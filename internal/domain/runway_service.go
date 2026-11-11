@@ -100,12 +100,12 @@ func runwayReferenceSpending(asOf Date, monthStartDay int, base Currency, moveme
 	if err != nil {
 		return Money{}, err
 	}
-	monthly, active, err := monthlyOutflows(window, monthStartDay, base, movements)
+	monthly, coveredMonths, err := monthlyOutflows(window, monthStartDay, base, movements)
 	if err != nil {
 		return Money{}, err
 	}
-	if active < 3 {
-		return Money{}, newError(ErrNotEnoughData, map[string]any{"months": active}, "not enough complete months")
+	if coveredMonths < 3 {
+		return Money{}, newError(ErrNotEnoughData, map[string]any{"months": coveredMonths}, "not enough complete months")
 	}
 	medianMinor, err := medianInt64(monthly)
 	if err != nil {
@@ -141,7 +141,10 @@ func monthlyOutflows(window Period, monthStartDay int, base Currency, movements 
 	if err != nil {
 		return nil, 0, err
 	}
-	active := map[Date]bool{}
+	var (
+		firstDataMonth Date
+		hasData        bool
+	)
 	for _, movement := range movements {
 		if movement.Date.IsZero() {
 			return nil, 0, missingField("date")
@@ -162,7 +165,10 @@ func monthlyOutflows(window Period, monthStartDay int, base Currency, movements 
 			return nil, 0, err
 		}
 		key := month.From()
-		active[key] = true
+		if !hasData || key.Before(firstDataMonth) {
+			firstDataMonth = key
+			hasData = true
+		}
 		if movement.Amount.Sign() >= 0 {
 			continue
 		}
@@ -171,12 +177,25 @@ func monthlyOutflows(window Period, monthStartDay int, base Currency, movements 
 			return nil, 0, err
 		}
 	}
-	values := make([]int64, 0, len(active))
-	for key := range active {
-		values = append(values, buckets[key])
+	if !hasData {
+		return nil, 0, nil
 	}
-	slices.Sort(values)
-	return values, len(active), nil
+	lastMonth, err := MonthPeriod(window.To(), monthStartDay)
+	if err != nil {
+		return nil, 0, err
+	}
+	values := make([]int64, 0, len(buckets))
+	for monthStart := firstDataMonth; ; {
+		values = append(values, buckets[monthStart])
+		if monthStart == lastMonth.From() {
+			return values, len(values), nil
+		}
+		next, nextErr := monthStart.AddMonths(1)
+		if nextErr != nil {
+			return nil, 0, nextErr
+		}
+		monthStart = next
+	}
 }
 
 func monthBuckets(window Period, monthStartDay int) (map[Date]int64, error) {
@@ -237,9 +256,21 @@ func runwayDuration(asOf Date, liquidity, monthlySpending Money) (RunwayResult, 
 	if liquidity.Sign() <= 0 {
 		return result, nil
 	}
-	num := new(big.Int).Mul(big.NewInt(liquidity.Minor()), big.NewInt(30))
 	den := big.NewInt(monthlySpending.Minor())
-	daysBig := new(big.Int).Quo(num, den)
+	months, remainder := new(big.Int), new(big.Int)
+	months.QuoRem(big.NewInt(liquidity.Minor()), den, remainder)
+	if !months.IsInt64() {
+		return RunwayResult{}, newError(ErrOverflow, nil, "runway exceeds int64 range")
+	}
+	months64 := months.Int64()
+	if months64 > math.MaxInt {
+		return RunwayResult{}, newError(ErrOverflow, nil, "runway exceeds int range")
+	}
+	if months64 > maxShiftMonths {
+		return RunwayResult{}, newError(ErrOverflow, nil, "runway exceeds supported horizon")
+	}
+	dayNumerator := remainder.Mul(remainder, big.NewInt(30))
+	daysBig := new(big.Int).Quo(dayNumerator, den)
 	if !daysBig.IsInt64() {
 		return RunwayResult{}, newError(ErrOverflow, nil, "runway exceeds int64 range")
 	}
@@ -250,9 +281,13 @@ func runwayDuration(asOf Date, liquidity, monthlySpending Money) (RunwayResult, 
 	if days64 > maxShiftDays {
 		return RunwayResult{}, newError(ErrOverflow, nil, "runway exceeds supported horizon")
 	}
-	result.Months = int(days64 / 30)
-	result.Days = int(days64 % 30)
-	zeroDate, err := asOf.AddDays(int(days64))
+	result.Months = int(months64)
+	result.Days = int(days64)
+	zeroDate, err := asOf.AddMonths(result.Months)
+	if err != nil {
+		return RunwayResult{}, err
+	}
+	zeroDate, err = zeroDate.AddDays(result.Days)
 	if err != nil {
 		return RunwayResult{}, err
 	}

@@ -96,7 +96,7 @@ func TestRunway(t *testing.T) {
 	if got.Months != 3 || got.Days != 3 {
 		t.Fatalf("duration = %d months %d days", got.Months, got.Days)
 	}
-	if got.ZeroDate != date(t, 2027, 2, 16) {
+	if got.ZeroDate != date(t, 2027, 2, 18) {
 		t.Fatalf("zero date = %v", got.ZeroDate)
 	}
 }
@@ -144,4 +144,41 @@ func TestRunwayMonotonicInLiquidityProperty(t *testing.T) {
 			t.Fatalf("non-monotonic: low=%d high=%d", lowDays, highDays)
 		}
 	})
+}
+
+func TestRunwayUsesCalendarMonthsForLongHorizons(t *testing.T) {
+	asOf := date(t, 2026, 11, 15)
+	got, err := Runway(asOf, 1, []RunwayBalance{
+		{Kind: AccountChecking, Balance: money(t, 2_500_000, "EUR")},
+	}, []RunwayMovement{
+		{Date: date(t, 2026, 8, 1), Amount: money(t, -100_000, "EUR"), Kind: KindPayment},
+		{Date: date(t, 2026, 9, 1), Amount: money(t, -100_000, "EUR"), Kind: KindPayment},
+		{Date: date(t, 2026, 10, 1), Amount: money(t, -100_000, "EUR"), Kind: KindPayment},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Months != 25 || got.Days != 0 {
+		t.Fatalf("duration = %d months %d days", got.Months, got.Days)
+	}
+	if got.ZeroDate != date(t, 2028, 12, 15) {
+		t.Fatalf("zero date = %v, want 2028-12-15", got.ZeroDate)
+	}
+}
+
+func TestRunwayReferenceSpendingCountsQuietMonthsAsZero(t *testing.T) {
+	asOf := date(t, 2026, 7, 15)
+	got, err := runwayReferenceSpending(asOf, 1, cur(t, "EUR"), []RunwayMovement{
+		{Date: date(t, 2026, 1, 10), Amount: money(t, -100, "EUR"), Kind: KindPayment},
+		{Date: date(t, 2026, 3, 10), Amount: money(t, -1_000, "EUR"), Kind: KindPayment},
+		{Date: date(t, 2026, 5, 10), Amount: money(t, -1_000, "EUR"), Kind: KindPayment},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Months from first data month (Jan) to last complete month (Jun):
+	// [100, 0, 1000, 0, 1000, 0] => median = (0+100)/2 = 50.
+	if got.Minor() != 50 {
+		t.Fatalf("reference spending = %d, want 50", got.Minor())
+	}
 }
