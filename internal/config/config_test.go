@@ -698,3 +698,42 @@ func TestResolveErrorsAndEdgeCases(t *testing.T) {
 		t.Error("expected error for invalid connectors.timeout, got nil")
 	}
 }
+
+func TestSetDoesNotPersistEnvOverrides(t *testing.T) {
+	tmp := t.TempDir()
+
+	env := func(k string) string {
+		if k == "FUI_CURRENCY" {
+			return "USD"
+		}
+		return ""
+	}
+
+	cfg, _, err := config.Resolve(config.ResolveOptions{
+		HomeDir: tmp,
+		Env:     env,
+	})
+	if err != nil {
+		t.Fatalf("Resolve failed: %v", err)
+	}
+
+	if cfg.Currency != "USD" {
+		t.Fatalf("cfg.Currency = %q, want USD", cfg.Currency)
+	}
+
+	// Set a different key: locale
+	if err := cfg.Set("locale", "en-US"); err != nil {
+		t.Fatalf("Set(locale) failed: %v", err)
+	}
+
+	// Read file directly from disk
+	data, err := os.ReadFile(cfg.ConfigFile)
+	if err != nil {
+		t.Fatalf("read config file failed: %v", err)
+	}
+
+	fileContent := string(data)
+	if strings.Contains(fileContent, "USD") {
+		t.Errorf("config file persisted env override USD:\n%s", fileContent)
+	}
+}

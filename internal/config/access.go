@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -94,8 +95,52 @@ func getProfileFormat(p *CSVProfile, field string) (string, bool) {
 	}
 }
 
-// Set updates the value of a dotted key, validates it, and persists the changes to c.ConfigFile.
+// SetInFile loads defaults and existing file configuration from path (without applying
+// environment or command-line overrides), sets and validates the given key, and saves
+// the updated configuration to path.
+func SetInFile(path, key, value string) error {
+	if path == "" {
+		return errors.New("save configuration: config file path is empty")
+	}
+
+	fileCfg := Defaults()
+	cleanPath := filepath.Clean(path)
+	data, err := os.ReadFile(cleanPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("read config file %q: %w", path, err)
+	}
+
+	if len(data) > 0 {
+		dec := toml.NewDecoder(bytes.NewReader(data))
+		dec.DisallowUnknownFields()
+		if decodeErr := dec.Decode(&fileCfg); decodeErr != nil {
+			var sme *toml.StrictMissingError
+			if !errors.As(decodeErr, &sme) {
+				return fmt.Errorf("decode config file %q: %w", path, decodeErr)
+			}
+		}
+	}
+
+	if err := fileCfg.applyKey(key, value); err != nil {
+		return err
+	}
+
+	return fileCfg.SaveToFile(path)
+}
+
+// Set updates the value of a dotted key, validates it, persists the changes to c.ConfigFile
+// without saving runtime environment or flag overrides, and updates in-memory state.
 func (c *Config) Set(key, value string) error {
+	if c.ConfigFile == "" {
+		return errors.New("save configuration: config file path is empty")
+	}
+	if err := SetInFile(c.ConfigFile, key, value); err != nil {
+		return err
+	}
+	return c.applyKey(key, value)
+}
+
+func (c *Config) applyKey(key, value string) error {
 	handled, err := c.setScalarField(key, value)
 	if err != nil {
 		return err
@@ -115,8 +160,7 @@ func (c *Config) Set(key, value string) error {
 			return fmt.Errorf("unknown configuration key: %q", key)
 		}
 	}
-
-	return c.Save()
+	return nil
 }
 
 func (c *Config) setScalarField(key, value string) (bool, error) {
