@@ -1,0 +1,10 @@
+Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance
+Card Payment,Current,2026-05-02 10:00:00,2026-05-03 12:00:00,Coffee Shop,-4.50,0,EUR,COMPLETED,995.50
+Transfer,Current,2026-05-03 09:00:00,2026-05-04 09:30:00,Transfer to Mario Rossi,-100.00,-0.50,EUR,COMPLETED,895.00
+Transfer,Current,2026-05-04 10:00:00,,Transfer from Alice,200.00,0,EUR,PENDING,895.00
+Card Refund,Current,2026-05-01 09:00:00,2026-05-02 09:00:00,Refund Store,10.00,0,EUR,COMPLETED,1000.00
+Exchange,Current,2026-05-04 12:00:00,2026-05-05 12:00:00,Exchange to USD,-50.00,0,EUR,COMPLETED,845.00
+Topup,Savings,2026-05-06 08:00:00,2026-05-06 08:00:00,Top up from card,150.00,0,USD,COMPLETED,150.00
+Cash Withdrawal,Current,2026-05-07 08:00:00,2026-05-07 08:00:00,ATM cash,-20.00,0,EUR,COMPLETED,825.00
+Transfer,Current,2026-05-08,2026-05-08,Transfer to Ignored,-5.00,0,EUR,REVERTED,820.00
+Transfer,Current,2026-05-09,2026-05-09,Transfer declined,-5.00,0,EUR,DECLINED,820.00
