@@ -30,6 +30,7 @@ func (b *stubBackup) Restore(context.Context, string) error { return nil }
 type Fixture struct {
 	Service *app.Service
 	Store   *memstore.Store
+	now     time.Time
 }
 
 // New builds an empty fixture, applying mutate (if any) to the default Config before Service
@@ -45,9 +46,10 @@ func New(t *testing.T, mutate ...func(*app.Config)) Fixture {
 		m(&cfg)
 	}
 	store := memstore.New()
-	clock := fixedClock{now: time.Date(2026, 6, 15, 9, 0, 0, 0, time.UTC)}
+	now := time.Date(2026, 6, 15, 9, 0, 0, 0, time.UTC)
+	clock := fixedClock{now: now}
 	svc := app.New(store, clock, &stubBackup{}, cfg)
-	return Fixture{Service: svc, Store: store}
+	return Fixture{Service: svc, Store: store, now: now}
 }
 
 // Account creates an account and fails the test on error.
