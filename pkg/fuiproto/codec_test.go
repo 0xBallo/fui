@@ -121,6 +121,58 @@ func TestEncoderWriteErrors(t *testing.T) {
 	}
 }
 
+func TestEncodeIncludesZeroBalanceAfter(t *testing.T) {
+	zero := int64(0)
+	records := []Record{
+		{
+			Type: RecordTypeMeta,
+			Meta: &MetaRecord{
+				Protocol:  ProtocolFUI1,
+				Connector: "x",
+				Version:   "0.1.0",
+			},
+		},
+		{
+			Type: RecordTypeAccount,
+			Account: &AccountRecord{
+				Ref:      "acc",
+				Name:     "Account",
+				Currency: "EUR",
+				Kind:     AccountKindChecking,
+			},
+		},
+		{
+			Type: RecordTypeTransaction,
+			Transaction: &TransactionRecord{
+				Account:      "acc",
+				ID:           "tx-1",
+				Date:         "2026-11-12",
+				Amount:       100,
+				Currency:     "EUR",
+				Description:  "desc",
+				Status:       TransactionStatusBooked,
+				BalanceAfter: &zero,
+			},
+		},
+		{
+			Type: RecordTypeEnd,
+			End: &EndRecord{
+				Transactions: 1,
+				Errors:       0,
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := EncodeSliceJSONL(&buf, records); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+
+	if !strings.Contains(buf.String(), `"balance_after":0`) {
+		t.Fatalf("encoded stream does not contain balance_after=0:\n%s", buf.String())
+	}
+}
+
 type failingWriter struct{}
 
 func (f *failingWriter) Write([]byte) (int, error) {

@@ -152,7 +152,7 @@ type TransactionRecord struct {
 	Kind             TransactionKind   `json:"kind,omitempty"`
 	Transfer         string            `json:"transfer,omitempty"`
 	Original         *OriginalAmount   `json:"original,omitempty"`
-	BalanceAfter     int64             `json:"balance_after,omitempty"`
+	BalanceAfter     *int64            `json:"balance_after,omitempty"`
 	CategoryHint     string            `json:"category_hint,omitempty"`
 	Category         string            `json:"category,omitempty"`
 	Tags             []string          `json:"tags,omitempty"`

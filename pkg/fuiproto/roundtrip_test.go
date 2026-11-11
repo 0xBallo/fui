@@ -157,3 +157,69 @@ func TestSpecExampleDecodesAndValidates(t *testing.T) {
 		t.Fatalf("unexpected end counts: %+v", result.End)
 	}
 }
+
+func TestRoundTripBalanceAfterZero(t *testing.T) {
+	zero := int64(0)
+	records := []Record{
+		{
+			Type: RecordTypeMeta,
+			Meta: &MetaRecord{
+				Protocol:  ProtocolFUI1,
+				Connector: "fui",
+				Version:   "0.1.0",
+			},
+		},
+		{
+			Type: RecordTypeAccount,
+			Account: &AccountRecord{
+				Ref:      "acc",
+				Name:     "Account",
+				Currency: "EUR",
+				Kind:     AccountKindChecking,
+			},
+		},
+		{
+			Type: RecordTypeTransaction,
+			Transaction: &TransactionRecord{
+				Account:      "acc",
+				ID:           "tx-1",
+				Date:         "2026-11-12",
+				Amount:       100,
+				Currency:     "EUR",
+				Description:  "desc",
+				Status:       TransactionStatusBooked,
+				BalanceAfter: &zero,
+			},
+		},
+		{
+			Type: RecordTypeEnd,
+			End: &EndRecord{
+				Transactions: 1,
+				Errors:       0,
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := EncodeSliceJSONL(&buf, records); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	if !strings.Contains(buf.String(), `"balance_after":0`) {
+		t.Fatalf("encoded stream does not contain balance_after=0:\n%s", buf.String())
+	}
+
+	var decoded []Record
+	for record, err := range DecodeJSONL(bytes.NewReader(buf.Bytes())) {
+		if err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		decoded = append(decoded, record)
+	}
+
+	if decoded[2].Transaction.BalanceAfter == nil || *decoded[2].Transaction.BalanceAfter != 0 {
+		t.Fatalf("decoded balance_after = %v, want pointer to 0", decoded[2].Transaction.BalanceAfter)
+	}
+	if diff := cmp.Diff(records, decoded); diff != "" {
+		t.Fatalf("round-trip mismatch (-want +got):\n%s", diff)
+	}
+}

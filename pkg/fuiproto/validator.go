@@ -196,11 +196,11 @@ func (s *validationState) acceptTransaction(line int, record Record) (bool, *Inv
 		return false, nil, structural(line, "transaction currency %q does not match account currency %q", record.Transaction.Currency, account.Currency)
 	}
 
+	s.txCount++
 	if msg := validateTransaction(*record.Transaction); msg != "" {
 		return false, &InvalidRow{Line: line, Type: RecordTypeTransaction, Message: msg}, nil
 	}
 
-	s.txCount++
 	return true, nil, nil
 }
 
@@ -256,11 +256,10 @@ func (s *validationState) acceptError(line int, record Record) (bool, *InvalidRo
 	if record.Error == nil {
 		return false, nil, structural(line, "error payload is required")
 	}
+	s.errorCount++
 	if msg := validateErrorRecord(*record.Error); msg != "" {
 		return false, &InvalidRow{Line: line, Type: RecordTypeError, Message: msg}, nil
 	}
-
-	s.errorCount++
 	return true, nil, nil
 }
 

@@ -254,7 +254,9 @@ func TestValidateStreamRowLevelRules(t *testing.T) {
 				},
 				{
 					Type: RecordTypeEnd,
-					End:  &EndRecord{},
+					End: &EndRecord{
+						Transactions: 1,
+					},
 				},
 			},
 			wantRow: RecordTypeTransaction,
@@ -291,7 +293,9 @@ func TestValidateStreamRowLevelRules(t *testing.T) {
 				},
 				{
 					Type: RecordTypeEnd,
-					End:  &EndRecord{},
+					End: &EndRecord{
+						Transactions: 1,
+					},
 				},
 			},
 			wantRow: RecordTypeTransaction,
@@ -327,7 +331,9 @@ func TestValidateStreamRowLevelRules(t *testing.T) {
 				},
 				{
 					Type: RecordTypeEnd,
-					End:  &EndRecord{},
+					End: &EndRecord{
+						Transactions: 1,
+					},
 				},
 			},
 			wantRow: RecordTypeTransaction,
@@ -450,6 +456,58 @@ func TestValidateDate(t *testing.T) {
 	}
 }
 
+func TestValidateStreamInvalidTransactionStillCountsForEnd(t *testing.T) {
+	records := []Record{
+		{
+			Type: RecordTypeMeta,
+			Meta: &MetaRecord{
+				Protocol:  ProtocolFUI1,
+				Connector: "x",
+				Version:   "0.1.0",
+			},
+		},
+		{
+			Type: RecordTypeAccount,
+			Account: &AccountRecord{
+				Ref:      "acc",
+				Name:     "Account",
+				Currency: "EUR",
+				Kind:     AccountKindChecking,
+			},
+		},
+		{
+			Type: RecordTypeTransaction,
+			Transaction: &TransactionRecord{
+				Account:     "acc",
+				ID:          "tx-1",
+				Date:        "2026-11-12",
+				Amount:      1,
+				Currency:    "EUR",
+				Description: "desc",
+				Status:      TransactionStatus("invalid"),
+			},
+		},
+		{
+			Type: RecordTypeEnd,
+			End: &EndRecord{
+				Transactions: 1,
+				Errors:       0,
+			},
+		},
+	}
+
+	result, err := ValidateStream(seqFromRecords(records))
+	if err != nil {
+		t.Fatalf("unexpected structural error: %v", err)
+	}
+	if len(result.RowErrors) != 1 {
+		t.Fatalf("row errors = %d, want 1", len(result.RowErrors))
+	}
+	if result.RowErrors[0].Type != RecordTypeTransaction {
+		t.Fatalf("row error type = %q, want %q", result.RowErrors[0].Type, RecordTypeTransaction)
+	}
+}
+
 func TestValidateStreamAdditionalBranches(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -521,7 +579,7 @@ func TestValidateStreamAdditionalBranches(t *testing.T) {
 			records: []Record{
 				{Type: RecordTypeMeta, Meta: &MetaRecord{Protocol: ProtocolFUI1, Connector: "x", Version: "0.1.0"}},
 				{Type: RecordTypeError, Error: &ErrorRecord{Line: 0, Message: "x"}},
-				{Type: RecordTypeEnd, End: &EndRecord{}},
+				{Type: RecordTypeEnd, End: &EndRecord{Errors: 1}},
 			},
 			rowContains: "line must be > 0",
 		},
@@ -531,7 +589,7 @@ func TestValidateStreamAdditionalBranches(t *testing.T) {
 				{Type: RecordTypeMeta, Meta: &MetaRecord{Protocol: ProtocolFUI1, Connector: "x", Version: "0.1.0"}},
 				{Type: RecordTypeAccount, Account: &AccountRecord{Ref: "a", Name: "A", Currency: "EUR", Kind: AccountKindChecking}},
 				{Type: RecordTypeTransaction, Transaction: &TransactionRecord{Account: "a", ID: "t", Date: "2026-11-11", Amount: 1, Currency: "EUR", Description: "x", Status: TransactionStatusBooked, Original: &OriginalAmount{Amount: 10}}},
-				{Type: RecordTypeEnd, End: &EndRecord{}},
+				{Type: RecordTypeEnd, End: &EndRecord{Transactions: 1}},
 			},
 			rowContains: "original currency is required",
 		},
@@ -541,7 +599,7 @@ func TestValidateStreamAdditionalBranches(t *testing.T) {
 				{Type: RecordTypeMeta, Meta: &MetaRecord{Protocol: ProtocolFUI1, Connector: "x", Version: "0.1.0"}},
 				{Type: RecordTypeAccount, Account: &AccountRecord{Ref: "a", Name: "A", Currency: "EUR", Kind: AccountKindChecking}},
 				{Type: RecordTypeTransaction, Transaction: &TransactionRecord{Account: "a", ID: "t", Date: "2026-11-11", OperationDate: "20261111", Amount: 1, Currency: "EUR", Description: "x", Status: TransactionStatusBooked}},
-				{Type: RecordTypeEnd, End: &EndRecord{}},
+				{Type: RecordTypeEnd, End: &EndRecord{Transactions: 1}},
 			},
 			rowContains: "invalid operation_date",
 		},
@@ -551,7 +609,7 @@ func TestValidateStreamAdditionalBranches(t *testing.T) {
 				{Type: RecordTypeMeta, Meta: &MetaRecord{Protocol: ProtocolFUI1, Connector: "x", Version: "0.1.0"}},
 				{Type: RecordTypeAccount, Account: &AccountRecord{Ref: "a", Name: "A", Currency: "EUR", Kind: AccountKindChecking}},
 				{Type: RecordTypeTransaction, Transaction: &TransactionRecord{Account: "a", ID: "t", Date: "2026-11-11", ValueDate: "20261111", Amount: 1, Currency: "EUR", Description: "x", Status: TransactionStatusBooked}},
-				{Type: RecordTypeEnd, End: &EndRecord{}},
+				{Type: RecordTypeEnd, End: &EndRecord{Transactions: 1}},
 			},
 			rowContains: "invalid value_date",
 		},
