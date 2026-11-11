@@ -69,3 +69,8 @@ func newError(sentinel *Error, details map[string]any, format string, args ...an
 func missingField(field string) error {
 	return newError(ErrMissingField, map[string]any{"field": field}, "missing field %q", field)
 }
+
+func invalidValue(field, value string) error {
+	return newError(ErrInvalidValue, map[string]any{"field": field, "value": value},
+		"invalid %s %q", field, value)
+}
