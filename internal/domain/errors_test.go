@@ -12,7 +12,7 @@ func TestErrorIsMatchesByCode(t *testing.T) {
 		CodeCurrencyMismatch: ErrCurrencyMismatch, CodeReconciled: ErrReconciled,
 		CodeOverflow: ErrOverflow, CodeInvalidAmount: ErrInvalidAmount,
 		CodeInvalidDate: ErrInvalidDate, CodeMissingField: ErrMissingField,
-		CodeInvalidValue: ErrInvalidValue,
+		CodeInvalidValue: ErrInvalidValue, CodeNotEnoughData: ErrNotEnoughData,
 	}
 	if len(sentinels) != len(Codes()) {
 		t.Fatalf("Codes() has %d entries, sentinels %d", len(Codes()), len(sentinels))

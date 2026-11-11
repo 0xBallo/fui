@@ -19,6 +19,7 @@ const (
 	CodeInvalidDate      Code = "invalid_date"
 	CodeMissingField     Code = "missing_field"
 	CodeInvalidValue     Code = "invalid_value"
+	CodeNotEnoughData    Code = "not_enough_data"
 )
 
 // Codes returns every domain error code, so the CLI can test that its
@@ -27,6 +28,7 @@ func Codes() []Code {
 	return []Code{
 		CodeAmbiguousName, CodeNotFound, CodeCurrencyMismatch, CodeReconciled,
 		CodeOverflow, CodeInvalidAmount, CodeInvalidDate, CodeMissingField, CodeInvalidValue,
+		CodeNotEnoughData,
 	}
 }
 
@@ -59,6 +61,7 @@ var (
 	ErrInvalidDate      = &Error{Code: CodeInvalidDate, Message: "invalid date"}
 	ErrMissingField     = &Error{Code: CodeMissingField, Message: "missing field"}
 	ErrInvalidValue     = &Error{Code: CodeInvalidValue, Message: "invalid value"}
+	ErrNotEnoughData    = &Error{Code: CodeNotEnoughData, Message: "not enough data"}
 )
 
 // newError builds an Error with the code of sentinel and a formatted message.
