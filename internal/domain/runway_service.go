@@ -141,30 +141,37 @@ func monthlyOutflows(window Period, monthStartDay int, base Currency, movements 
 	if err != nil {
 		return nil, 0, err
 	}
+	firstDataMonth, hasData, err := fillMonthlyOutflows(buckets, window, monthStartDay, base, movements)
+	if err != nil {
+		return nil, 0, err
+	}
+	if !hasData {
+		return nil, 0, nil
+	}
+	lastMonth, err := MonthPeriod(window.To(), monthStartDay)
+	if err != nil {
+		return nil, 0, err
+	}
+	values, err := monthRangeValues(buckets, firstDataMonth, lastMonth.From())
+	if err != nil {
+		return nil, 0, err
+	}
+	return values, len(values), nil
+}
+
+func fillMonthlyOutflows(buckets map[Date]int64, window Period, monthStartDay int, base Currency, movements []RunwayMovement) (Date, bool, error) {
 	var (
 		firstDataMonth Date
 		hasData        bool
 	)
 	for _, movement := range movements {
-		if movement.Date.IsZero() {
-			return nil, 0, missingField("date")
-		}
-		if movement.Kind == KindTransfer || movement.Kind == KindInvestment {
-			continue
-		}
-		if !window.Contains(movement.Date) {
-			continue
-		}
-		if movement.Amount.Currency() != base {
-			return nil, 0, newError(ErrCurrencyMismatch, map[string]any{
-				"left": movement.Amount.Currency().Code(), "right": base.Code(),
-			}, "currency mismatch: %s vs %s", movement.Amount.Currency(), base)
-		}
-		month, err := MonthPeriod(movement.Date, monthStartDay)
+		key, include, err := monthKeyForRunwayMovement(window, monthStartDay, base, movement)
 		if err != nil {
-			return nil, 0, err
+			return Date{}, false, err
 		}
-		key := month.From()
+		if !include {
+			continue
+		}
 		if !hasData || key.Before(firstDataMonth) {
 			firstDataMonth = key
 			hasData = true
@@ -174,25 +181,41 @@ func monthlyOutflows(window Period, monthStartDay int, base Currency, movements 
 		}
 		buckets[key], err = addOutflow(buckets[key], movement.Amount)
 		if err != nil {
-			return nil, 0, err
+			return Date{}, false, err
 		}
 	}
-	if !hasData {
-		return nil, 0, nil
+	return firstDataMonth, hasData, nil
+}
+
+func monthKeyForRunwayMovement(window Period, monthStartDay int, base Currency, movement RunwayMovement) (Date, bool, error) {
+	if movement.Date.IsZero() {
+		return Date{}, false, missingField("date")
 	}
-	lastMonth, err := MonthPeriod(window.To(), monthStartDay)
+	if movement.Kind == KindTransfer || movement.Kind == KindInvestment || !window.Contains(movement.Date) {
+		return Date{}, false, nil
+	}
+	if movement.Amount.Currency() != base {
+		return Date{}, false, newError(ErrCurrencyMismatch, map[string]any{
+			"left": movement.Amount.Currency().Code(), "right": base.Code(),
+		}, "currency mismatch: %s vs %s", movement.Amount.Currency(), base)
+	}
+	month, err := MonthPeriod(movement.Date, monthStartDay)
 	if err != nil {
-		return nil, 0, err
+		return Date{}, false, err
 	}
+	return month.From(), true, nil
+}
+
+func monthRangeValues(buckets map[Date]int64, from, to Date) ([]int64, error) {
 	values := make([]int64, 0, len(buckets))
-	for monthStart := firstDataMonth; ; {
+	for monthStart := from; ; {
 		values = append(values, buckets[monthStart])
-		if monthStart == lastMonth.From() {
-			return values, len(values), nil
+		if monthStart == to {
+			return values, nil
 		}
 		next, nextErr := monthStart.AddMonths(1)
 		if nextErr != nil {
-			return nil, 0, nextErr
+			return nil, nextErr
 		}
 		monthStart = next
 	}

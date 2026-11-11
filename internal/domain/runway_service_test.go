@@ -33,6 +33,22 @@ func TestMedianInt64(t *testing.T) {
 	}
 }
 
+func TestRunwayBaseCurrency(t *testing.T) {
+	got, err := runwayBaseCurrency(nil, []RunwayMovement{
+		{Date: date(t, 2026, 1, 1), Amount: money(t, -1, "USD"), Kind: KindPayment},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != cur(t, "USD") {
+		t.Fatalf("currency = %s", got)
+	}
+	_, err = runwayBaseCurrency(nil, []RunwayMovement{{Date: date(t, 2026, 1, 1), Amount: Money{}, Kind: KindPayment}})
+	if !errors.Is(err, ErrMissingField) {
+		t.Fatalf("missing currency err = %v", err)
+	}
+}
+
 func TestLastCompleteMonthsWindowBoundaries(t *testing.T) {
 	tests := []struct {
 		name     string
