@@ -39,10 +39,12 @@ type UseCases interface {
 }
 
 // Config holds the user-facing settings Root applies: the locale used to format amounts and
-// dates, and the theme name ("default" or "high-contrast").
+// dates, the theme name ("default" or "high-contrast"), and the first day of the accounting month
+// (1..31, see domain.MonthPeriod) used by the dashboard's spending and runway reports.
 type Config struct {
-	Locale domain.Locale
-	Theme  string
+	Locale        domain.Locale
+	Theme         string
+	MonthStartDay int
 }
 
 // Root is the top-level Bubble Tea model: it routes between the MVP screens (keys 1/2/3),
@@ -73,7 +75,7 @@ func New(uc UseCases, cfg Config) *Root {
 	}
 	th := theme.ByName(cfg.Theme)
 	r := &Root{loc: loc, th: th, km: DefaultKeyMap()}
-	r.tabs[screens.TabDashboard] = dashboard.New(uc, loc, th)
+	r.tabs[screens.TabDashboard] = dashboard.New(uc, loc, th, cfg.MonthStartDay)
 	r.tabs[screens.TabTransactions] = transactions.New(uc, loc, th)
 	r.tabs[screens.TabAccounts] = accounts.New(uc, loc, th)
 	return r

@@ -29,10 +29,11 @@ const (
 // spending by category, and a quick-add shortcut. Update and View never touch the store; every
 // use case call runs inside a tea.Cmd.
 type Model struct {
-	uc  UseCases
-	loc domain.Locale
-	th  theme.Theme
-	km  KeyMap
+	uc            UseCases
+	loc           domain.Locale
+	th            theme.Theme
+	km            KeyMap
+	monthStartDay int
 
 	width, height int
 	mode          mode
@@ -61,9 +62,14 @@ type Model struct {
 
 var _ screens.Screen = (*Model)(nil)
 
-// New builds the dashboard screen over uc, formatting amounts and dates with loc.
-func New(uc UseCases, loc domain.Locale, th theme.Theme) *Model {
-	m := &Model{uc: uc, loc: loc, th: th, km: DefaultKeyMap()}
+// New builds the dashboard screen over uc, formatting amounts and dates with loc. monthStartDay
+// is the first day of the accounting month (1..31, see domain.MonthPeriod); values outside that
+// range default to 1.
+func New(uc UseCases, loc domain.Locale, th theme.Theme, monthStartDay int) *Model {
+	if monthStartDay < 1 || monthStartDay > 31 {
+		monthStartDay = 1
+	}
+	m := &Model{uc: uc, loc: loc, th: th, km: DefaultKeyMap(), monthStartDay: monthStartDay}
 	m.table = components.NewTable([]components.Column{
 		{Title: "Account", Width: 24, Align: lipgloss.Left},
 		{Title: "Kind", Width: 12, Align: lipgloss.Left},
@@ -140,15 +146,13 @@ func (m *Model) load() tea.Cmd {
 			out.categories = append(out.categories, c.Name)
 		}
 
-		// Accounting months start on the 1st: FUI has no per-user setting for this yet.
-		const monthStartDay = 1
 		base := out.netWorth.Base
-		out.spending, err = m.uc.Spending(ctx, reporting.SpendingParams{BaseCurrency: base, MonthStartDay: monthStartDay})
+		out.spending, err = m.uc.Spending(ctx, reporting.SpendingParams{BaseCurrency: base, MonthStartDay: m.monthStartDay})
 		if err != nil {
 			return screens.ErrorMsg{Err: err}
 		}
 
-		out.runway, err = m.uc.Runway(ctx, reporting.RunwayParams{BaseCurrency: base, MonthStartDay: monthStartDay})
+		out.runway, err = m.uc.Runway(ctx, reporting.RunwayParams{BaseCurrency: base, MonthStartDay: m.monthStartDay})
 		switch {
 		case errors.Is(err, domain.ErrNotEnoughData):
 			out.runwayAvailable = false

@@ -46,7 +46,7 @@ func newFixture(t *testing.T) (screentest.Fixture, screens.Screen) {
 	t.Helper()
 	fx := screentest.New(t)
 	uc := useCases{Service: fx.Service, Reporting: fx.NewReporting(t)}
-	scr := screens.Screen(dashboard.New(uc, domain.LocaleENUS, theme.Default()))
+	scr := screens.Screen(dashboard.New(uc, domain.LocaleENUS, theme.Default(), 1))
 	scr.SetSize(100, 30)
 	return fx, scr
 }
@@ -113,5 +113,32 @@ func TestDashboardQuickAdd(t *testing.T) {
 	view := scr.View()
 	if !strings.Contains(view, "984.50") {
 		t.Fatalf("expected the updated balance 984.50 EUR in view, got:\n%s", view)
+	}
+}
+
+// TestDashboardUsesConfiguredMonthStartDay verifies New's monthStartDay parameter actually reaches
+// the Spending/Runway calls instead of a hardcoded 1: with "now" frozen at 2026-06-15 (see
+// screentest.New), a transaction dated 2026-06-10 falls in the current accounting month when it
+// starts on the 1st, but in the previous one when it starts on the 12th.
+func TestDashboardUsesConfiguredMonthStartDay(t *testing.T) {
+	fx := screentest.New(t)
+	fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "1000", OpenedOn: "2026-01-01"})
+	fx.Category(t, app.AddCategoryRequest{Name: "Groceries", Kind: "expense"})
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-50", Description: "Supermarket", Category: "Groceries", Date: "2026-06-10"})
+
+	uc := useCases{Service: fx.Service, Reporting: fx.NewReporting(t)}
+
+	monthStart1 := screens.Screen(dashboard.New(uc, domain.LocaleENUS, theme.Default(), 1))
+	monthStart1.SetSize(100, 30)
+	monthStart1 = run(t, monthStart1, monthStart1.Init())
+	if !strings.Contains(monthStart1.View(), "Groceries") {
+		t.Fatalf("expected Groceries spending with month_start_day=1, got:\n%s", monthStart1.View())
+	}
+
+	monthStart12 := screens.Screen(dashboard.New(uc, domain.LocaleENUS, theme.Default(), 12))
+	monthStart12.SetSize(100, 30)
+	monthStart12 = run(t, monthStart12, monthStart12.Init())
+	if strings.Contains(monthStart12.View(), "Groceries") {
+		t.Fatalf("expected no Groceries spending with month_start_day=12 (tx predates the period), got:\n%s", monthStart12.View())
 	}
 }
