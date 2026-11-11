@@ -56,6 +56,12 @@ func TestNewAccount(t *testing.T) {
 	if err != nil || got.Name != "Fineco" {
 		t.Fatalf("NewAccount = %+v, %v", got, err)
 	}
+	withIBAN := validAccount(t)
+	withIBAN.IBAN = "de89 3704 0044 0532 0130 00"
+	got, err = NewAccount(withIBAN)
+	if err != nil || got.IBAN != "DE89370400440532013000" {
+		t.Fatalf("NewAccount with iban = %+v, %v", got, err)
+	}
 	tests := []struct {
 		name    string
 		mutate  func(*Account)
@@ -67,6 +73,7 @@ func TestNewAccount(t *testing.T) {
 		{"no currency", func(a *Account) { a.Currency = Currency{} }, ErrMissingField},
 		{"opening in other currency", func(a *Account) { a.OpeningBalance = money(t, 1, "USD") }, ErrCurrencyMismatch},
 		{"no opening date", func(a *Account) { a.OpenedOn = Date{} }, ErrMissingField},
+		{"bad iban", func(a *Account) { a.IBAN = "not-an-iban" }, ErrInvalidValue},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

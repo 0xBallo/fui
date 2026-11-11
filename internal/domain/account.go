@@ -38,10 +38,12 @@ type Account struct {
 	OpeningBalance Money
 	OpenedOn       Date
 	Archived       bool
+	IBAN           string // optional; normalized (ParseIBAN) when set
 }
 
 // NewAccount validates a and returns it with the name trimmed. The opening
-// balance must be in the account currency.
+// balance must be in the account currency. IBAN is optional but, when set,
+// must be a syntactically valid IBAN (see ParseIBAN).
 func NewAccount(a Account) (Account, error) {
 	name, err := requireName("name", a.Name)
 	if err != nil {
@@ -61,6 +63,13 @@ func NewAccount(a Account) (Account, error) {
 	}
 	if a.OpenedOn.IsZero() {
 		return Account{}, missingField("opened_on")
+	}
+	if a.IBAN != "" {
+		iban, err := ParseIBAN(a.IBAN)
+		if err != nil {
+			return Account{}, err
+		}
+		a.IBAN = iban
 	}
 	return a, nil
 }
