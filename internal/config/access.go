@@ -317,7 +317,8 @@ func setProfileFormat(p *CSVProfile, key, field, value string) (bool, error) {
 }
 
 // SaveToFile serializes the persistent configuration as TOML to path,
-// creating directories with 0700 and files with 0600 permissions.
+// creating directories with 0700 and writing atomically to a temporary file
+// with 0600 permissions, fsyncing, and renaming over the target path.
 func (c *Config) SaveToFile(path string) error {
 	if path == "" {
 		return errors.New("save configuration: path must not be empty")
@@ -333,15 +334,41 @@ func (c *Config) SaveToFile(path string) error {
 		return fmt.Errorf("marshal config TOML: %w", err)
 	}
 
-	f, err := os.OpenFile(cleanPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	tmpFile, err := os.CreateTemp(dir, "config-*.tmp")
 	if err != nil {
-		return fmt.Errorf("open config file %q: %w", cleanPath, err)
+		return fmt.Errorf("create temp config file in %q: %w", dir, err)
 	}
-	defer func() { _ = f.Close() }()
+	tmpName := tmpFile.Name()
+	defer func() {
+		if tmpName != "" {
+			_ = os.Remove(tmpName)
+		}
+	}()
 
-	if _, err := f.Write(data); err != nil {
-		return fmt.Errorf("write config file %q: %w", cleanPath, err)
+	if err := tmpFile.Chmod(0o600); err != nil {
+		_ = tmpFile.Close()
+		return fmt.Errorf("chmod temp config file %q: %w", tmpName, err)
 	}
+
+	if _, err := tmpFile.Write(data); err != nil {
+		_ = tmpFile.Close()
+		return fmt.Errorf("write temp config file %q: %w", tmpName, err)
+	}
+
+	if err := tmpFile.Sync(); err != nil {
+		_ = tmpFile.Close()
+		return fmt.Errorf("sync temp config file %q: %w", tmpName, err)
+	}
+
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("close temp config file %q: %w", tmpName, err)
+	}
+
+	if err := os.Rename(tmpName, cleanPath); err != nil {
+		return fmt.Errorf("rename temp config to %q: %w", cleanPath, err)
+	}
+	tmpName = ""
+
 	return nil
 }
 

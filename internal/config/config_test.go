@@ -737,3 +737,48 @@ func TestSetDoesNotPersistEnvOverrides(t *testing.T) {
 		t.Errorf("config file persisted env override USD:\n%s", fileContent)
 	}
 }
+
+func TestSaveToFileAtomic(t *testing.T) {
+	tmp := t.TempDir()
+	configPath := filepath.Join(tmp, "config.toml")
+
+	// Write initial file
+	if err := os.WriteFile(configPath, []byte("currency = \"EUR\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	infoBefore, err := os.Stat(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.Defaults()
+	cfg.Currency = "USD"
+	if err := cfg.SaveToFile(configPath); err != nil {
+		t.Fatalf("SaveToFile failed: %v", err)
+	}
+
+	infoAfter, err := os.Stat(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Atomic rename replaces the inode; an in-place truncate reuses the same inode.
+	if os.SameFile(infoBefore, infoAfter) {
+		t.Errorf("SaveToFile truncated in place instead of atomically renaming over target")
+	}
+
+	// Check permissions on the atomically renamed file
+	if perm := infoAfter.Mode().Perm(); perm != 0o600 {
+		t.Errorf("expected permissions 0600, got %#o", perm)
+	}
+
+	// Ensure no leftover temporary files in dir
+	entries, err := os.ReadDir(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "config.toml" {
+		t.Errorf("unexpected directory contents after atomic save: %v", entries)
+	}
+}
