@@ -2,12 +2,14 @@ package transactions
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/tui/components"
 	"github.com/0xballo/fui/internal/tui/screens"
 	"github.com/0xballo/fui/internal/tui/screens/screentest"
 	"github.com/0xballo/fui/internal/tui/theme"
@@ -91,4 +93,66 @@ func TestReconciledDeleteNeedsConfirmTwice(t *testing.T) {
 			t.Fatalf("expected the reconciled transaction to be deleted")
 		}
 	}
+}
+
+// TestSubmitCmdsDoNotRaceWithUpdate guards the Elm-architecture rule that a tea.Cmd returned by a
+// submit* method must only use values copied out of the Model before it is returned: Bubble Tea
+// runs the Cmd on its own goroutine, so anything it reads or writes directly on the live Model
+// (such as m.req or m.table, both mutated by Update in reaction to ordinary key presses) races
+// with Update. It runs every submit* Cmd concurrently with a goroutine that repeatedly performs
+// the same mutations Update would, and must pass under -race.
+func TestSubmitCmdsDoNotRaceWithUpdate(t *testing.T) {
+	fx := screentest.New(t)
+	fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "100", OpenedOn: "2026-01-01"})
+	fx.Category(t, app.AddCategoryRequest{Name: "Groceries", Kind: string(domain.CategoryExpense)})
+	tx := fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-5", Description: "Coffee", Date: "2026-06-01"})
+
+	m := New(fx.Service, domain.LocaleENUS, theme.Default())
+	m.SetSize(100, 30)
+	scr := run(t, screens.Screen(m), m.Init())
+	m = scr.(*Model)
+
+	// Arm every submit* method's preconditions: a delete target, an in-progress edit form, an
+	// add form, and a categorize field over the selected row.
+	m.deleteTarget = tx.ID
+	m.editing = &tx.ID
+	m.editingTransferLeg = false
+	m.amountF = components.NewAutocomplete("Amount:", "", m.th)
+	m.amountF.SetValue("-6")
+	m.dateF = components.NewAutocomplete("Date:", "", m.th)
+	m.dateF.SetValue("2026-06-01")
+	m.descF = components.NewAutocomplete("Description:", "", m.th)
+	m.descF.SetValue("Coffee")
+	m.categoryF = components.NewAutocomplete("Category:", "", m.th)
+	m.notesF = components.NewAutocomplete("Notes:", "", m.th)
+	m.statusF = components.NewAutocomplete("Status:", "", m.th)
+	m.statusF.SetValue("pending")
+	m.kindF = components.NewAutocomplete("Kind:", "", m.th)
+	m.kindF.SetValue("payment")
+	m.accountF = components.NewAutocomplete("Account:", "", m.th)
+	m.accountF.SetValue("Checking")
+
+	m.table.ToggleSelect()
+	m.categorizeField = components.NewAutocomplete("New category:", "", m.th)
+	m.categorizeField.SetValue("Groceries")
+
+	cmds := []tea.Cmd{m.submitDelete(false), m.submitAdd(), m.submitEdit(false), m.submitCategorize(false)}
+
+	var wg sync.WaitGroup
+	for _, cmd := range cmds {
+		wg.Add(1)
+		go func(c tea.Cmd) {
+			defer wg.Done()
+			c()
+		}(cmd)
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 200; i++ {
+			m.req = app.ListTxRequest{Text: "x"}
+			m.table.ToggleSelect()
+		}
+	}()
+	wg.Wait()
 }

@@ -19,4 +19,6 @@ type UseCases interface {
 	ApplyEditTx(ctx context.Context, p app.EditTxPlan) (domain.Transaction, error)
 	PlanRemoveTx(ctx context.Context, req app.RemoveTxRequest) (app.RemoveTxPlan, error)
 	ApplyRemoveTx(ctx context.Context, p app.RemoveTxPlan) error
+	PlanCategorizeTx(ctx context.Context, req app.CategorizeTxRequest) (app.CategorizeTxPlan, error)
+	ApplyCategorizeTx(ctx context.Context, p app.CategorizeTxPlan) error
 }

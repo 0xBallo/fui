@@ -135,43 +135,20 @@ func (m *Model) InputActive() bool {
 }
 
 // loadedMsg carries a fresh first page, plus account and category names, back into Update.
+// clearSelection is set when the load follows a bulk action that consumed the table's selection.
 type loadedMsg struct {
-	page       app.TxPage
-	accounts   []string
-	categories []string
+	page           app.TxPage
+	accounts       []string
+	categories     []string
+	clearSelection bool
 }
 
 // moreMsg carries one more page, appended to the already loaded window.
 type moreMsg struct{ page app.TxPage }
 
 func (m *Model) load() tea.Cmd {
-	req := m.req
-	req.Limit = pageSize
-	req.After = nil
-	return func() tea.Msg {
-		ctx := context.Background()
-		page, err := m.uc.ListTx(ctx, req)
-		if err != nil {
-			return screens.ErrorMsg{Err: err}
-		}
-		accts, err := m.uc.ListAccounts(ctx, app.ListAccountsRequest{})
-		if err != nil {
-			return screens.ErrorMsg{Err: err}
-		}
-		cats, err := m.uc.ListCategories(ctx)
-		if err != nil {
-			return screens.ErrorMsg{Err: err}
-		}
-		names := make([]string, len(accts))
-		for i, a := range accts {
-			names[i] = a.Account.Name
-		}
-		catNames := make([]string, len(cats))
-		for i, c := range cats {
-			catNames[i] = c.Name
-		}
-		return loadedMsg{page: page, accounts: names, categories: catNames}
-	}
+	uc, req := m.uc, m.req
+	return func() tea.Msg { return reload(context.Background(), uc, req, false) }
 }
 
 func (m *Model) loadMore() tea.Cmd {
@@ -196,6 +173,9 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		m.accounts = msg.accounts
 		m.categories = msg.categories
 		m.table.SetRows(m.txRows())
+		if msg.clearSelection {
+			m.table.ClearSelection()
+		}
 		m.mode = modeList
 		m.lastErr = nil
 		return m, nil
@@ -345,6 +325,8 @@ func (m *Model) handleConfirmKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 			return m, m.submitDelete(true)
 		case confirmEditReconciled:
 			return m, m.submitEdit(true)
+		case confirmCategorizeReconciled:
+			return m, m.submitCategorize(true)
 		case confirmNone:
 			return m, nil
 		}
@@ -357,37 +339,41 @@ func (m *Model) handleConfirmKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 
 func (m *Model) submitDelete(confirmReconciled bool) tea.Cmd {
 	id := m.deleteTarget
+	uc, req := m.uc, m.req
 	return func() tea.Msg {
 		ctx := context.Background()
-		plan, err := m.uc.PlanRemoveTx(ctx, app.RemoveTxRequest{ID: id, ConfirmReconciled: confirmReconciled})
+		plan, err := uc.PlanRemoveTx(ctx, app.RemoveTxRequest{ID: id, ConfirmReconciled: confirmReconciled})
 		if err != nil {
 			if !confirmReconciled && errors.Is(err, domain.ErrReconciled) {
 				return needReconcileMsg{purpose: confirmDeleteReconciled}
 			}
 			return screens.ErrorMsg{Err: err}
 		}
-		if err := m.uc.ApplyRemoveTx(ctx, plan); err != nil {
+		if err := uc.ApplyRemoveTx(ctx, plan); err != nil {
 			return screens.ErrorMsg{Err: err}
 		}
-		return m.reload(ctx)
+		return reload(ctx, uc, req, false)
 	}
 }
 
 // needReconcileMsg asks the user to confirm an edit or delete of a reconciled transaction.
 type needReconcileMsg struct{ purpose confirmPurpose }
 
-func (m *Model) reload(ctx context.Context) tea.Msg {
-	req := m.req
+// reload is the shared body of every tea.Cmd that needs a fresh first page afterward. It only
+// touches its parameters, which every caller must copy out of the Model synchronously before
+// returning the tea.Cmd closure that calls it, keeping all live Model access confined to Update.
+func reload(ctx context.Context, uc UseCases, req app.ListTxRequest, clearSelection bool) tea.Msg {
 	req.Limit = pageSize
-	page, err := m.uc.ListTx(ctx, req)
+	req.After = nil
+	page, err := uc.ListTx(ctx, req)
 	if err != nil {
 		return screens.ErrorMsg{Err: err}
 	}
-	accts, err := m.uc.ListAccounts(ctx, app.ListAccountsRequest{})
+	accts, err := uc.ListAccounts(ctx, app.ListAccountsRequest{})
 	if err != nil {
 		return screens.ErrorMsg{Err: err}
 	}
-	cats, err := m.uc.ListCategories(ctx)
+	cats, err := uc.ListCategories(ctx)
 	if err != nil {
 		return screens.ErrorMsg{Err: err}
 	}
@@ -399,7 +385,7 @@ func (m *Model) reload(ctx context.Context) tea.Msg {
 	for i, c := range cats {
 		catNames[i] = c.Name
 	}
-	return loadedMsg{page: page, accounts: names, categories: catNames}
+	return loadedMsg{page: page, accounts: names, categories: catNames, clearSelection: clearSelection}
 }
 
 func (m *Model) txRows() []components.Row {

@@ -2,10 +2,12 @@ package transactions
 
 import (
 	"context"
+	"errors"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/tui/components"
 	"github.com/0xballo/fui/internal/tui/screens"
 )
@@ -138,33 +140,48 @@ func (m *Model) handleCategorizeKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 			m.categorizeField = updated
 			return m, cmd
 		}
-		return m, m.submitCategorize()
+		return m, m.submitCategorize(false)
 	}
 	updated, cmd := m.categorizeField.Update(msg)
 	m.categorizeField = updated
 	return m, cmd
 }
 
-func (m *Model) submitCategorize() tea.Cmd {
-	ids := append([]string{}, m.table.SelectedIDs()...)
-	category := m.categorizeField.Value()
-	return func() tea.Msg {
-		ctx := context.Background()
-		for _, idStr := range ids {
-			id, err := parseTxID(idStr)
-			if err != nil {
-				return screens.ErrorMsg{Err: err}
-			}
-			plan, err := m.uc.PlanEditTx(ctx, app.EditTxRequest{ID: id, Category: &category})
-			if err != nil {
-				return screens.ErrorMsg{Err: err}
-			}
-			if _, err := m.uc.ApplyEditTx(ctx, plan); err != nil {
-				return screens.ErrorMsg{Err: err}
-			}
+// parseTxIDs parses every table row ID in strs back into the TransactionID it was formatted from.
+func parseTxIDs(strs []string) ([]domain.TransactionID, error) {
+	ids := make([]domain.TransactionID, len(strs))
+	for i, s := range strs {
+		id, err := parseTxID(s)
+		if err != nil {
+			return nil, err
 		}
-		m.table.ClearSelection()
-		return m.reload(ctx)
+		ids[i] = id
+	}
+	return ids, nil
+}
+
+func (m *Model) submitCategorize(confirmReconciled bool) tea.Cmd {
+	ids, parseErr := parseTxIDs(m.table.SelectedIDs())
+	category := m.categorizeField.Value()
+	uc, listReq := m.uc, m.req
+	return func() tea.Msg {
+		if parseErr != nil {
+			return screens.ErrorMsg{Err: parseErr}
+		}
+		ctx := context.Background()
+		plan, err := uc.PlanCategorizeTx(ctx, app.CategorizeTxRequest{
+			IDs: ids, Category: category, ConfirmReconciled: confirmReconciled,
+		})
+		if err != nil {
+			if !confirmReconciled && errors.Is(err, domain.ErrReconciled) {
+				return needReconcileMsg{purpose: confirmCategorizeReconciled}
+			}
+			return screens.ErrorMsg{Err: err}
+		}
+		if err := uc.ApplyCategorizeTx(ctx, plan); err != nil {
+			return screens.ErrorMsg{Err: err}
+		}
+		return reload(ctx, uc, listReq, true)
 	}
 }
 

@@ -21,6 +21,7 @@ const (
 	confirmDelete
 	confirmDeleteReconciled
 	confirmEditReconciled
+	confirmCategorizeReconciled
 )
 
 func (m *Model) openAddForm() {
@@ -126,16 +127,17 @@ func (m *Model) submitAdd() tea.Cmd {
 		Description: m.descF.Value(), Category: m.categoryF.Value(), Notes: m.notesF.Value(),
 		Status: m.statusF.Value(), Kind: m.kindF.Value(),
 	}
+	uc, listReq := m.uc, m.req
 	return func() tea.Msg {
 		ctx := context.Background()
-		plan, err := m.uc.PlanAddTx(ctx, req)
+		plan, err := uc.PlanAddTx(ctx, req)
 		if err != nil {
 			return screens.ErrorMsg{Err: err}
 		}
-		if _, err := m.uc.ApplyAddTx(ctx, plan); err != nil {
+		if _, err := uc.ApplyAddTx(ctx, plan); err != nil {
 			return screens.ErrorMsg{Err: err}
 		}
-		return m.reload(ctx)
+		return reload(ctx, uc, listReq, false)
 	}
 }
 
@@ -152,19 +154,20 @@ func (m *Model) submitEdit(confirmReconciled bool) tea.Cmd {
 		ID: id, Amount: amount, Date: &date, Description: &desc, Notes: &notes,
 		Category: &category, Status: &status, Kind: &kind, ConfirmReconciled: confirmReconciled,
 	}
+	uc, listReq := m.uc, m.req
 	return func() tea.Msg {
 		ctx := context.Background()
-		plan, err := m.uc.PlanEditTx(ctx, req)
+		plan, err := uc.PlanEditTx(ctx, req)
 		if err != nil {
 			if !confirmReconciled && errors.Is(err, domain.ErrReconciled) {
 				return needReconcileMsg{purpose: confirmEditReconciled}
 			}
 			return screens.ErrorMsg{Err: err}
 		}
-		if _, err := m.uc.ApplyEditTx(ctx, plan); err != nil {
+		if _, err := uc.ApplyEditTx(ctx, plan); err != nil {
 			return screens.ErrorMsg{Err: err}
 		}
-		return m.reload(ctx)
+		return reload(ctx, uc, listReq, false)
 	}
 }
 
