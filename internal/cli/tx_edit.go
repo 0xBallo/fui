@@ -15,7 +15,7 @@ func newTxEditCmd(deps *Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "edit ID",
 		Short:   "Edit a transaction",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: "  fui tx edit 42 --amount -15,00 --confirm-reconciled",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runTxEdit(cmd, deps, args[0])

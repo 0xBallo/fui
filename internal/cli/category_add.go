@@ -12,7 +12,7 @@ func newCategoryAddCmd(deps *Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "add NAME",
 		Short:   "Add a category",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: "  fui category add Freelance --kind income",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rt, err := runtimeOf(cmd, deps)

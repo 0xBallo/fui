@@ -16,7 +16,7 @@ func newTxRemoveCmd(deps *Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "rm ID",
 		Short:   "Remove a transaction",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: "  fui tx rm 42",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runTxRemove(cmd, deps, args[0])

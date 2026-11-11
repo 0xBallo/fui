@@ -11,7 +11,7 @@ func newCategoryMergeCmd(deps *Deps) *cobra.Command {
 	return &cobra.Command{
 		Use:     "merge SOURCE TARGET",
 		Short:   "Merge a category into another",
-		Args:    cobra.ExactArgs(2),
+		Args:    exactArgs(2),
 		Example: "  fui category merge Dinning Dining --yes",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rt, err := runtimeOf(cmd, deps)

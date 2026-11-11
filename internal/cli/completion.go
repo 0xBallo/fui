@@ -35,7 +35,7 @@ func newCompletionShellCmd(shell, example string, gen func(root, cmd *cobra.Comm
 		Use:     shell,
 		Short:   "Generate a " + shell + " completion script",
 		Example: example,
-		Args:    cobra.NoArgs,
+		Args:    noArgs(),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := gen(cmd.Root(), cmd); err != nil {
 				return fmt.Errorf("generate %s completion: %w", shell, err)

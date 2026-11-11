@@ -11,7 +11,7 @@ func newCategoryRemoveCmd(deps *Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "rm NAME",
 		Short:   "Remove a category",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: "  fui category rm \"Other Expenses\" --reassign-to Shopping",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runCategoryRemove(cmd, deps, args[0])

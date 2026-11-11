@@ -12,7 +12,7 @@ func newFXSetCmd(deps *Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "set CURRENCY RATE",
 		Short:   "Set a manual exchange rate",
-		Args:    cobra.ExactArgs(2),
+		Args:    exactArgs(2),
 		Example: "  fui fx set USD 1.0842 --date 2026-01-01",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rt, err := runtimeOf(cmd, deps)

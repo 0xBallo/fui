@@ -12,7 +12,7 @@ func newConfigSetCmd(deps *Deps) *cobra.Command {
 	return &cobra.Command{
 		Use:     "set KEY VALUE",
 		Short:   "Change a configuration value",
-		Args:    cobra.ExactArgs(2),
+		Args:    exactArgs(2),
 		Example: "  fui config set currency EUR",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rt, err := runtimeOf(cmd, deps)

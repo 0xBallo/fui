@@ -28,7 +28,7 @@ func runtimeOf(cmd *cobra.Command, deps *Deps) (runtimeFlags, error) {
 	isJSON, _ := cmd.Flags().GetBool("json")
 	isCSV, _ := cmd.Flags().GetBool("csv")
 	if isJSON && isCSV {
-		return runtimeFlags{}, errors.New("--json and --csv are mutually exclusive")
+		return runtimeFlags{}, newUsageError(errors.New("--json and --csv are mutually exclusive"))
 	}
 	noInput, _ := cmd.Flags().GetBool("no-input")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")

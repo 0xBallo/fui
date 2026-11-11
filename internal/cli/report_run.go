@@ -18,7 +18,7 @@ func newReportRunCmd(deps *Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "run NAME",
 		Short:   "Run a predefined report (categories or cashflow)",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: "  fui report run categories --month 2026-10",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runReport(cmd, deps, args[0])

@@ -44,12 +44,13 @@ func TestCompletionBash(t *testing.T) {
 }
 
 // TestNoSubcommandRunsTUI covers "fui" with no args: it must call the injected RunTUI, and fail
-// clearly when none was given.
+// clearly when none was given. Missing RunTUI is a build/environment condition, not something
+// the user can fix by changing their input, so it is ExitDataError, not ExitUserError.
 func TestNoSubcommandRunsTUI(t *testing.T) {
 	h := newHarness(t)
 	_, stderr, code := h.run()
-	if code != 1 {
-		t.Fatalf("exit = %d, want 1; stderr=%s", code, stderr)
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2; stderr=%s", code, stderr)
 	}
 	if !strings.Contains(stderr, "no TUI available") {
 		t.Errorf("stderr = %q, want a no-TUI-available message", stderr)

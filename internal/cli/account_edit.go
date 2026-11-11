@@ -12,7 +12,7 @@ func newAccountEditCmd(deps *Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "edit NAME",
 		Short:   "Edit an account",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: "  fui account edit Checking --name \"Main Checking\"",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAccountEdit(cmd, deps, args[0])

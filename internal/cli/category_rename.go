@@ -12,7 +12,7 @@ func newCategoryRenameCmd(deps *Deps) *cobra.Command {
 	return &cobra.Command{
 		Use:     "rename NAME NEW_NAME",
 		Short:   "Rename a category",
-		Args:    cobra.ExactArgs(2),
+		Args:    exactArgs(2),
 		Example: "  fui category rename Dinning Dining",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rt, err := runtimeOf(cmd, deps)

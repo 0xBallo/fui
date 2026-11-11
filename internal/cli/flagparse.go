@@ -27,7 +27,7 @@ func splitLeadingPositional(cmd *cobra.Command, args []string) (first string, re
 	}
 	first, tail := args[0], args[1:]
 	if err := cmd.Flags().Parse(tail); err != nil {
-		return "", nil, false, fmt.Errorf("parse flags: %w", err)
+		return "", nil, false, newUsageError(fmt.Errorf("parse flags: %w", err))
 	}
 	return first, cmd.Flags().Args(), false, nil
 }

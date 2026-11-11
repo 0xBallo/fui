@@ -7,7 +7,7 @@ func newAccountShowCmd(deps *Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "show NAME",
 		Short:   "Show one account",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: "  fui account show Checking --at 2026-01-01",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rt, err := runtimeOf(cmd, deps)

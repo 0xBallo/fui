@@ -15,7 +15,7 @@ func newRestoreCmd(deps *Deps) *cobra.Command {
 	return &cobra.Command{
 		Use:     "restore PATH",
 		Short:   "Restore the archive from a backup",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: "  fui restore ~/.local/state/fui/backups/fui-2026-01-01.db --yes",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rt, err := runtimeOf(cmd, deps)

@@ -11,7 +11,7 @@ func newAccountAddCmd(deps *Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "add NAME",
 		Short:   "Add an account",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: "  fui account add Checking --kind checking --currency EUR --opening-balance 1000",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAccountAdd(cmd, deps, args[0])

@@ -21,7 +21,7 @@ func NewRoot(deps *Deps) *cobra.Command {
 		SilenceErrors: true,
 		Args: func(_ *cobra.Command, args []string) error {
 			if len(args) > 0 {
-				return fmt.Errorf("unknown command %q for %q", args[0], "fui")
+				return newUsageError(fmt.Errorf("unknown command %q for %q", args[0], "fui"))
 			}
 			return nil
 		},
@@ -32,6 +32,7 @@ func NewRoot(deps *Deps) *cobra.Command {
 			return deps.RunTUI(cmd.Context())
 		},
 	}
+	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return newUsageError(err) })
 	registerPersistentFlags(root)
 	root.AddCommand(
 		newInitCmd(deps), newAddCmd(deps), newTxCmd(deps), newTransferCmd(deps),
@@ -40,6 +41,23 @@ func NewRoot(deps *Deps) *cobra.Command {
 		newReportCmd(deps), newKPICmd(deps), newCompletionCmd(),
 	)
 	return root
+}
+
+// exactArgs wraps cobra.ExactArgs(n) so a wrong argument count is a usageError, classified as
+// ExitUserError, instead of the ExitDataError every other non-domain error defaults to.
+func exactArgs(n int) cobra.PositionalArgs {
+	validate := cobra.ExactArgs(n)
+	return func(cmd *cobra.Command, args []string) error {
+		return newUsageError(validate(cmd, args))
+	}
+}
+
+// noArgs wraps cobra.NoArgs the same way exactArgs wraps cobra.ExactArgs.
+func noArgs() cobra.PositionalArgs {
+	validate := cobra.NoArgs
+	return func(cmd *cobra.Command, args []string) error {
+		return newUsageError(validate(cmd, args))
+	}
 }
 
 // registerPersistentFlags defines the flags common to every command, per the technical spec.

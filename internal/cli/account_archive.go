@@ -8,7 +8,7 @@ func newAccountArchiveCmd(deps *Deps) *cobra.Command {
 	return &cobra.Command{
 		Use:     "archive NAME",
 		Short:   "Archive an account",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: "  fui account archive \"Old Savings\"",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rt, err := runtimeOf(cmd, deps)

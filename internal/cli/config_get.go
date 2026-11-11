@@ -13,7 +13,7 @@ func newConfigGetCmd(deps *Deps) *cobra.Command {
 	return &cobra.Command{
 		Use:     "get KEY",
 		Short:   "Read a configuration value",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: "  fui config get currency",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rt, err := runtimeOf(cmd, deps)

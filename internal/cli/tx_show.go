@@ -13,7 +13,7 @@ func newTxShowCmd(deps *Deps) *cobra.Command {
 	return &cobra.Command{
 		Use:     "show ID",
 		Short:   "Show one transaction",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: "  fui tx show 42",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rt, err := runtimeOf(cmd, deps)

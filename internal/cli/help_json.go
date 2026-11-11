@@ -96,7 +96,7 @@ func newHelpJSONCmd(deps *Deps) *cobra.Command {
 			if len(args) > 0 {
 				found, _, err := cmd.Root().Find(args)
 				if err != nil {
-					return fmt.Errorf("find command: %w", err)
+					return newUsageError(fmt.Errorf("find command: %w", err))
 				}
 				target = found
 			}
