@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/exp/golden"
 	"github.com/charmbracelet/x/exp/teatest"
 
 	"github.com/0xballo/fui/internal/app"
@@ -32,8 +34,8 @@ func newSnapshotFixture(t *testing.T) screentest.Fixture {
 }
 
 // snapshot runs Root at 80x24 over the seeded fixture, types keys, waits for wait to appear in
-// the rendered output, then diffs the final frame against testdata/<test name>.golden (refresh
-// with `go test ./internal/tui/... -run <test> -update`).
+// the rendered output, then diffs the ANSI-stripped final frame against
+// testdata/<test name>.golden (refresh with `go test ./internal/tui -run <test> -update`).
 func snapshot(t *testing.T, keys, wait string) {
 	t.Helper()
 	fx := newSnapshotFixture(t)
@@ -62,7 +64,11 @@ func snapshot(t *testing.T, keys, wait string) {
 	}
 	captured.Write(rest)
 
-	teatest.RequireEqualOutput(t, captured.Bytes())
+	// Compare only the rendered text, not the raw escape stream: cursor-movement/clear
+	// trailers that the terminal libraries emit on quit vary across patch versions of
+	// bubbletea/colorprofile and are not part of what the screen actually renders, so
+	// pinning to them would make the goldens brittle to unrelated dependency bumps.
+	golden.RequireEqual(t, []byte(ansi.Strip(captured.String())))
 }
 
 func TestDashboardSnapshot(t *testing.T) {

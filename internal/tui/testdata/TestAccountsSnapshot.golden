@@ -1,8 +1,8 @@
-[?25l[?2004h1 Dashboard  2 Transactions  3 Accounts  4 Budget  5 Reports  6 Import  7 Settin
-[K
-Accounts[K
-[K
-Account                  Kind                  Balance[K
-Checking                 checking             1,207.50[K
-[K
-? help · q quit[K[2K[?2004l[?25h[?1002l[?1003l[?1006l
+1 Dashboard  2 Transactions  3 Accounts  4 Budget  5 Reports  6 Import  7 Settin
+
+Accounts
+
+Account                  Kind                  Balance
+Checking                 checking             1,207.50
+
+? help · q quit
