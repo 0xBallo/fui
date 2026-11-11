@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/cli"
 	"github.com/0xballo/fui/internal/config"
 	"github.com/0xballo/fui/internal/domain"
@@ -38,26 +39,50 @@ func (b *fakeBackup) Restore(_ context.Context, path string) error {
 // harness builds a cli.Deps over an empty memstore and runs command lines against it, capturing
 // output and the exit code. Each run gets a fresh Deps so stdout/stderr never leak between cases.
 type harness struct {
-	t      *testing.T
-	store  *memstore.Store
-	svc    *app.Service
-	backup *fakeBackup
-	cfg    *config.Config
-	term   bool
-	stdin  *bytes.Buffer
+	t         *testing.T
+	store     *memstore.Store
+	svc       *app.Service
+	backup    *fakeBackup
+	cfg       *config.Config
+	term      bool
+	stdin     *bytes.Buffer
+	reporting cli.Reporting
 }
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 	store := memstore.New()
 	backup := &fakeBackup{}
+	clock := fixedClock{time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)}
 	svcCfg := app.Config{Locale: domain.LocaleENUS, Location: time.UTC, BaseCurrency: currency(t, "EUR")}
-	svc := app.New(store, fixedClock{time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)}, backup, svcCfg)
+	svc := app.New(store, clock, backup, svcCfg)
 	cfg := &config.Config{
-		Currency: "EUR", Locale: config.LocaleUS,
+		Currency: "EUR", Locale: config.LocaleUS, MonthStartDay: 1,
 		ConfigFile: filepath.Join(t.TempDir(), "config.toml"),
 	}
-	return &harness{t: t, store: store, svc: svc, backup: backup, cfg: cfg, stdin: &bytes.Buffer{}}
+	return &harness{
+		t: t, store: store, svc: svc, backup: backup, cfg: cfg, stdin: &bytes.Buffer{},
+		reporting: mustReporting(t, store, clock),
+	}
+}
+
+// mustReporting builds the reporting use cases over store's reporting.Source test adapter.
+func mustReporting(t *testing.T, store *memstore.Store, clock reporting.Clock) cli.Reporting {
+	t.Helper()
+	src := reportingSource{store: store}
+	spending, err := reporting.NewSpending(src, clock)
+	if err != nil {
+		t.Fatalf("NewSpending: %v", err)
+	}
+	cashFlow, err := reporting.NewCashFlow(src, clock)
+	if err != nil {
+		t.Fatalf("NewCashFlow: %v", err)
+	}
+	runway, err := reporting.NewRunway(src, clock)
+	if err != nil {
+		t.Fatalf("NewRunway: %v", err)
+	}
+	return cli.Reporting{Spending: spending, CashFlow: cashFlow, Runway: runway}
 }
 
 // useItalianLocale switches the harness to it-IT (comma decimal separator, dd/mm/yyyy dates),
@@ -83,7 +108,7 @@ func (h *harness) run(args ...string) (stdout, stderr string, code int) {
 	h.t.Helper()
 	var out, errw bytes.Buffer
 	deps := &cli.Deps{
-		Service: h.svc, Config: h.cfg, Stdin: h.stdin, Stdout: &out, Stderr: &errw,
+		Service: h.svc, Reporting: h.reporting, Config: h.cfg, Stdin: h.stdin, Stdout: &out, Stderr: &errw,
 		IsTerminal: h.term, Version: "test",
 	}
 	code = cli.Execute(context.Background(), deps, args)

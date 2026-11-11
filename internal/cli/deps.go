@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/config"
 	"github.com/0xballo/fui/internal/domain"
 )
@@ -18,6 +19,8 @@ import (
 type Deps struct {
 	// Service runs the account, transaction, transfer, category, fx and backup use cases.
 	Service *app.Service
+	// Reporting runs the read-only report and KPI use cases.
+	Reporting Reporting
 	// Config is the resolved configuration; AgentMode reflects FUI_AGENT, Locale and Currency
 	// drive parsing and formatting.
 	Config *config.Config
@@ -33,10 +36,25 @@ type Deps struct {
 	Version string
 }
 
+// Reporting are the read-only reporting and KPI use cases backing `report run` and `kpi runway`.
+// The composition root builds them over the real store; tests build them over a memstore
+// adapter.
+type Reporting struct {
+	Spending reporting.Spending
+	CashFlow reporting.CashFlow
+	Runway   reporting.Runway
+}
+
 // Locale returns the configured number/date locale, defaulting to en-US.
 func (d *Deps) Locale() domain.Locale {
 	if l := domain.Locale(d.Config.Locale); l.Valid() {
 		return l
 	}
 	return domain.LocaleENUS
+}
+
+// BaseCurrency parses the configured base currency, used by report and KPI commands to convert
+// multi-currency amounts.
+func (d *Deps) BaseCurrency() (domain.Currency, error) {
+	return domain.ParseCurrency(d.Config.Currency)
 }

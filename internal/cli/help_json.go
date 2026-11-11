@@ -35,6 +35,8 @@ var outputSchemas = map[string]string{
 	"fui backup":          "backup_result",
 	"fui restore":         "restore_result",
 	"fui config get":      "config_value",
+	"fui report run":      "spending_report|cashflow_report",
+	"fui kpi runway":      "runway",
 }
 
 // helpFlag describes one flag of a command in "help --json" output.
