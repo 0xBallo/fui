@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/0xballo/fui/pkg/fuiproto"
 )
 
 func TestParseMinorUnits(t *testing.T) {
@@ -42,6 +44,34 @@ func TestParseRevolutCSVErrors(t *testing.T) {
 	}
 	if len(result.errors) != 1 {
 		t.Fatalf("errors = %d, want 1", len(result.errors))
+	}
+}
+
+func TestRevolutFeeNormalization(t *testing.T) {
+	input := strings.NewReader(
+		"Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance\n" +
+			"Transfer,Current,2026-01-01 10:00:00,2026-01-01 11:00:00,Transfer to Example,-10.00,0.50,EUR,COMPLETED,100.00\n",
+	)
+
+	result, err := parseRevolutCSV(input, nil)
+	if err != nil {
+		t.Fatalf("parseRevolutCSV returned error: %v", err)
+	}
+	if len(result.transactions) != 2 {
+		t.Fatalf("transactions = %d, want 2", len(result.transactions))
+	}
+
+	mainTx := result.transactions[0].Transaction
+	feeTx := result.transactions[1].Transaction
+
+	if mainTx.BalanceAfter == nil {
+		t.Fatalf("main balance_after is nil")
+	}
+	if *mainTx.BalanceAfter != 10050 {
+		t.Fatalf("main balance_after = %d, want 10050", *mainTx.BalanceAfter)
+	}
+	if feeTx.Amount != -50 {
+		t.Fatalf("fee amount = %d, want -50", feeTx.Amount)
 	}
 }
 
@@ -92,7 +122,7 @@ func TestParseRevolutAmounts(t *testing.T) {
 	if errRecord != nil {
 		t.Fatalf("unexpected error: %+v", errRecord)
 	}
-	if amount != -123 || fee != -10 || balance == nil || *balance != 10000 {
+	if amount != -123 || fee != 10 || balance == nil || *balance != 10000 {
 		t.Fatalf("unexpected parsed amounts: amount=%d fee=%d balance=%v", amount, fee, balance)
 	}
 
@@ -102,6 +132,15 @@ func TestParseRevolutAmounts(t *testing.T) {
 	})
 	if errRecord == nil {
 		t.Fatalf("expected invalid amount error")
+	}
+}
+
+func TestRevolutAccountKind(t *testing.T) {
+	if got := revolutAccountKind("Savings"); got != fuiproto.AccountKindSavings {
+		t.Fatalf("kind = %q, want %q", got, fuiproto.AccountKindSavings)
+	}
+	if got := revolutAccountKind("Current"); got != fuiproto.AccountKindChecking {
+		t.Fatalf("kind = %q, want %q", got, fuiproto.AccountKindChecking)
 	}
 }
 

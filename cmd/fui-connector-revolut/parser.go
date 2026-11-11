@@ -27,6 +27,7 @@ type revolutRow struct {
 	line          int
 	accountRef    string
 	accountName   string
+	accountKind   fuiproto.AccountKind
 	currency      string
 	date          string
 	operationDate string
@@ -153,6 +154,7 @@ func parseRevolutRow(record []string, line int, columns map[string]int) (revolut
 		line:          line,
 		accountRef:    "revolut-" + product + "-" + currency,
 		accountName:   "Revolut " + titleWords(product) + " " + currency,
+		accountKind:   revolutAccountKind(raw["product"]),
 		currency:      currency,
 		date:          date,
 		operationDate: parseOptionalDate(raw["started date"]),
@@ -205,7 +207,7 @@ func parseRevolutAmounts(
 		return 0, 0, nil, &rowErr
 	}
 	if parsedFee != nil {
-		fee = *parsedFee
+		fee = absMinorUnits(*parsedFee)
 	}
 
 	balance, err := parseOptionalMinorUnits(raw["balance"])
@@ -264,7 +266,7 @@ func materializeRows(rows []revolutRow, parseErrors []fuiproto.ErrorRecord, sinc
 			Ref:      row.accountRef,
 			Name:     row.accountName,
 			Currency: row.currency,
-			Kind:     fuiproto.AccountKindChecking,
+			Kind:     row.accountKind,
 		}
 
 		transactions = append(transactions, makeMainTransaction(row))
@@ -294,7 +296,7 @@ func makeMainTransaction(row revolutRow) fuiproto.Record {
 	if row.balance != nil {
 		value := *row.balance
 		if row.fee != 0 {
-			value = value - row.fee
+			value = value + row.fee
 		}
 		balanceAfter = &value
 	}
@@ -332,7 +334,7 @@ func makeFeeTransaction(row revolutRow) fuiproto.Record {
 			ID:            row.id + "-fee",
 			Date:          row.date,
 			OperationDate: row.operationDate,
-			Amount:        row.fee,
+			Amount:        -row.fee,
 			Currency:      row.currency,
 			Description:   "Fee: " + row.description,
 			Status:        row.status,
@@ -457,6 +459,13 @@ func revolutKind(rawType string) fuiproto.TransactionKind {
 	default:
 		return fuiproto.TransactionKindOther
 	}
+}
+
+func revolutAccountKind(product string) fuiproto.AccountKind {
+	if strings.EqualFold(strings.TrimSpace(product), "savings") {
+		return fuiproto.AccountKindSavings
+	}
+	return fuiproto.AccountKindChecking
 }
 
 func extractRevolutPayee(rawType, description string) string {
@@ -712,4 +721,11 @@ func digitsOnly(value string) bool {
 		}
 	}
 	return true
+}
+
+func absMinorUnits(value int64) int64 {
+	if value < 0 {
+		return -value
+	}
+	return value
 }
