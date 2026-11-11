@@ -236,3 +236,108 @@ func TestReconciledNeedsConfirmation(t *testing.T) {
 	wantNoErr(t, err)
 	wantNoErr(t, e.svc.ApplyRemoveTx(ctx, rp))
 }
+
+func TestCategorizeTx(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+	e.account(t, "A", "checking", "EUR", "0")
+	e.category(t, "Food", "expense")
+	e.category(t, "Fun", "expense")
+	tx1 := e.tx(t, app.AddTxRequest{Account: "A", Amount: "-10", Category: "Food"})
+	tx2 := e.tx(t, app.AddTxRequest{Account: "A", Amount: "-20"})
+
+	p, err := e.svc.PlanCategorizeTx(ctx, app.CategorizeTxRequest{IDs: []domain.TransactionID{tx1.ID, tx2.ID}, Category: "Fun"})
+	wantNoErr(t, err)
+	if !p.Bulk {
+		t.Error("plan is not bulk")
+	}
+	if len(p.Changes) != 2 || len(p.Txs) != 2 {
+		t.Fatalf("plan = %+v", p)
+	}
+	wantNoErr(t, e.svc.ApplyCategorizeTx(ctx, p))
+	if len(e.backup.reasons) != 1 || e.backup.reasons[0] != app.BackupReasonBulk {
+		t.Errorf("backup reasons = %v, want one %q", e.backup.reasons, app.BackupReasonBulk)
+	}
+
+	for _, id := range []domain.TransactionID{tx1.ID, tx2.ID} {
+		v, err := e.svc.ShowTx(ctx, id)
+		wantNoErr(t, err)
+		if v.Category != "Fun" {
+			t.Errorf("ShowTx(%d).Category = %q, want %q", id, v.Category, "Fun")
+		}
+	}
+
+	// Clearing the category on tx1 alone leaves tx2 untouched.
+	p, err = e.svc.PlanCategorizeTx(ctx, app.CategorizeTxRequest{IDs: []domain.TransactionID{tx1.ID}, Category: ""})
+	wantNoErr(t, err)
+	wantNoErr(t, e.svc.ApplyCategorizeTx(ctx, p))
+	v, err := e.svc.ShowTx(ctx, tx1.ID)
+	wantNoErr(t, err)
+	if v.Category != "" {
+		t.Errorf("category not cleared: %q", v.Category)
+	}
+	v, err = e.svc.ShowTx(ctx, tx2.ID)
+	wantNoErr(t, err)
+	if v.Category != "Fun" {
+		t.Errorf("unrelated transaction changed: %q", v.Category)
+	}
+}
+
+func TestCategorizeTxRejectsEmptyOrUnknownIDs(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+	e.account(t, "A", "checking", "EUR", "0")
+	before := e.store.Snapshot()
+
+	_, err := e.svc.PlanCategorizeTx(ctx, app.CategorizeTxRequest{})
+	wantCode(t, err, domain.ErrMissingField)
+	_, err = e.svc.PlanCategorizeTx(ctx, app.CategorizeTxRequest{IDs: []domain.TransactionID{999}})
+	wantCode(t, err, domain.ErrNotFound)
+	if after := e.store.Snapshot(); after != before {
+		t.Error("PlanCategorizeTx wrote to the store")
+	}
+}
+
+func TestCategorizeTxReconciledNeedsConfirmation(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+	e.account(t, "A", "checking", "EUR", "0")
+	e.category(t, "Fun", "expense")
+	tx := e.tx(t, app.AddTxRequest{Account: "A", Amount: "-10", Status: "reconciled"})
+
+	_, err := e.svc.PlanCategorizeTx(ctx, app.CategorizeTxRequest{IDs: []domain.TransactionID{tx.ID}, Category: "Fun"})
+	wantCode(t, err, domain.ErrReconciled)
+
+	p, err := e.svc.PlanCategorizeTx(ctx, app.CategorizeTxRequest{
+		IDs: []domain.TransactionID{tx.ID}, Category: "Fun", ConfirmReconciled: true,
+	})
+	wantNoErr(t, err)
+	wantNoErr(t, e.svc.ApplyCategorizeTx(ctx, p))
+}
+
+// ApplyCategorizeTx writes every transaction of the plan in one WithTx: if any update fails, none
+// of the others are persisted either.
+func TestCategorizeTxApplyIsAtomic(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+	e.account(t, "A", "checking", "EUR", "0")
+	e.category(t, "Fun", "expense")
+	tx := e.tx(t, app.AddTxRequest{Account: "A", Amount: "-10"})
+
+	p, err := e.svc.PlanCategorizeTx(ctx, app.CategorizeTxRequest{IDs: []domain.TransactionID{tx.ID}, Category: "Fun"})
+	wantNoErr(t, err)
+	// Forge a second, nonexistent transaction into the plan to force ApplyCategorizeTx to fail
+	// partway through the loop.
+	bogus := tx
+	bogus.ID = 999
+	p.Txs = append(p.Txs, bogus)
+
+	err = e.svc.ApplyCategorizeTx(ctx, p)
+	wantCode(t, err, domain.ErrNotFound)
+
+	v, showErr := e.svc.ShowTx(ctx, tx.ID)
+	wantNoErr(t, showErr)
+	if v.Category != "" {
+		t.Errorf("partial write survived a failed ApplyCategorizeTx: category = %q", v.Category)
+	}
+}

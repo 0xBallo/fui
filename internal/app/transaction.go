@@ -396,6 +396,79 @@ func (s *Service) ApplyEditTx(ctx context.Context, p EditTxPlan) (domain.Transac
 	return p.Tx, err
 }
 
+// CategorizeTxRequest sets Category on every transaction in IDs, clearing it when Category is
+// empty. Reconciled transactions among them need ConfirmReconciled.
+type CategorizeTxRequest struct {
+	IDs               []domain.TransactionID
+	Category          string
+	ConfirmReconciled bool
+}
+
+// CategorizeTxPlan is the plan to store every transaction of Txs with its new category. Bulk is
+// always true: it is a mass change over potentially many transactions.
+type CategorizeTxPlan struct {
+	Plan
+	Txs []domain.Transaction
+}
+
+// PlanCategorizeTx plans setting Category on every transaction in req.IDs. It fails, without
+// writing to the store, if IDs is empty, an ID does not exist, Category does not resolve, or a
+// reconciled transaction is included without ConfirmReconciled.
+func (s *Service) PlanCategorizeTx(ctx context.Context, req CategorizeTxRequest) (CategorizeTxPlan, error) {
+	var out CategorizeTxPlan
+	if len(req.IDs) == 0 {
+		return out, newError(domain.ErrMissingField, map[string]any{"field": "ids"}, "no transactions selected")
+	}
+	err := s.store.Read(ctx, func(r Repos) error {
+		accts, cats, err := loadNames(ctx, r)
+		if err != nil {
+			return err
+		}
+		var catID domain.CategoryID
+		var catName string
+		if req.Category != "" {
+			c, err := pickCategory(cats, req.Category)
+			if err != nil {
+				return err
+			}
+			catID, catName = c.ID, c.Name
+		}
+		v := newViewer(accts, cats)
+		for _, id := range req.IDs {
+			t, err := r.Transactions().Get(ctx, id)
+			if err != nil {
+				return fmt.Errorf("get transaction %d: %w", id, err)
+			}
+			if err := checkReconciled(t, req.ConfirmReconciled); err != nil {
+				return err
+			}
+			t.CategoryID = catID
+			edited, err := domain.NewTransaction(t)
+			if err != nil {
+				return fmt.Errorf("transaction %d: %w", id, err)
+			}
+			out.Txs = append(out.Txs, edited)
+			out.Changes = append(out.Changes, txChange(OpUpdate, edited, v.view(edited).Account, catName))
+		}
+		out.Bulk = true
+		return nil
+	})
+	return out, err
+}
+
+// ApplyCategorizeTx stores every transaction of the plan in a single transaction, taking one
+// backup first since it is a bulk change.
+func (s *Service) ApplyCategorizeTx(ctx context.Context, p CategorizeTxPlan) error {
+	return s.apply(ctx, p.Bulk, func(r Repos) error {
+		for _, t := range p.Txs {
+			if err := r.Transactions().Update(ctx, t); err != nil {
+				return fmt.Errorf("update transaction %d: %w", t.ID, err)
+			}
+		}
+		return nil
+	})
+}
+
 // RemoveTxRequest removes transaction ID; removing a transfer leg removes the whole transfer.
 // Removing a reconciled transaction needs ConfirmReconciled.
 type RemoveTxRequest struct {

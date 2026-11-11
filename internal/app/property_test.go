@@ -9,6 +9,7 @@ import (
 	"pgregory.net/rapid"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/domain"
 )
 
 // The balance at a date does not depend on the order movements were inserted in.
@@ -118,6 +119,10 @@ func TestPlanNeverWrites(t *testing.T) {
 				return err
 			},
 			"remove tx": func() error { _, err := e.svc.PlanRemoveTx(ctx, app.RemoveTxRequest{ID: tx.ID}); return err },
+			"categorize tx": func() error {
+				_, err := e.svc.PlanCategorizeTx(ctx, app.CategorizeTxRequest{IDs: []domain.TransactionID{tx.ID}, Category: s("c")})
+				return err
+			},
 			"transfer": func() error {
 				_, err := e.svc.PlanTransfer(ctx, app.TransferRequest{From: s("f"), To: s("t"), Amount: s("m"), Fee: s("fee")})
 				return err
