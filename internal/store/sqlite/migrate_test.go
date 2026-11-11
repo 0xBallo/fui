@@ -123,7 +123,7 @@ func mustOpenRawDB(t *testing.T, path string) *sql.DB {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	db, err := openDB(path, 1)
+	db, err := openDB(path, 1, false)
 	if err != nil {
 		t.Fatalf("openDB: %v", err)
 	}

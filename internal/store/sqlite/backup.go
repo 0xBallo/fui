@@ -72,10 +72,19 @@ func (s *Store) Restore(ctx context.Context, path string) error {
 	if _, err := s.backupLocked(ctx, backup.ReasonRestore); err != nil {
 		return err
 	}
+	if _, err := s.writeDB.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+		return fmt.Errorf("restore: wal checkpoint: %w", mapSQLError(err))
+	}
 
 	oldWrite, oldRead := s.writeDB, s.readDB
 	if err := closeDBs(oldRead, oldWrite); err != nil {
 		return fmt.Errorf("restore: close active connections: %w", err)
+	}
+	if err := ensureWALSidecarsGone(s.path); err != nil {
+		if reopenErr := s.reopenLocked(); reopenErr != nil {
+			return fmt.Errorf("restore: keep current db after wal sidecar check: %w", errors.Join(err, reopenErr))
+		}
+		return err
 	}
 
 	if err := os.Rename(tempPath, s.path); err != nil {
@@ -92,7 +101,7 @@ func (s *Store) Restore(ctx context.Context, path string) error {
 }
 
 func validateRestoreCandidate(ctx context.Context, path string) error {
-	db, err := openDB(path, 1)
+	db, err := openDB(path, 1, false)
 	if err != nil {
 		return fmt.Errorf("restore: open candidate %q: %w", path, mapSQLError(err))
 	}
@@ -161,11 +170,11 @@ func (s *Store) copyCandidateToTemp(candidate string) (string, error) {
 }
 
 func (s *Store) reopenLocked() error {
-	writeDB, err := openDB(s.path, 1)
+	writeDB, err := openDB(s.path, 1, true)
 	if err != nil {
 		return err
 	}
-	readDB, err := openDB(s.path, defaultReadPoolSize)
+	readDB, err := openDB(s.path, defaultReadPoolSize, false)
 	if err != nil {
 		_ = writeDB.Close()
 		return err
@@ -184,6 +193,22 @@ func closeDBs(dbs ...*sql.DB) error {
 		errs = append(errs, db.Close())
 	}
 	return errors.Join(errs...)
+}
+
+func ensureWALSidecarsGone(path string) error {
+	for _, suffix := range []string{"-wal", "-shm"} {
+		sidecarPath := path + suffix
+		if _, err := os.Stat(sidecarPath); err == nil {
+			return &domainErrorf{
+				sentinel: errDBLocked,
+				format:   "restore: sidecar file %q still present after close",
+				args:     []any{sidecarPath},
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("restore: stat sidecar %q: %w", sidecarPath, err)
+		}
+	}
+	return nil
 }
 
 func quoteString(s string) string {

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"sync"
 
 	"github.com/0xballo/fui/internal/app"
@@ -78,7 +79,7 @@ func Open(ctx context.Context, opts Options) (*Store, error) {
 		return nil, fmt.Errorf("open sqlite store: ensure backup dir: %w", err)
 	}
 
-	writeDB, err := openDB(opts.Path, 1)
+	writeDB, err := openDB(opts.Path, 1, true)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite store: open write db: %w", mapSQLError(err))
 	}
@@ -95,7 +96,7 @@ func Open(ctx context.Context, opts Options) (*Store, error) {
 		return nil, err
 	}
 
-	readDB, err := openDB(opts.Path, opts.ReadPoolSize)
+	readDB, err := openDB(opts.Path, opts.ReadPoolSize, false)
 	if err != nil {
 		_ = writeDB.Close()
 		return nil, fmt.Errorf("open sqlite store: open read db: %w", mapSQLError(err))
@@ -170,12 +171,8 @@ func (s *Store) WithTx(ctx context.Context, fn func(app.Repos) error) error {
 	return nil
 }
 
-func openDB(path string, maxOpen int) (*sql.DB, error) {
-	dsn := fmt.Sprintf(
-		"file:%s?_pragma=foreign_keys(ON)&_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=busy_timeout(%d)",
-		path,
-		defaultBusyTimeoutMS,
-	)
+func openDB(path string, maxOpen int, immediateTxLock bool) (*sql.DB, error) {
+	dsn := sqliteDSN(path, immediateTxLock)
 	db, err := sql.Open(sqliteDriverName, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite db %q: %w", path, err)
@@ -189,6 +186,24 @@ func openDB(path string, maxOpen int) (*sql.DB, error) {
 		return nil, fmt.Errorf("ping sqlite db %q: %w", path, err)
 	}
 	return db, nil
+}
+
+func sqliteDSN(path string, immediateTxLock bool) string {
+	values := url.Values{}
+	values.Add("_pragma", "foreign_keys(ON)")
+	values.Add("_pragma", "journal_mode(WAL)")
+	values.Add("_pragma", "synchronous(FULL)")
+	values.Add("_pragma", fmt.Sprintf("busy_timeout(%d)", defaultBusyTimeoutMS))
+	if immediateTxLock {
+		values.Set("_txlock", "immediate")
+	}
+
+	u := url.URL{
+		Scheme:   "file",
+		Path:     path,
+		RawQuery: values.Encode(),
+	}
+	return u.String()
 }
 
 func newQueries(tx *sql.Tx) *gen.Queries {

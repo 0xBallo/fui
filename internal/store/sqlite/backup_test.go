@@ -2,9 +2,11 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 	"time"
 
@@ -79,6 +81,65 @@ func TestRestoreRejectsCorruptedCandidate(t *testing.T) {
 	if !errors.Is(err, errDBCorrupted) {
 		t.Fatalf("Restore error = %v, want db_corrupted", err)
 	}
+}
+
+func TestRestoreLockedByOtherProcessKeepsCurrentDB(t *testing.T) {
+	root := t.TempDir()
+	store, _ := mustOpenStore(t, root, 5)
+
+	_ = insertAccountForTest(t, store, "Original")
+	candidate, err := store.Backup(context.Background(), app.BackupReasonManual)
+	if err != nil {
+		t.Fatalf("Backup: %v", err)
+	}
+	_ = insertAccountForTest(t, store, "Later")
+
+	external, err := openDB(filepath.Join(root, "data", "fui.db"), 1, false)
+	if err != nil {
+		t.Fatalf("open external db: %v", err)
+	}
+	defer func() { _ = external.Close() }()
+
+	readTx, err := external.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatalf("begin external read tx: %v", err)
+	}
+	defer func() { _ = readTx.Rollback() }()
+	var n int
+	if err := readTx.QueryRowContext(context.Background(), "SELECT count(*) FROM accounts").Scan(&n); err != nil {
+		t.Fatalf("external read: %v", err)
+	}
+
+	err = store.Restore(context.Background(), candidate)
+	if !errors.Is(err, errDBLocked) {
+		t.Fatalf("Restore with external holder err = %v, want db_locked", err)
+	}
+
+	names := listAccountNames(t, store)
+	sort.Strings(names)
+	if len(names) != 2 || names[0] != "Later" || names[1] != "Original" {
+		t.Fatalf("accounts after failed restore = %v, want [Later Original]", names)
+	}
+}
+
+func listAccountNames(t *testing.T, store *Store) []string {
+	t.Helper()
+
+	var names []string
+	err := store.Read(context.Background(), func(r app.Repos) error {
+		accounts, listErr := r.Accounts().List(context.Background())
+		if listErr != nil {
+			return listErr
+		}
+		for _, account := range accounts {
+			names = append(names, account.Name)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	return names
 }
 
 func mustOpenStore(t *testing.T, root string, keep int) (*Store, *clock.Fixed) {

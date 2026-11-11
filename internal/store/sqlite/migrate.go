@@ -6,6 +6,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,11 +71,16 @@ func (s *Store) migrate(ctx context.Context, existing bool) error {
 		}
 	}
 
-	goose.SetBaseFS(migrationFS)
-	if err := goose.SetDialect("sqlite3"); err != nil {
-		return fmt.Errorf("open sqlite store: configure goose dialect: %w", err)
+	migrationsFS, err := fs.Sub(migrationFS, "migrations")
+	if err != nil {
+		return fmt.Errorf("open sqlite store: load migrations fs: %w", err)
 	}
-	if err := goose.UpContext(ctx, s.writeDB, "migrations"); err != nil {
+	provider, err := goose.NewProvider(goose.DialectSQLite3, s.writeDB, migrationsFS)
+	if err != nil {
+		return fmt.Errorf("open sqlite store: create migration provider: %w", err)
+	}
+
+	if _, err := provider.Up(ctx); err != nil {
 		return &domainErrorf{
 			sentinel: errMigrationFailed,
 			format:   "migrate schema: %v",

@@ -3,8 +3,11 @@ package sqlite
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -108,5 +111,85 @@ func TestReadIsReadOnly(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("Read write should fail")
+	}
+}
+
+func TestOpenSupportsSpecialCharactersInPath(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "db #1", "fui ?main%v1.db")
+	store, err := Open(context.Background(), Options{
+		Path:       path,
+		BackupDir:  filepath.Join(root, "backups"),
+		BackupKeep: 5,
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if info.Size() == 0 {
+		t.Fatalf("db file size is 0 for %q, expected migrated sqlite file", path)
+	}
+}
+
+func TestConcurrentWithTxAcrossStoresReadThenWrite(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "data", "fui.db")
+	backupDir := filepath.Join(root, "data", "backups")
+
+	storeA, err := Open(context.Background(), Options{
+		Path:       path,
+		BackupDir:  backupDir,
+		BackupKeep: 10,
+	})
+	if err != nil {
+		t.Fatalf("Open storeA: %v", err)
+	}
+	t.Cleanup(func() { _ = storeA.Close() })
+
+	storeB, err := Open(context.Background(), Options{
+		Path:       path,
+		BackupDir:  backupDir,
+		BackupKeep: 10,
+	})
+	if err != nil {
+		t.Fatalf("Open storeB: %v", err)
+	}
+	t.Cleanup(func() { _ = storeB.Close() })
+
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	run := func(s *Store, name string) {
+		<-start
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		errs <- s.WithTx(ctx, func(r app.Repos) error {
+			if _, err := r.Categories().List(ctx); err != nil {
+				return err
+			}
+			time.Sleep(120 * time.Millisecond)
+			_, err := r.Categories().Insert(ctx, domain.Category{
+				Name: name,
+				Kind: domain.CategoryExpense,
+			})
+			return err
+		})
+	}
+
+	go run(storeA, "c1")
+	go run(storeB, "c2")
+	close(start)
+
+	for range 2 {
+		if err := <-errs; err != nil {
+			t.Fatalf("writer failed: %v", err)
+		}
 	}
 }
