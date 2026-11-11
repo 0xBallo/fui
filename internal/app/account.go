@@ -15,6 +15,7 @@ type AddAccountRequest struct {
 	Currency       string
 	OpeningBalance string
 	OpenedOn       string
+	IBAN           string
 }
 
 // AddAccountPlan is the plan to create Account.
@@ -61,7 +62,7 @@ func (s *Service) newAccount(req AddAccountRequest) (domain.Account, error) {
 	}
 	acct, err := domain.NewAccount(domain.Account{
 		Name: req.Name, Description: req.Description, Kind: kind,
-		Currency: cur, OpeningBalance: opening, OpenedOn: opened,
+		Currency: cur, OpeningBalance: opening, OpenedOn: opened, IBAN: req.IBAN,
 	})
 	if err != nil {
 		return domain.Account{}, fmt.Errorf("account: %w", err)
@@ -166,6 +167,7 @@ type EditAccountRequest struct {
 	Description    *string
 	Kind           *string
 	OpeningBalance *string
+	IBAN           *string
 }
 
 // EditAccountPlan is the plan to store Account.
@@ -200,7 +202,7 @@ func (s *Service) PlanEditAccount(ctx context.Context, req EditAccountRequest) (
 }
 
 func (s *Service) editedAccount(a domain.Account, req EditAccountRequest) (domain.Account, error) {
-	if req.Name == nil && req.Description == nil && req.Kind == nil && req.OpeningBalance == nil {
+	if req.Name == nil && req.Description == nil && req.Kind == nil && req.OpeningBalance == nil && req.IBAN == nil {
 		return domain.Account{}, newError(domain.ErrMissingField, map[string]any{"field": "changes"}, "nothing to change")
 	}
 	if req.Name != nil {
@@ -222,6 +224,9 @@ func (s *Service) editedAccount(a domain.Account, req EditAccountRequest) (domai
 			return domain.Account{}, err
 		}
 		a.OpeningBalance = m
+	}
+	if req.IBAN != nil {
+		a.IBAN = *req.IBAN
 	}
 	edited, err := domain.NewAccount(a)
 	if err != nil {
@@ -292,6 +297,9 @@ func accountChange(op Op, a domain.Account) Change {
 	f["opened_on"] = a.OpenedOn.String()
 	if a.Description != "" {
 		f["description"] = a.Description
+	}
+	if a.IBAN != "" {
+		f["iban"] = a.IBAN
 	}
 	return Change{Op: op, Entity: EntityAccount, Summary: fmt.Sprintf("%s account %q (%s, %s)", op, a.Name, a.Kind, a.Currency), Fields: f}
 }

@@ -22,6 +22,7 @@ func newAccountEditCmd(deps *Deps) *cobra.Command {
 	cmd.Flags().String("description", "", "new description")
 	cmd.Flags().String("kind", "", "new kind")
 	cmd.Flags().String("opening-balance", "", "new opening balance")
+	cmd.Flags().String("iban", "", "new IBAN (empty clears it)")
 	return cmd
 }
 
@@ -34,6 +35,7 @@ func runAccountEdit(cmd *cobra.Command, deps *Deps, name string) error {
 	plan, err := deps.Service.PlanEditAccount(ctx, app.EditAccountRequest{
 		Account: name, Name: changedString(cmd, "name"), Description: changedString(cmd, "description"),
 		Kind: changedString(cmd, "kind"), OpeningBalance: changedString(cmd, "opening-balance"),
+		IBAN: changedString(cmd, "iban"),
 	})
 	if err != nil {
 		return err

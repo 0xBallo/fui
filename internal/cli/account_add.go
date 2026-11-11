@@ -22,6 +22,7 @@ func newAccountAddCmd(deps *Deps) *cobra.Command {
 	cmd.Flags().String("currency", "", "ISO 4217 currency (required)")
 	cmd.Flags().String("opening-balance", "", "balance on opened-on (default: 0)")
 	cmd.Flags().String("opened-on", "", "date the account was opened (default: today)")
+	cmd.Flags().String("iban", "", "IBAN of the account (optional)")
 	return cmd
 }
 
@@ -41,10 +42,11 @@ func runAccountAdd(cmd *cobra.Command, deps *Deps, name string) error {
 	description, _ := cmd.Flags().GetString("description")
 	openingBalance, _ := cmd.Flags().GetString("opening-balance")
 	openedOn, _ := cmd.Flags().GetString("opened-on")
+	iban, _ := cmd.Flags().GetString("iban")
 	ctx := cmd.Context()
 	plan, err := deps.Service.PlanAddAccount(ctx, app.AddAccountRequest{
 		Name: name, Description: description, Kind: kind, Currency: currency,
-		OpeningBalance: openingBalance, OpenedOn: openedOn,
+		OpeningBalance: openingBalance, OpenedOn: openedOn, IBAN: iban,
 	})
 	if err != nil {
 		return err

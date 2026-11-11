@@ -61,6 +61,32 @@ func TestAccountListFormats(t *testing.T) {
 	}
 }
 
+// TestAccountAddEditIBAN covers account add --iban, account edit --iban (set and clear), and the
+// invalid_value error for a malformed IBAN.
+func TestAccountAddEditIBAN(t *testing.T) {
+	h := newHarness(t)
+	out, _ := h.mustRun("account", "add", "Revolut", "--kind", "checking", "--currency", "EUR",
+		"--iban", "de89 3704 0044 0532 0130 00", "--json")
+	if !strings.Contains(out, `"iban":"DE89370400440532013000"`) {
+		t.Errorf("account add --iban output = %q, want normalized iban", out)
+	}
+
+	out, _ = h.mustRun("account", "edit", "Revolut", "--iban", "GB29NWBK60161331926819", "--json")
+	if !strings.Contains(out, `"iban":"GB29NWBK60161331926819"`) {
+		t.Errorf("account edit --iban output = %q, want new iban", out)
+	}
+
+	out, _ = h.mustRun("account", "edit", "Revolut", "--iban", "", "--json")
+	if strings.Contains(out, `"iban"`) {
+		t.Errorf("account edit --iban \"\" output = %q, want iban cleared", out)
+	}
+
+	_, stderr, code := h.run("account", "add", "Checking2", "--kind", "checking", "--currency", "EUR", "--iban", "not-an-iban")
+	if code != 1 || !strings.Contains(stderr, "invalid iban") {
+		t.Errorf("account add with bad iban = exit %d, stderr %q, want exit 1 and invalid iban", code, stderr)
+	}
+}
+
 // TestTxListFormats covers tx list in table and CSV formats.
 func TestTxListFormats(t *testing.T) {
 	h := newHarness(t)

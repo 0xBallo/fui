@@ -17,6 +17,7 @@ type AccountDTO struct {
 	OpeningBalance int64  `json:"opening_balance"`
 	OpenedOn       string `json:"opened_on"`
 	Archived       bool   `json:"archived"`
+	IBAN           string `json:"iban,omitempty"`
 	Balance        int64  `json:"balance"`
 	AsOf           string `json:"as_of"`
 }
@@ -26,7 +27,7 @@ func accountDTO(a app.AccountBalance) AccountDTO {
 		ID: int64(a.Account.ID), Name: a.Account.Name, Description: a.Account.Description,
 		Kind: string(a.Account.Kind), Currency: a.Account.Currency.Code(),
 		OpeningBalance: a.Account.OpeningBalance.Minor(), OpenedOn: a.Account.OpenedOn.String(),
-		Archived: a.Account.Archived, Balance: a.Balance.Minor(), AsOf: a.At.String(),
+		Archived: a.Account.Archived, IBAN: a.Account.IBAN, Balance: a.Balance.Minor(), AsOf: a.At.String(),
 	}
 }
 
