@@ -1,0 +1,117 @@
+package config
+
+import (
+	"fmt"
+	"strings"
+	"unicode"
+)
+
+// Validate checks whether all configuration values satisfy required constraints.
+// Any invalid value results in an error explicitly naming the offending key.
+func (c *Config) Validate() error {
+	if err := validateCurrency(c.Currency); err != nil {
+		return err
+	}
+	if err := validateLocale(c.Locale); err != nil {
+		return err
+	}
+	if err := validateMonthStartDay(c.MonthStartDay); err != nil {
+		return err
+	}
+	if err := validateWeekStart(c.WeekStart); err != nil {
+		return err
+	}
+	if err := validateTheme(c.Theme); err != nil {
+		return err
+	}
+	if err := validateBackupKeep(c.Backup.Keep); err != nil {
+		return err
+	}
+	if err := validateTimeout(c.Connectors.Timeout); err != nil {
+		return err
+	}
+	return validateProfiles(c.Import.Profiles)
+}
+
+func validateCurrency(curr string) error {
+	if len(curr) != 3 {
+		return fmt.Errorf("invalid value for key %q: %q (expected 3-letter ISO code)", "currency", curr)
+	}
+	for _, r := range curr {
+		if !unicode.IsLetter(r) || !unicode.IsUpper(r) {
+			return fmt.Errorf("invalid value for key %q: %q (expected 3-letter ISO code)", "currency", curr)
+		}
+	}
+	return nil
+}
+
+func validateLocale(loc string) error {
+	switch loc {
+	case LocaleIT, LocaleUS:
+		return nil
+	default:
+		return fmt.Errorf("invalid value for key %q: %q (allowed: %s, %s)", "locale", loc, LocaleIT, LocaleUS)
+	}
+}
+
+func validateMonthStartDay(day int) error {
+	if day < 1 || day > 31 {
+		return fmt.Errorf("invalid value for key %q: %d (must be between 1 and 31)", "month_start_day", day)
+	}
+	return nil
+}
+
+func validateWeekStart(ws string) error {
+	switch strings.ToLower(ws) {
+	case WeekStartMonday, WeekStartSunday:
+		return nil
+	default:
+		return fmt.Errorf("invalid value for key %q: %q (allowed: %s, %s)", "week_start", ws, WeekStartMonday, WeekStartSunday)
+	}
+}
+
+func validateTheme(th string) error {
+	switch th {
+	case ThemeTerminal, ThemeHighContrast:
+		return nil
+	default:
+		return fmt.Errorf("invalid value for key %q: %q (allowed: %s, %s)", "theme", th, ThemeTerminal, ThemeHighContrast)
+	}
+}
+
+func validateBackupKeep(keep int) error {
+	if keep <= 0 {
+		return fmt.Errorf("invalid value for key %q: %d (must be greater than 0)", "backup.keep", keep)
+	}
+	return nil
+}
+
+func validateTimeout(d Duration) error {
+	if d.Duration() <= 0 {
+		return fmt.Errorf("invalid value for key %q: must be positive duration", "connectors.timeout")
+	}
+	return nil
+}
+
+func validateProfiles(profiles map[string]CSVProfile) error {
+	for name, p := range profiles {
+		if p.DateColumn == "" {
+			return fmt.Errorf("invalid value for key %q: must not be empty", fmt.Sprintf("import.profiles.%s.date_column", name))
+		}
+		if p.DescriptionColumn == "" {
+			return fmt.Errorf("invalid value for key %q: must not be empty", fmt.Sprintf("import.profiles.%s.description_column", name))
+		}
+		hasAmount := p.AmountColumn != ""
+		hasDebitCredit := p.DebitColumn != "" && p.CreditColumn != ""
+		if !hasAmount && !hasDebitCredit {
+			return fmt.Errorf("invalid value for key %q: either amount_column or both debit_column and credit_column must be specified", fmt.Sprintf("import.profiles.%s.amount_column", name))
+		}
+		if p.DateFormat == "" {
+			return fmt.Errorf("invalid value for key %q: must not be empty", fmt.Sprintf("import.profiles.%s.date_format", name))
+		}
+		if p.SkipRows < 0 {
+			return fmt.Errorf("invalid value for key %q: must be non-negative", fmt.Sprintf("import.profiles.%s.skip_rows", name))
+		}
+	}
+	return nil
+}
