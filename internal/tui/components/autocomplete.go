@@ -69,6 +69,12 @@ func (a *Autocomplete) Focused() bool {
 	return a.input.Focused()
 }
 
+// DropdownOpen reports whether the suggestion popup is currently shown, so a containing form
+// can let the field consume the next key (e.g. enter to pick a suggestion) before acting itself.
+func (a *Autocomplete) DropdownOpen() bool {
+	return a.open && len(a.filtered) > 0
+}
+
 // Update processes key events, navigating suggestion popups when open.
 func (a *Autocomplete) Update(msg tea.Msg) (Autocomplete, tea.Cmd) {
 	if keyMsg, ok := msg.(tea.KeyMsg); ok && a.input.Focused() {
