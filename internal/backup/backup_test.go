@@ -217,3 +217,46 @@ func TestListAndRotate(t *testing.T) {
 		t.Errorf("expected 0 files after keep=0, got %v, %v", finalList, err)
 	}
 }
+
+func TestListDeterministicTieBreaking(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create backups with the exact same timestamp but different reasons in reverse alphabetical order
+	names := []string{
+		"fui-20261111-120000-restore.db",
+		"fui-20261111-120000-migrate.db",
+		"fui-20261111-120000-manual.db",
+		"fui-20261111-120000-import.db",
+		"fui-20261111-120000-bulk.db",
+	}
+	for _, n := range names {
+		if err := os.WriteFile(filepath.Join(dir, n), []byte("test"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	files, err := backup.List(dir)
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(files) != len(names) {
+		t.Fatalf("expected %d files, got %d", len(names), len(files))
+	}
+
+	wantOrder := []string{
+		"fui-20261111-120000-bulk.db",
+		"fui-20261111-120000-import.db",
+		"fui-20261111-120000-manual.db",
+		"fui-20261111-120000-migrate.db",
+		"fui-20261111-120000-restore.db",
+	}
+
+	var gotOrder []string
+	for _, f := range files {
+		gotOrder = append(gotOrder, f.Name)
+	}
+
+	if diff := cmp.Diff(wantOrder, gotOrder); diff != "" {
+		t.Errorf("unexpected tie-break order (-want +got):\n%s", diff)
+	}
+}

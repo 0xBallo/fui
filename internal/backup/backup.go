@@ -135,6 +135,9 @@ func List(dir string) ([]File, error) {
 	}
 
 	sort.Slice(files, func(i, j int) bool {
+		if files[i].Time.Equal(files[j].Time) {
+			return files[i].Name < files[j].Name
+		}
 		return files[i].Time.Before(files[j].Time)
 	})
 
