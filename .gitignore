@@ -1,0 +1,7 @@
+/dist/
+/bin/
+*.db
+*.db-wal
+*.db-shm
+coverage.out
+.task-report.md

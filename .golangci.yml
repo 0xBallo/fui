@@ -1,0 +1,89 @@
+version: "2"
+linters:
+  enable:
+    - staticcheck
+    - revive
+    - errcheck
+    - errorlint
+    - wrapcheck
+    - gosec
+    - gocyclo
+    - funlen
+    - depguard
+    - forbidigo
+    - exhaustive
+    - nolintlint
+  settings:
+    gocyclo:
+      min-complexity: 15
+    funlen:
+      lines: 60
+      statements: 40
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    wrapcheck:
+      ignore-package-globs:
+        - github.com/0xballo/fui/*
+    exhaustive:
+      default-signifies-exhaustive: false
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^time\.Now$
+          msg: inject a clock (internal/clock) instead of calling time.Now
+        - pattern: ^float(32|64)$
+          msg: no floating point in money code; use domain.Money / domain.Rate
+    depguard:
+      rules:
+        domain:
+          files: ["**/internal/domain/**", "!**/internal/domain/simulate/**"]
+          list-mode: strict
+          allow: [$gostd, github.com/0xballo/fui/internal/domain]
+        app-no-adapters:
+          files: ["**/internal/app/**"]
+          deny:
+            - pkg: github.com/0xballo/fui/internal/store
+              desc: app defines ports, it must not import adapters
+            - pkg: github.com/0xballo/fui/internal/connector
+              desc: app defines ports, it must not import adapters
+            - pkg: github.com/0xballo/fui/internal/cli
+              desc: app must not import UI
+            - pkg: github.com/0xballo/fui/internal/tui
+              desc: app must not import UI
+        ui-no-store:
+          files: ["**/internal/cli/**", "**/internal/tui/**"]
+          deny:
+            - pkg: github.com/0xballo/fui/internal/store
+              desc: CLI/TUI talk to internal/app only
+            - pkg: github.com/0xballo/fui/internal/connector
+              desc: CLI/TUI talk to internal/app only
+        proto-public:
+          files: ["**/pkg/fuiproto/**"]
+          deny:
+            - pkg: github.com/0xballo/fui/internal
+              desc: pkg/fuiproto is public and must not import internal
+        no-network:
+          files: ["**/internal/**", "**/cmd/fui/**"]
+          deny:
+            - pkg: net/http
+              desc: FUI is local-first, no network
+            - pkg: net/rpc
+              desc: FUI is local-first, no network
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [funlen, gocyclo, wrapcheck, gosec]
+      - path: internal/clock/
+        linters: [forbidigo]
+        text: time\.Now
+      - path: (internal/domain/simulate/|internal/cli/|internal/tui/|cmd/|pkg/|tools/|internal/connector/)
+        linters: [forbidigo]
+        text: float
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes: [github.com/0xballo/fui]
