@@ -43,6 +43,9 @@ FUI is a local-first personal-finance CLI + TUI in Go. Specs (Italian) are the s
 ## Workflow for each agent
 
 1. You work **only inside your git worktree** on your branch. Do not touch other worktrees or the main checkout.
+   Never read or write paths outside it (no `/tmp`, no `find /`, no module cache): inspect dependencies with
+   `go doc -src <pkg> <symbol>` / `go list -m -versions <mod>`, experiment in `t.TempDir()` or `./.scratch`
+   (add it to `.git/info/exclude`).
 2. Stay inside the paths owned by your task (listed in your task file). `go.mod`/`go.sum` may be updated for new
    dependencies (only the ones allowed by the technical spec). If you need a change elsewhere, do not make it:
    write it under "Requests" in your report.
