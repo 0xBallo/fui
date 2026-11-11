@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,6 +36,7 @@ func TestSpendingRunWithDefaultPeriodAndTimezone(t *testing.T) {
 			makeTx(t, 1, date(t, 2026, 11, 26), -10_00, "EUR", domain.KindPayment, 1),
 			makeTx(t, 1, date(t, 2026, 11, 27), -20_00, "EUR", domain.KindPayment, 1),
 		},
+		categories: []domain.Category{{ID: 1, Name: "Groceries", Kind: domain.CategoryExpense}},
 	}
 	tests := []struct {
 		name     string
@@ -154,6 +156,142 @@ func TestRunwayRun(t *testing.T) {
 	}
 }
 
+func TestSpendingIncludesCategoryNames(t *testing.T) {
+	useCase, err := NewSpending(&fakeSource{
+		transactions: []domain.Transaction{
+			makeTx(t, 1, date(t, 2026, 11, 2), -10_000, "EUR", domain.KindPayment, 1),
+			makeTx(t, 1, date(t, 2026, 11, 3), -2_000, "EUR", domain.KindPayment, 0),
+		},
+		accounts: []domain.Account{
+			account(t, 1, "Wallet", domain.AccountCash, "EUR", false),
+		},
+		categories: []domain.Category{{ID: 1, Name: "Groceries", Kind: domain.CategoryExpense}},
+	}, fixedClock{now: time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := useCase.Run(context.Background(), SpendingParams{
+		Period:        period(t, date(t, 2026, 11, 1), date(t, 2026, 11, 30)),
+		MonthStartDay: 1,
+		BaseCurrency:  cur(t, "EUR"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Rows) != 2 {
+		t.Fatalf("rows = %d", len(got.Rows))
+	}
+	if got.Rows[0].CategoryName != "Groceries" {
+		t.Fatalf("row0 category = %q", got.Rows[0].CategoryName)
+	}
+	if got.Rows[1].CategoryName != "Uncategorized" {
+		t.Fatalf("row1 category = %q", got.Rows[1].CategoryName)
+	}
+}
+
+func TestSpendingFailsWhenCategoryNameMissing(t *testing.T) {
+	useCase, err := NewSpending(&fakeSource{
+		transactions: []domain.Transaction{
+			makeTx(t, 1, date(t, 2026, 11, 2), -10_000, "EUR", domain.KindPayment, 99),
+		},
+	}, fixedClock{now: time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = useCase.Run(context.Background(), SpendingParams{
+		Period:       period(t, date(t, 2026, 11, 1), date(t, 2026, 11, 30)),
+		BaseCurrency: cur(t, "EUR"),
+	})
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestCashFlowPropagatesSourceError(t *testing.T) {
+	useCase, err := NewCashFlow(&fakeSource{
+		listTransactionsErr: errors.New("boom"),
+	}, fixedClock{now: time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = useCase.Run(context.Background(), CashFlowParams{
+		Period:       period(t, date(t, 2026, 11, 1), date(t, 2026, 11, 30)),
+		BaseCurrency: cur(t, "EUR"),
+	})
+	if err == nil || !strings.Contains(err.Error(), "list transactions") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRunwayUsesClockDateAndFXConversion(t *testing.T) {
+	useCase, err := NewRunway(&fakeSource{
+		accounts: []domain.Account{
+			account(t, 1, "USD wallet", domain.AccountCash, "USD", false),
+		},
+		balances: map[domain.AccountID]domain.Money{
+			1: money(t, 10_000, "USD"),
+		},
+		transactions: []domain.Transaction{
+			makeTx(t, 1, date(t, 2026, 8, 1), -10_000, "USD", domain.KindPayment, 0),
+			makeTx(t, 1, date(t, 2026, 9, 1), -10_000, "USD", domain.KindPayment, 0),
+			makeTx(t, 1, date(t, 2026, 10, 1), -10_000, "USD", domain.KindPayment, 0),
+		},
+		rates: map[string][]fxPoint{
+			"USD->EUR": {
+				{date: date(t, 2026, 8, 1), rate: rate(t, 900_000_000)},
+				{date: date(t, 2026, 9, 1), rate: rate(t, 900_000_000)},
+				{date: date(t, 2026, 10, 1), rate: rate(t, 900_000_000)},
+				{date: date(t, 2026, 11, 15), rate: rate(t, 900_000_000)},
+			},
+		},
+	}, fixedClock{now: time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := useCase.Run(context.Background(), RunwayParams{
+		MonthStartDay: 1,
+		BaseCurrency:  cur(t, "EUR"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AsOf != date(t, 2026, 11, 15) {
+		t.Fatalf("asOf = %v", got.AsOf)
+	}
+	if got.Liquidity.Minor() != 9_000 {
+		t.Fatalf("liquidity = %d", got.Liquidity.Minor())
+	}
+	if got.ReferenceMonthlySpending.Minor() != 9_000 {
+		t.Fatalf("reference spending = %d", got.ReferenceMonthlySpending.Minor())
+	}
+}
+
+func TestRunwayFailsWhenFXRateMissing(t *testing.T) {
+	useCase, err := NewRunway(&fakeSource{
+		accounts: []domain.Account{
+			account(t, 1, "USD wallet", domain.AccountCash, "USD", false),
+		},
+		balances: map[domain.AccountID]domain.Money{
+			1: money(t, 10_000, "USD"),
+		},
+		transactions: []domain.Transaction{
+			makeTx(t, 1, date(t, 2026, 8, 1), -10_000, "USD", domain.KindPayment, 0),
+			makeTx(t, 1, date(t, 2026, 9, 1), -10_000, "USD", domain.KindPayment, 0),
+			makeTx(t, 1, date(t, 2026, 10, 1), -10_000, "USD", domain.KindPayment, 0),
+		},
+	}, fixedClock{now: time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = useCase.Run(context.Background(), RunwayParams{
+		MonthStartDay: 1,
+		BaseCurrency:  cur(t, "EUR"),
+	})
+	if err == nil || !strings.Contains(err.Error(), "fx rate") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 type fixedClock struct {
 	now time.Time
 }
@@ -162,9 +300,16 @@ func (clock fixedClock) Now() time.Time { return clock.now }
 
 type fakeSource struct {
 	accounts     []domain.Account
+	categories   []domain.Category
 	transactions []domain.Transaction
 	balances     map[domain.AccountID]domain.Money
 	rates        map[string][]fxPoint
+
+	listAccountsErr     error
+	listCategoriesErr   error
+	listTransactionsErr error
+	balanceAtErr        error
+	fxRateErr           error
 }
 
 type fxPoint struct {
@@ -173,6 +318,9 @@ type fxPoint struct {
 }
 
 func (source *fakeSource) ListAccounts(_ context.Context, filter AccountFilter) ([]domain.Account, error) {
+	if source.listAccountsErr != nil {
+		return nil, source.listAccountsErr
+	}
 	accountIDs := toSet(filter.AccountIDs)
 	accounts := make([]domain.Account, 0, len(source.accounts))
 	for _, account := range source.accounts {
@@ -188,6 +336,9 @@ func (source *fakeSource) ListAccounts(_ context.Context, filter AccountFilter) 
 }
 
 func (source *fakeSource) ListTransactions(_ context.Context, filter TransactionFilter) ([]domain.Transaction, error) {
+	if source.listTransactionsErr != nil {
+		return nil, source.listTransactionsErr
+	}
 	accountIDs := toSet(filter.AccountIDs)
 	txs := make([]domain.Transaction, 0, len(source.transactions))
 	for _, tx := range source.transactions {
@@ -202,7 +353,30 @@ func (source *fakeSource) ListTransactions(_ context.Context, filter Transaction
 	return txs, nil
 }
 
+func (source *fakeSource) ListCategories(_ context.Context, categoryIDs []domain.CategoryID) ([]domain.Category, error) {
+	if source.listCategoriesErr != nil {
+		return nil, source.listCategoriesErr
+	}
+	if len(categoryIDs) == 0 {
+		return nil, nil
+	}
+	ids := map[domain.CategoryID]bool{}
+	for _, id := range categoryIDs {
+		ids[id] = true
+	}
+	categories := make([]domain.Category, 0, len(categoryIDs))
+	for _, category := range source.categories {
+		if ids[category.ID] {
+			categories = append(categories, category)
+		}
+	}
+	return categories, nil
+}
+
 func (source *fakeSource) BalanceAt(_ context.Context, accountID domain.AccountID, _ domain.Date) (domain.Money, error) {
+	if source.balanceAtErr != nil {
+		return domain.Money{}, source.balanceAtErr
+	}
 	balance, ok := source.balances[accountID]
 	if !ok {
 		return domain.Money{}, fmt.Errorf("balance not found for account %d", accountID)
@@ -211,6 +385,9 @@ func (source *fakeSource) BalanceAt(_ context.Context, accountID domain.AccountI
 }
 
 func (source *fakeSource) FXRateOnOrBefore(_ context.Context, from domain.Currency, to domain.Currency, at domain.Date) (domain.Rate, error) {
+	if source.fxRateErr != nil {
+		return 0, source.fxRateErr
+	}
 	key := from.Code() + "->" + to.Code()
 	points := source.rates[key]
 	var (

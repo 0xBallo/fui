@@ -12,6 +12,8 @@ import (
 type Source interface {
 	// ListAccounts returns accounts, optionally filtered by IDs.
 	ListAccounts(ctx context.Context, filter AccountFilter) ([]domain.Account, error)
+	// ListCategories returns categories for the given IDs.
+	ListCategories(ctx context.Context, categoryIDs []domain.CategoryID) ([]domain.Category, error)
 	// ListTransactions returns transactions in period, optionally filtered by accounts.
 	ListTransactions(ctx context.Context, filter TransactionFilter) ([]domain.Transaction, error)
 	// BalanceAt returns the account balance at date.
