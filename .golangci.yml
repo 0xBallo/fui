@@ -37,7 +37,7 @@ linters:
     depguard:
       rules:
         domain:
-          files: ["**/internal/domain/**", "!**/internal/domain/simulate/**"]
+          files: ["**/internal/domain/**", "!**/internal/domain/simulate/**", "!$test"]
           list-mode: strict
           allow: [$gostd, github.com/0xballo/fui/internal/domain]
         app-no-adapters:

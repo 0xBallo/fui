@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"pgregory.net/rapid" //nolint:depguard // test-only dependency allowed by the technical spec
+	"pgregory.net/rapid"
 )
 
 func TestNewMoneyRequiresCurrency(t *testing.T) {

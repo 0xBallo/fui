@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"testing"
 
-	"pgregory.net/rapid" //nolint:depguard // test-only dependency allowed by the technical spec
+	"pgregory.net/rapid"
 )
 
 func rate(t tb, scaled int64) Rate {

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"pgregory.net/rapid" //nolint:depguard // test-only dependency allowed by the technical spec
+	"pgregory.net/rapid"
 )
 
 func TestNewPeriod(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"pgregory.net/rapid" //nolint:depguard // test-only dependency allowed by the technical spec
+	"pgregory.net/rapid"
 )
 
 func date(t tb, y, m, d int) Date {
