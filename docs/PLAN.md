@@ -26,3 +26,10 @@ Model policy: no model above effort `high`, no premium/token-heavy models (Opus/
 
 v0.2/v0.3 features, goreleaser/Homebrew/cosign release pipeline (only a CI workflow is added), mutation testing,
 nightly jobs.
+
+## Follow-up tasks (added during the run)
+
+| Wave | Task | Branch | Agent / model |
+| --- | --- | --- | --- |
+| 4 | T08b Import/export CLI commands, account IBAN (migration 0002) | `feat/import-cli` | Claude Code · sonnet · high (same agent as T08) |
+| 4 | T11 Composition root, e2e testscript, skill, CI | `feat/integration` | Claude Code · sonnet · high |
