@@ -136,4 +136,25 @@ func TestTransferProposals(t *testing.T) {
 			t.Fatalf("archived partner not linked: %+v", linked)
 		}
 	})
+	t.Run("by an existing account's persisted IBAN", func(t *testing.T) {
+		e := newEnv(nil)
+		const ibanB = "IT60X0542811101000000123456"
+		b := e.seedAccount(t, "Account B", "bank", "b")
+		b.IBAN = ibanB
+		if err := e.store.WithTx(context.Background(), func(r app.Repos) error {
+			return r.Accounts().Update(context.Background(), b)
+		}); err != nil {
+			t.Fatalf("set iban on existing account: %v", err)
+		}
+		recs := []fuiproto.Record{
+			account("a", "Account A", "EUR"),
+			account("b", "Account B", "EUR"), // no IBAN on the record: it comes from the archive
+			txRec("a", "out", "2026-10-01", -700, "to B", kind(fuiproto.TransactionKindTransfer), counterparty(ibanB)),
+			txRec("b", "in", "2026-10-01", 700, "from A", kind(fuiproto.TransactionKindTransfer)),
+		}
+		plan := e.plan(t, stream("bank", "", recs...), createAccounts)
+		if len(plan.Transfers) != 1 || plan.Transfers[0].Reason != domain.TransferMatchByCounterpartyIBAN {
+			t.Fatalf("proposals = %+v", plan.Transfers)
+		}
+	})
 }

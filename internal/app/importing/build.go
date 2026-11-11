@@ -82,7 +82,8 @@ type builder struct {
 	plan  *ImportPlan
 
 	accts   map[string]*acctInfo
-	order   []string // refs in stream order
+	order   []string         // refs in stream order
+	active  []domain.Account // active accounts, for IBAN-based transfer matching
 	cats    map[string]domain.Category
 	newCats map[string]bool
 	seenExt map[string]bool
@@ -164,6 +165,7 @@ func (b *builder) resolveAccounts(ctx context.Context) error {
 			active = append(active, a)
 		}
 	}
+	b.active = active
 	for _, rec := range b.st.result.Records {
 		if rec.Account == nil {
 			continue

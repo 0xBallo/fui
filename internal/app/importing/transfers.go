@@ -87,8 +87,9 @@ func isTransferKind(k domain.TxKind) bool {
 }
 
 // proposeTransfers suggests links between unlabelled transfer rows, and with transfer
-// movements already in the archive: counterparty IBAN of the stream's own accounts first,
-// then opposite amount within 2 days.
+// movements already in the archive: counterparty IBAN of the user's accounts first (both the
+// stream's own accounts and every other active account already in the archive), then opposite
+// amount within 2 days.
 func (b *builder) proposeTransfers(ctx context.Context) error {
 	var cands []domain.TransferCandidate
 	for i, row := range b.plan.Rows {
@@ -108,6 +109,11 @@ func (b *builder) proposeTransfers(ctx context.Context) error {
 		return err
 	}
 	own := map[string]domain.AccountID{}
+	for _, a := range b.active {
+		if a.IBAN != "" {
+			own[a.IBAN] = a.ID
+		}
+	}
 	for _, ref := range b.order {
 		if a := b.accts[ref]; a.rec.IBAN != "" && a.resolved() {
 			own[a.rec.IBAN] = a.id
