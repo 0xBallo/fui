@@ -10,8 +10,8 @@ so they reference the real code merged so far.
 | 1 | T01 Domain value types and entities | `feat/domain-core` | `internal/domain/` | Claude Code · sonnet · effort high |
 | 1 | T02 fui/1 protocol | `feat/proto-fui1` | `pkg/fuiproto/` | Copilot CLI · gpt-5.3-codex · effort high |
 | 1 | T03 Config, clock, logging, backup files, ADRs | `feat/platform` | `internal/config/`, `internal/clock/`, `internal/logging/`, `internal/backup/`, `docs/adr/` | Antigravity · gemini-3.8-flash-high |
-| 2 | T04 App ports and core use cases (Plan/Apply) | `feat/app-core` | `internal/app/` | Claude Code · sonnet · high |
-| 2 | T05 Domain services (balance, dedup, transfer match, runway, reports) | `feat/domain-services` | `internal/domain/` (new files) | Copilot CLI · gpt-5.3-codex · high |
+| 2 | T04 App ports and core use cases (Plan/Apply) | `feat/app-core` | `internal/app/` (root), `internal/testutil/memstore/` | Claude Code · sonnet · high |
+| 2 | T05 Domain services (balance, dedup, transfer match, runway, reports) | `feat/domain-services` | `internal/domain/` (new files), `internal/app/reporting/` | Copilot CLI · gpt-5.3-codex · high |
 | 2 | T06 Revolut and Widiba connectors | `feat/connectors-bank` | `cmd/fui-connector-*/`, `tools/anonymize/` | Antigravity · gemini-3.8-flash-high |
 | 3 | T07 SQLite store, migrations, sqlc, backup/restore | `feat/store-sqlite` | `internal/store/` | Copilot CLI · gpt-5.3-codex · high |
 | 3 | T08 Import/export pipeline, connector runner, CSV connector | `feat/import-pipeline` | `internal/app/importing/`, `internal/connector/` | Claude Code · sonnet · high |
