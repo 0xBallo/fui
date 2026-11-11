@@ -22,6 +22,7 @@ type UseCases interface {
 	// Spending runs the spending-by-category report (internal/app/reporting.Spending.Run).
 	Spending(ctx context.Context, params reporting.SpendingParams) (reporting.SpendingResult, error)
 	// Runway runs the runway KPI (internal/app/reporting.Runway.Run); it fails with
-	// domain.ErrNotEnoughData when fewer than 12 complete months of history are available.
+	// domain.ErrNotEnoughData when fewer than 3 complete months of history are available
+	// (the median outflow is taken over up to 12 complete months).
 	Runway(ctx context.Context, params reporting.RunwayParams) (reporting.RunwayResult, error)
 }

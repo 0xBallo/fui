@@ -243,7 +243,7 @@ func (m *Model) viewNetWorth() string {
 
 func (m *Model) viewRunway() string {
 	if !m.runwayAvailable {
-		return m.th.Muted.Render("not enough data (needs 12 complete months of history)")
+		return m.th.Muted.Render("not enough data (needs at least 3 complete months)")
 	}
 	months, days := m.runway.Months, m.runway.Days
 	return m.th.Base.Render(domain.FormatAmount(m.runway.Liquidity, m.loc)) +
