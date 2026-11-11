@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"database/sql"
 )
 
 const balanceAt = `-- name: BalanceAt :one
@@ -38,7 +39,7 @@ func (q *Queries) BalanceAt(ctx context.Context, arg BalanceAtParams) (BalanceAt
 
 const getAccount = `-- name: GetAccount :one
 SELECT
-    id, name, description, kind, currency, opening_balance_minor, opened_on, archived, created_at, updated_at
+    id, name, description, kind, currency, opening_balance_minor, opened_on, archived, created_at, updated_at, iban
 FROM accounts
 WHERE id = ?1
 `
@@ -57,6 +58,7 @@ func (q *Queries) GetAccount(ctx context.Context, id int64) (Account, error) {
 		&i.Archived,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Iban,
 	)
 	return i, err
 }
@@ -69,7 +71,8 @@ INSERT INTO accounts (
     currency,
     opening_balance_minor,
     opened_on,
-    archived
+    archived,
+    iban
 )
 VALUES (
     ?1,
@@ -78,10 +81,11 @@ VALUES (
     ?4,
     ?5,
     ?6,
-    ?7
+    ?7,
+    ?8
 )
 RETURNING
-    id, name, description, kind, currency, opening_balance_minor, opened_on, archived, created_at, updated_at
+    id, name, description, kind, currency, opening_balance_minor, opened_on, archived, created_at, updated_at, iban
 `
 
 type InsertAccountParams struct {
@@ -92,6 +96,7 @@ type InsertAccountParams struct {
 	OpeningBalanceMinor int64
 	OpenedOn            string
 	Archived            int64
+	Iban                sql.NullString
 }
 
 func (q *Queries) InsertAccount(ctx context.Context, arg InsertAccountParams) (Account, error) {
@@ -103,6 +108,7 @@ func (q *Queries) InsertAccount(ctx context.Context, arg InsertAccountParams) (A
 		arg.OpeningBalanceMinor,
 		arg.OpenedOn,
 		arg.Archived,
+		arg.Iban,
 	)
 	var i Account
 	err := row.Scan(
@@ -116,13 +122,14 @@ func (q *Queries) InsertAccount(ctx context.Context, arg InsertAccountParams) (A
 		&i.Archived,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Iban,
 	)
 	return i, err
 }
 
 const listAccounts = `-- name: ListAccounts :many
 SELECT
-    id, name, description, kind, currency, opening_balance_minor, opened_on, archived, created_at, updated_at
+    id, name, description, kind, currency, opening_balance_minor, opened_on, archived, created_at, updated_at, iban
 FROM accounts
 ORDER BY id
 `
@@ -147,6 +154,7 @@ func (q *Queries) ListAccounts(ctx context.Context) ([]Account, error) {
 			&i.Archived,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Iban,
 		); err != nil {
 			return nil, err
 		}
@@ -163,7 +171,7 @@ func (q *Queries) ListAccounts(ctx context.Context) ([]Account, error) {
 
 const listAccountsForReport = `-- name: ListAccountsForReport :many
 SELECT
-    id, name, description, kind, currency, opening_balance_minor, opened_on, archived, created_at, updated_at
+    id, name, description, kind, currency, opening_balance_minor, opened_on, archived, created_at, updated_at, iban
 FROM accounts
 WHERE (?1 = 1 OR archived = 0)
     AND (json_array_length(?2) = 0 OR id IN (SELECT value FROM json_each(?2)))
@@ -195,6 +203,7 @@ func (q *Queries) ListAccountsForReport(ctx context.Context, arg ListAccountsFor
 			&i.Archived,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Iban,
 		); err != nil {
 			return nil, err
 		}
@@ -219,8 +228,9 @@ SET
     opening_balance_minor = ?5,
     opened_on = ?6,
     archived = ?7,
+    iban = ?8,
     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-WHERE id = ?8
+WHERE id = ?9
 `
 
 type UpdateAccountParams struct {
@@ -231,6 +241,7 @@ type UpdateAccountParams struct {
 	OpeningBalanceMinor int64
 	OpenedOn            string
 	Archived            int64
+	Iban                sql.NullString
 	ID                  int64
 }
 
@@ -243,6 +254,7 @@ func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) (i
 		arg.OpeningBalanceMinor,
 		arg.OpenedOn,
 		arg.Archived,
+		arg.Iban,
 		arg.ID,
 	)
 	if err != nil {

@@ -25,6 +25,7 @@ func (r accountRepo) Insert(ctx context.Context, a domain.Account) (domain.Accou
 		OpeningBalanceMinor: a.OpeningBalance.Minor(),
 		OpenedOn:            a.OpenedOn.String(),
 		Archived:            boolToInt64(a.Archived),
+		Iban:                toNullString(a.IBAN),
 	})
 	if err != nil {
 		return domain.Account{}, mapConstraint(err)
@@ -49,6 +50,7 @@ func (r accountRepo) Update(ctx context.Context, a domain.Account) error {
 		OpeningBalanceMinor: a.OpeningBalance.Minor(),
 		OpenedOn:            a.OpenedOn.String(),
 		Archived:            boolToInt64(a.Archived),
+		Iban:                toNullString(a.IBAN),
 	})
 	if err != nil {
 		return mapConstraint(err)

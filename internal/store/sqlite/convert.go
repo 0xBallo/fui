@@ -62,6 +62,7 @@ func toAccount(row gen.Account) (domain.Account, error) {
 		OpeningBalance: opening,
 		OpenedOn:       opened,
 		Archived:       row.Archived != 0,
+		IBAN:           nullStringOrEmpty(row.Iban),
 	}, nil
 }
 

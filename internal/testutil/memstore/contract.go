@@ -135,6 +135,24 @@ func contractAccounts(t *testing.T, f *fixture) {
 		}
 		return nil
 	})
+	a.IBAN = "DE89370400440532013000"
+	f.do(t, func(r app.Repos) error {
+		if err := r.Accounts().Update(ctx, a); err != nil {
+			t.Fatalf("Update with iban: %v", err)
+		}
+		got, err := r.Accounts().Get(ctx, a.ID)
+		if err != nil || got != a {
+			t.Errorf("Get after setting iban = %+v, %v; want %+v", got, err, a)
+		}
+		a.IBAN = ""
+		if err := r.Accounts().Update(ctx, a); err != nil {
+			t.Fatalf("Update clearing iban: %v", err)
+		}
+		if got, err := r.Accounts().Get(ctx, a.ID); err != nil || got != a {
+			t.Errorf("Get after clearing iban = %+v, %v; want %+v", got, err, a)
+		}
+		return nil
+	})
 }
 
 func contractCategories(t *testing.T, f *fixture) {

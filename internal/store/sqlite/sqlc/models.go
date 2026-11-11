@@ -19,6 +19,7 @@ type Account struct {
 	Archived            int64
 	CreatedAt           string
 	UpdatedAt           string
+	Iban                sql.NullString
 }
 
 type Category struct {

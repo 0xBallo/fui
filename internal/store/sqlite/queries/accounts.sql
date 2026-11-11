@@ -6,7 +6,8 @@ INSERT INTO accounts (
     currency,
     opening_balance_minor,
     opened_on,
-    archived
+    archived,
+    iban
 )
 VALUES (
     @name,
@@ -15,7 +16,8 @@ VALUES (
     @currency,
     @opening_balance_minor,
     @opened_on,
-    @archived
+    @archived,
+    @iban
 )
 RETURNING
     *;
@@ -30,6 +32,7 @@ SET
     opening_balance_minor = @opening_balance_minor,
     opened_on = @opened_on,
     archived = @archived,
+    iban = @iban,
     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = @id;
 

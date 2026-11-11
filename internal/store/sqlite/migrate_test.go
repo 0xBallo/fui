@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/pressly/goose/v3"
 
 	"github.com/0xballo/fui/internal/backup"
 	"github.com/0xballo/fui/internal/clock"
@@ -41,6 +43,60 @@ func TestSchemaGolden(t *testing.T) {
 	want := string(wantBytes)
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Fatalf("schema dump mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestMigrateFromV1AddsIBANColumn(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "data", "fui.db")
+	backupDir := filepath.Join(root, "data", "backups")
+	ctx := context.Background()
+
+	db := mustOpenRawDB(t, dbPath)
+	migrationsFS, err := fs.Sub(migrationFS, "migrations")
+	if err != nil {
+		t.Fatalf("fs.Sub: %v", err)
+	}
+	provider, err := goose.NewProvider(goose.DialectSQLite3, db, migrationsFS)
+	if err != nil {
+		t.Fatalf("goose.NewProvider: %v", err)
+	}
+	if _, err := provider.UpTo(ctx, 1); err != nil {
+		t.Fatalf("migrate to v1: %v", err)
+	}
+	mustExec(t, db, `INSERT INTO accounts
+		(name, kind, currency, opening_balance_minor, opened_on)
+		VALUES ('Checking', 'checking', 'EUR', 1000, '2026-01-01')`)
+	mustClose(t, db)
+
+	clk := clock.NewFixed(time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC))
+	store, err := Open(ctx, Options{
+		Path:       dbPath,
+		BackupDir:  backupDir,
+		BackupKeep: 10,
+		Clock:      clk,
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	version, err := pragmaUserVersion(ctx, store.writeDB)
+	if err != nil {
+		t.Fatalf("pragmaUserVersion: %v", err)
+	}
+	if version != currentSchemaVersion {
+		t.Fatalf("user_version = %d, want %d", version, currentSchemaVersion)
+	}
+
+	var name string
+	var iban sql.NullString
+	row := store.writeDB.QueryRowContext(ctx, "SELECT name, iban FROM accounts WHERE name = 'Checking'")
+	if err := row.Scan(&name, &iban); err != nil {
+		t.Fatalf("scan migrated account: %v", err)
+	}
+	if name != "Checking" || iban.Valid {
+		t.Fatalf("migrated account = (%q, %v), want (%q, invalid)", name, iban, "Checking")
 	}
 }
 

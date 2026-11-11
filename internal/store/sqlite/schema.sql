@@ -8,7 +8,8 @@ CREATE TABLE accounts (
     opened_on TEXT NOT NULL CHECK (length(opened_on) = 10),
     archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    iban TEXT CHECK (iban IS NULL OR length(iban) BETWEEN 15 AND 34)
 ) STRICT;
 
 CREATE TABLE categories (
