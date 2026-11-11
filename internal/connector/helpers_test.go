@@ -8,8 +8,12 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/0xballo/fui/internal/clock"
 	"github.com/0xballo/fui/pkg/fuiproto"
 )
+
+// wall measures elapsed time in tests.
+var wall = clock.NewSystem()
 
 var (
 	fakeOnce sync.Once
