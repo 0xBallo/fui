@@ -110,8 +110,8 @@ func TestTransactionsEditForm(t *testing.T) {
 		scr, _ = sendKey(scr, tea.KeyBackspace)
 	}
 	scr, _ = sendRunes(scr, "-9.99")
-	scr, cmd = sendKey(scr, tea.KeyEnter) // amount -> date
-	scr, _ = sendKey(scr, tea.KeyEnter)   // date -> description (unchanged)
+	scr, _ = sendKey(scr, tea.KeyEnter) // amount -> date
+	scr, _ = sendKey(scr, tea.KeyEnter) // date -> description (unchanged)
 	scr, _ = sendRunes(scr, " shop")
 	scr, _ = sendKey(scr, tea.KeyEnter) // description -> category
 	scr, _ = sendKey(scr, tea.KeyEnter) // category -> notes
@@ -120,7 +120,7 @@ func TestTransactionsEditForm(t *testing.T) {
 	scr, _ = sendKey(scr, tea.KeyEnter) // status -> kind (prefilled "payment", opens its dropdown)
 	scr, _ = sendKey(scr, tea.KeyEnter) // accept the "payment" suggestion
 	scr, cmd = sendKey(scr, tea.KeyEnter)
-	scr = run(t, scr, cmd)
+	run(t, scr, cmd)
 
 	page, err := fx.Service.ListTx(context.Background(), app.ListTxRequest{})
 	if err != nil {
@@ -155,7 +155,7 @@ func TestTransactionsDeleteWithConfirm(t *testing.T) {
 
 	scr, _ = sendRunes(scr, "d")
 	scr, cmd := sendRunes(scr, "y")
-	scr = run(t, scr, cmd)
+	run(t, scr, cmd)
 
 	page, err := fx.Service.ListTx(context.Background(), app.ListTxRequest{})
 	if err != nil {
@@ -232,7 +232,7 @@ func TestTransactionsBulkCategorize(t *testing.T) {
 	scr, _ = sendRunes(scr, "Groceries")
 	scr, _ = sendKey(scr, tea.KeyEnter) // accept suggestion
 	scr, cmd := sendKey(scr, tea.KeyEnter)
-	scr = run(t, scr, cmd)
+	run(t, scr, cmd)
 
 	page, err := fx.Service.ListTx(context.Background(), app.ListTxRequest{})
 	if err != nil {

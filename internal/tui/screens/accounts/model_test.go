@@ -121,7 +121,7 @@ func TestAccountsArchiveWithConfirm(t *testing.T) {
 
 	scr, _ = sendRunes(scr, "d")
 	scr, cmd := sendRunes(scr, "y")
-	scr = run(t, scr, cmd)
+	run(t, scr, cmd)
 
 	accts, err := fx.Service.ListAccounts(context.Background(), app.ListAccountsRequest{})
 	if err != nil {
