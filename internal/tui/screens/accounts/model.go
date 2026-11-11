@@ -93,6 +93,9 @@ func (m *Model) Title() string { return "Accounts" }
 // KeyMap exposes the bindings for the global help view.
 func (m *Model) KeyMap() []key.Binding { return m.km.Bindings() }
 
+// InputActive reports whether the add-account form is capturing keystrokes.
+func (m *Model) InputActive() bool { return m.mode == modeForm }
+
 // loadedMsg carries a fresh account listing back into Update.
 type loadedMsg struct{ balances []app.AccountBalance }
 
@@ -154,9 +157,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		return m.handleConfirmKey(msg)
 	case modeDetail:
 		return m.handleDetailKey(msg)
-	default:
+	case modeList:
 		return m.handleListKey(msg)
 	}
+	return m.handleListKey(msg)
 }
 
 func (m *Model) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
@@ -316,9 +320,10 @@ func (m *Model) View() string {
 		return m.viewList() + "\n\n" + m.confirm.View()
 	case modeDetail:
 		return m.viewDetail()
-	default:
+	case modeList:
 		return m.viewList()
 	}
+	return m.viewList()
 }
 
 func (m *Model) viewList() string {

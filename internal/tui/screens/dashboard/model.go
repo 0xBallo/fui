@@ -97,6 +97,9 @@ func (m *Model) Title() string { return "Dashboard" }
 // KeyMap exposes the bindings for the global help view.
 func (m *Model) KeyMap() []key.Binding { return m.km.Bindings() }
 
+// InputActive reports whether the quick-add form is capturing keystrokes.
+func (m *Model) InputActive() bool { return m.mode == modeForm }
+
 // loadedMsg carries every piece of fresh dashboard data back into Update.
 type loadedMsg struct {
 	balances []app.AccountBalance

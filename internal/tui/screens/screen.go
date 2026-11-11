@@ -34,6 +34,10 @@ type Screen interface {
 	KeyMap() []key.Binding
 	Title() string
 	SetSize(width, height int)
+	// InputActive reports whether a text field is currently capturing every keystroke (a form,
+	// search box, or filter), so the root router must forward keys straight through instead of
+	// intercepting its own global bindings (quit, help, tab switch).
+	InputActive() bool
 }
 
 // ErrorMsg propagates an operational failure to be surfaced on the global status bar.

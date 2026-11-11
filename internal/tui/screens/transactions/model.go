@@ -122,6 +122,18 @@ func (m *Model) Title() string { return "Transactions" }
 // KeyMap exposes the bindings for the global help view.
 func (m *Model) KeyMap() []key.Binding { return m.km.Bindings() }
 
+// InputActive reports whether a form, the filter panel, the quick search box, or the bulk
+// categorize field is currently capturing keystrokes.
+func (m *Model) InputActive() bool {
+	switch m.mode {
+	case modeForm, modeFilter, modeSearch, modeCategorize:
+		return true
+	case modeList, modeConfirm:
+		return false
+	}
+	return false
+}
+
 // loadedMsg carries a fresh first page, plus account and category names, back into Update.
 type loadedMsg struct {
 	page       app.TxPage
@@ -231,9 +243,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		return m.handleSearchKey(msg)
 	case modeCategorize:
 		return m.handleCategorizeKey(msg)
-	default:
+	case modeList:
 		return m.handleListKey(msg)
 	}
+	return m.handleListKey(msg)
 }
 
 func (m *Model) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
@@ -258,14 +271,7 @@ func (m *Model) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	case key.Matches(msg, m.km.Edit):
 		return m, m.openEditForm()
 	case key.Matches(msg, m.km.Delete):
-		row := m.selectedTx()
-		if row == nil {
-			return m, nil
-		}
-		m.deleteTarget = row.Transaction.ID
-		m.confirmPurpose = confirmDelete
-		m.confirm.Show("Delete transaction", fmt.Sprintf("Delete %q?", row.Transaction.Description))
-		m.mode = modeConfirm
+		return m.handleDeleteKey()
 	case key.Matches(msg, m.km.Filter):
 		m.openFilterForm()
 	case key.Matches(msg, m.km.Search):
@@ -289,6 +295,19 @@ func (m *Model) maybeLoadMore() tea.Cmd {
 	}
 	m.loadingMore = true
 	return m.loadMore()
+}
+
+// handleDeleteKey arms the delete confirmation dialog for the selected row.
+func (m *Model) handleDeleteKey() (screens.Screen, tea.Cmd) {
+	row := m.selectedTx()
+	if row == nil {
+		return m, nil
+	}
+	m.deleteTarget = row.Transaction.ID
+	m.confirmPurpose = confirmDelete
+	m.confirm.Show("Delete transaction", fmt.Sprintf("Delete %q?", row.Transaction.Description))
+	m.mode = modeConfirm
+	return m, nil
 }
 
 // parseTxID parses a table row ID back into the TransactionID it was formatted from.
@@ -326,6 +345,8 @@ func (m *Model) handleConfirmKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 			return m, m.submitDelete(true)
 		case confirmEditReconciled:
 			return m, m.submitEdit(true)
+		case confirmNone:
+			return m, nil
 		}
 	case no:
 		m.confirmPurpose = confirmNone
@@ -408,9 +429,10 @@ func (m *Model) View() string {
 		return m.viewSearch()
 	case modeCategorize:
 		return m.viewCategorize()
-	default:
+	case modeList:
 		return m.viewList()
 	}
+	return m.viewList()
 }
 
 func (m *Model) viewList() string {
