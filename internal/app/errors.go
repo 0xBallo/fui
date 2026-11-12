@@ -24,7 +24,9 @@ const (
 
 // Codes returns every app-level error code, for the CLI's exhaustive exit-code mapping test.
 func Codes() []domain.Code {
-	return []domain.Code{CodeConfirmationRequired, CodeRateMissing, CodeAlreadyExists, CodeInUse}
+	return []domain.Code{
+		CodeConfirmationRequired, CodeRateMissing, CodeAlreadyExists, CodeInUse, CodeModuleDisabled,
+	}
 }
 
 // Sentinels for errors.Is; they match every error carrying the same code.
