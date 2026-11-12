@@ -7,6 +7,7 @@ import (
 
 	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/clock"
+	"github.com/0xballo/fui/internal/config"
 	"github.com/0xballo/fui/internal/domain"
 )
 
@@ -38,16 +39,17 @@ func (emptySource) FXRateOnOrBefore(context.Context, domain.Currency, domain.Cur
 // (an empty archive yields no spending rows).
 func TestTUIUseCasesForwardReports(t *testing.T) {
 	clk := clock.NewFixed(time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC))
-	rep, err := newReporting(emptySource{}, clk)
+	cfg := config.Defaults()
+	eur, err := domain.ParseCurrency("EUR")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep, err := newReporting(nil, emptySource{}, clk, &cfg, eur)
 	if err != nil {
 		t.Fatalf("newReporting: %v", err)
 	}
 	uc := newTUIUseCases(nil, rep)
 	ctx := context.Background()
-	eur, err := domain.ParseCurrency("EUR")
-	if err != nil {
-		t.Fatal(err)
-	}
 	asOf, err := domain.NewDate(2026, 1, 15)
 	if err != nil {
 		t.Fatal(err)

@@ -91,7 +91,14 @@ func mustReporting(t *testing.T, store *memstore.Store, clock reporting.Clock) c
 	if err != nil {
 		t.Fatalf("NewRunway: %v", err)
 	}
-	return cli.Reporting{Spending: spending, CashFlow: cashFlow, Runway: runway}
+	analytics := reporting.NewAnalytics(store, clock, src, reporting.Config{
+		Locale:        domain.LocaleENUS,
+		BaseCurrency:  currency(t, "EUR"),
+		MonthStartDay: 1,
+		HorizonDays:   config.DefaultForecastDays,
+		Modules:       module.Default(),
+	})
+	return cli.Reporting{Spending: spending, CashFlow: cashFlow, Runway: runway, Analytics: analytics}
 }
 
 // useItalianLocale switches the harness to it-IT (comma decimal separator, dd/mm/yyyy dates),

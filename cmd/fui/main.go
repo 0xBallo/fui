@@ -21,8 +21,6 @@ import (
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/budgeting"
 	"github.com/0xballo/fui/internal/app/importing"
-	"github.com/0xballo/fui/internal/app/lending"
-	"github.com/0xballo/fui/internal/app/recurring"
 	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/app/rules"
 	"github.com/0xballo/fui/internal/cli"
@@ -134,7 +132,7 @@ func wireStore(ctx context.Context, cfg *config.Config, appClock app.Clock, deps
 	deps.Service = app.New(store, appClock, store, app.Config{
 		Locale: domain.Locale(cfg.Locale), BaseCurrency: baseCurrency,
 	})
-	rep, err := newReporting(store, appClock)
+	rep, err := newReporting(store, store, appClock, cfg, baseCurrency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("build reporting use cases: %w", err)
@@ -156,8 +154,6 @@ func wireStore(ctx context.Context, cfg *config.Config, appClock app.Clock, deps
 		Locale: domain.Locale(cfg.Locale), BaseCurrency: baseCurrency, MonthStartDay: cfg.MonthStartDay,
 		Mode: domain.BudgetMode(cfg.Budget.Mode), Modules: modules,
 	})
-	deps.Recurring = recurring.New(store, appClock, store, recurring.Config{Locale: domain.Locale(cfg.Locale)})
-	deps.Loans = lending.New(store, appClock, store, lending.Config{Locale: domain.Locale(cfg.Locale)})
 	deps.RunTUI = func(ctx context.Context) error {
 		return tui.Run(ctx, newTUIUseCases(deps.Service, rep), tui.Config{
 			Locale: domain.Locale(cfg.Locale), Theme: cfg.Theme,
@@ -190,7 +186,13 @@ func (u tuiUseCases) Runway(ctx context.Context, params reporting.RunwayParams) 
 }
 
 // newReporting builds the read-only reporting and KPI use cases over source.
-func newReporting(source reporting.Source, clk reporting.Clock) (cli.Reporting, error) {
+func newReporting(
+	store app.Store,
+	source reporting.Source,
+	clk reporting.Clock,
+	cfg *config.Config,
+	baseCurrency domain.Currency,
+) (cli.Reporting, error) {
 	spending, err := reporting.NewSpending(source, clk)
 	if err != nil {
 		return cli.Reporting{}, fmt.Errorf("new spending report: %w", err)
@@ -203,7 +205,18 @@ func newReporting(source reporting.Source, clk reporting.Clock) (cli.Reporting, 
 	if err != nil {
 		return cli.Reporting{}, fmt.Errorf("new runway kpi: %w", err)
 	}
-	return cli.Reporting{Spending: spending, CashFlow: cashFlow, Runway: runway}, nil
+	modules, err := cfg.ModulesEnabled()
+	if err != nil {
+		return cli.Reporting{}, fmt.Errorf("resolve modules.enabled: %w", err)
+	}
+	analytics := reporting.NewAnalytics(store, clk, source, reporting.Config{
+		Locale:        domain.Locale(cfg.Locale),
+		BaseCurrency:  baseCurrency,
+		MonthStartDay: cfg.MonthStartDay,
+		HorizonDays:   cfg.Forecast.Horizon,
+		Modules:       modules,
+	})
+	return cli.Reporting{Spending: spending, CashFlow: cashFlow, Runway: runway, Analytics: analytics}, nil
 }
 
 // clockTestOverrideEnv freezes "now" to a fixed instant for the e2e testscripts: it is read only
