@@ -20,8 +20,9 @@ day-to-day flow.
   `develop`.
 - Commits on feature and hotfix branches no longer have to be atomic. A versioned `pre-commit` hook (`make hooks`)
   runs format, build, vet, lint and tests so that no commit is broken.
-- A release is a pull request from `develop` to `main`, merged with a merge commit, followed by the version bump:
-  an annotated `vX.Y.Z` tag on `main`.
+- A release is a `release/vX.Y.Z` branch from `develop` that moves the `[Unreleased]` section of `CHANGELOG.md`
+  under the new version; its pull request to `main` is merged with a merge commit, then an annotated `vX.Y.Z` tag is
+  created on `main` and `main` is merged back into `develop`. Hotfixes update `CHANGELOG.md` in their own branch.
 
 ### Consequences
 

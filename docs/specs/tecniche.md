@@ -449,7 +449,7 @@ FUI usa un git flow leggero con due branch stabili: `main` corrisponde a PROD (l
 - `main` (PROD) e `develop` (PREVIEW) protetti: di norma niente commit diretti, si entra solo da pull request con CI verde.
 - Feature branch `<tipo>/<scope>-<descrizione>` (es. `feat/import-widiba-xlsx`, `fix/budget-rollover`): nascono da `develop` ed entrano in `develop` con **squash merge**.
 - Hotfix branch `hotfix/<descrizione>`: nascono da `main` per correggere PROD ed entrano in `main` con **squash merge**; subito dopo `main` si riporta su `develop` con un merge.
-- Rilascio: una PR da `develop` a `main` unita con merge commit (non squash, così i due branch restano allineati), dopo il bump della versione; poi il tag su `main` (vedi "Versioni e rilasci").
+- Rilascio: un branch `release/vX.Y.Z` nato da `develop` aggiorna `CHANGELOG.md`; la sua PR verso `main` si unisce con merge commit (non squash), poi si crea il tag su `main` e si riporta `main` su `develop` (vedi "Versioni e rilasci").
 - Funzioni incomplete possono entrare in `develop` dietro un flag di configurazione `experimental.<nome>` invece di restare in branch lunghi.
 
 **Commit** — su feature e hotfix branch si possono fare più commit sullo stesso tema, senza obbligo di atomicità: lo squash merge li riduce a un unico commit. L'hook `pre-commit` garantisce comunque che ogni commit compili e passi lint e test. Un bug fix include il test che lo riproduce; codice generato e golden file aggiornati stanno nello stesso branch del cambiamento che li richiede.
@@ -474,7 +474,7 @@ Scope tra `domain`, `app`, `cli`, `tui`, `store`, `import`, `connector/revolut`,
 2. Descrizione con cosa cambia, perché, come è stato verificato e lo use case o il requisito delle FS coinvolto.
 3. Tutti i job obbligatori della CI verdi prima del merge, imposto dalla protezione dei branch.
 4. Auto-revisione del diff completo; per dominio e schema, il giorno dopo.
-5. Merge con "Squash and merge" per feature e hotfix branch; "Create a merge commit" solo per la PR di rilascio `develop` → `main` e per riportare `main` su `develop`.
+5. Merge con "Squash and merge" per feature e hotfix branch; "Create a merge commit" solo per la PR di rilascio `release/vX.Y.Z` → `main` e per riportare `main` su `develop`.
 
 **Checklist di revisione**
 
@@ -487,7 +487,7 @@ Scope tra `domain`, `app`, `cli`, `tui`, `store`, `import`, `connector/revolut`,
 
 **Hook locali** — versionati in `.githooks/` e attivati una volta con `make hooks` (`core.hooksPath`). Il `pre-commit` esegue formattazione, `go build`, `go vet`, `golangci-lint` e `go test`, e blocca il commit se uno fallisce. Gli hook velocizzano il ciclo ma non sostituiscono la CI, che resta il controllo vincolante.
 
-**Versioni e rilasci** — SemVer con versioni `0.x` fino alla stabilità del formato JSON e del protocollo: in `0.x` un cambio incompatibile aumenta la minor. La versione vive nel tag: prima di rilasciare su `main` si decide il bump (patch, minor o major, dai tipi dei commit squashati dall'ultimo tag), si unisce la PR di rilascio e si crea il tag annotato `vX.Y.Z` sul commit di `main`; `make build` incorpora la versione da `git describe`. Un hotfix produce un bump di patch e il suo tag. Il changelog si genera dai commit con `git-cliff`, e la pipeline pubblica i binari.
+**Versioni e rilasci** — SemVer con versioni `0.x` fino alla stabilità del formato JSON e del protocollo: in `0.x` un cambio incompatibile aumenta la minor. La versione vive nel tag: prima di rilasciare su `main` si decide il bump (patch, minor o major, dai tipi dei commit squashati dall'ultimo tag), si sposta la sezione `[Unreleased]` di `CHANGELOG.md` sotto la nuova versione (formato Keep a Changelog, scritta a partire dai titoli dei commit di squash), si unisce la PR di rilascio e si crea il tag annotato `vX.Y.Z` sul commit di `main`; `make build` incorpora la versione da `git describe`. Un hotfix aggiorna `CHANGELOG.md` nel proprio branch e produce un bump di patch con il suo tag. La pipeline pubblica i binari con la sezione del changelog della versione.
 
 ## Test e prevenzione delle regressioni
 
@@ -575,7 +575,7 @@ La pipeline gira su GitHub Actions per ogni pull request e per ogni push su `dev
 
 1. Bump della versione e tag annotato e firmato `vX.Y.Z` su un commit di `main` con CI verde (dopo la PR di rilascio da `develop` o un hotfix).
 2. `goreleaser` compila `fui` e i connettori con `CGO_ENABLED=0`, `-trimpath` e versione, commit e data incorporati, per `linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`.
-3. Pubblica archivi, `checksums.txt`, SBOM e firme `cosign`, più il changelog generato da `git-cliff`.
+3. Pubblica archivi, `checksums.txt`, SBOM e firme `cosign`, più la sezione della versione da `CHANGELOG.md`.
 4. Aggiorna il tap Homebrew; i completamenti di shell e la pagina di manuale sono inclusi negli archivi.
 
 Il binario riporta la propria versione con `fui --version`, la stessa scritta nella skill per gli agenti.
@@ -619,7 +619,7 @@ Le decisioni architetturali si registrano come ADR in `docs/adr/NNNN-titolo.md` 
 
 | Sezione | Modifica |
 | --- | --- |
-| Flusso Git | `main` = PROD, `develop` = PREVIEW; feature branch da `develop` e hotfix da `main`, uniti con squash merge; niente obbligo di commit atomici; hook `pre-commit` con build, lint e test; CI verde obbligatoria prima del merge; bump della versione e tag prima del rilascio su `main` |
+| Flusso Git | `main` = PROD, `develop` = PREVIEW; feature branch da `develop` e hotfix da `main`, uniti con squash merge; niente obbligo di commit atomici; hook `pre-commit` con build, lint e test; CI verde obbligatoria prima del merge; bump della versione, `CHANGELOG.md` e tag prima del rilascio su `main` |
 | CI/CD e distribuzione | CI anche sui push su `develop`; rilascio da `main` dopo la PR di rilascio |
 | Decisioni tecniche e punti aperti | ADR 0013 sostituisce ADR 0006 |
 

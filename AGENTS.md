@@ -55,7 +55,8 @@ FUI is a local-first personal-finance CLI + TUI in Go. Specs (Italian) are the s
    `pre-commit` hook (`make hooks` once per clone) runs fmt, build, vet, lint and tests, so every commit is green.
    Messages use **Conventional Commits**: `<type>(<scope>): <imperative lowercase summary ≤72 chars>`, scopes:
    `domain, app, cli, tui, store, import, connector/revolut, connector/widiba, proto, config, skill` (plus `build`,
-   `ci`, `docs` as types); the PR title uses the same format, as it becomes the squash commit.
+   `ci`, `docs` as types); the PR title uses the same format, as it becomes the squash commit. Releases: `release/vX.Y.Z` from `develop`
+   updates `CHANGELOG.md`, merges into `main`, gets the tag.
    **Never** add `Co-Authored-By`, or mention AI/Claude/Copilot/Gemini/agents in commit messages. Do not push.
 4. Before declaring done, run and make green (on your packages):
    `gofumpt -l . ; go build ./... ; go vet ./... ; go test -race ./<your-pkgs>/... ; golangci-lint run ./<your-pkgs>/...`
