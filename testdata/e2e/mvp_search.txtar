@@ -1,0 +1,31 @@
+# tx search: accent- and case-insensitive partial match, shared filters, --json summary, filtered export.
+exec fui init --currency EUR
+exec fui account add Checking --kind checking --currency EUR --opening-balance 1000
+exec fui add -- -12,50 'Caffè Città' -c Groceries -a Checking --date 2026-01-10
+exec fui add -- -80,00 'Supermercato Città' -c Groceries -a Checking --date 2026-01-12
+exec fui add -- 300,00 Stipendio -a Checking --date 2026-01-14
+
+exec fui tx search CITTA
+stdout 'Caffè Città'
+stdout 'Supermercato Città'
+! stdout Stipendio
+
+exec fui tx search 'caff'
+stdout 'Caffè Città'
+! stdout Supermercato
+
+exec fui tx search citta --expense --min 20 --json
+stdout '"description":"Supermercato Città"'
+! stdout 'Caffè'
+stdout '"summary":\{"count":1,"totals":\[\{"currency":"EUR","amount":-8000\}\]\}'
+
+exec fui tx search citta --from 2026-01-11 --json
+stdout '"count":1'
+
+exec fui tx search nomatch --json
+stdout '"items":\[\]'
+
+exec fui export --format csv --expense --from 2026-01-11
+stdout 'Supermercato Città'
+! stdout 'Caffè'
+! stdout Stipendio

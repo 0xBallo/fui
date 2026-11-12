@@ -1,0 +1,26 @@
+# reset: --yes, --keep-settings, agent mode without --yes, automatic backup with reason "reset".
+exec fui init --currency EUR
+exec fui account add Checking --kind checking --currency EUR
+exec fui add -- -5,00 Coffee -c Groceries -a Checking
+
+# Agent mode never prompts: exit code 1 with confirmation_required, archive untouched.
+env FUI_AGENT=1
+! exec fui reset
+stderr '"code":"confirmation_required"'
+env FUI_AGENT=
+exec fui tx list --json
+stdout '"description":"Coffee"'
+
+exec fui reset --keep-settings --yes
+exec fui tx list --json
+! stdout Coffee
+exec fui account list --json
+! stdout Checking
+exec fui category list --json
+stdout Groceries
+exists xdg/data/fui/backups/fui-20260115-000000-reset.db
+
+exec fui account add Checking --kind checking --currency EUR
+exec fui reset --yes
+exec fui account list --json
+! stdout Checking

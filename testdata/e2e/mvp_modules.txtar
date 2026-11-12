@@ -1,0 +1,31 @@
+# Modules matrix: presets, module list, enable/disable with dependencies, help --json per preset.
+# No non-core command exists yet, so a disabled module's command (module_disabled) cannot be
+# exercised; module state is asserted via module list and help --json is identical across presets.
+exec fui init --preset expense --currency EUR
+exec fui module list --json
+stdout '"id":"budget","enabled":true'
+stdout '"id":"loans","enabled":false'
+exec fui help --json
+cp stdout expense-help.json
+
+# Enabling a module pulls in its dependencies; disabling one that others need needs --yes.
+exec fui module enable ai
+stdout 'ai, budget, core, recurring, simulations'
+! exec fui module disable recurring
+stderr 'confirmation required'
+exec fui module disable recurring --yes
+stdout 'Enabled modules: budget, core'
+! exec fui module disable core
+stderr 'cannot be disabled'
+! exec fui module enable bogus
+stderr 'unknown module'
+
+exec fui reset --yes
+exec fui init --preset full --currency EUR
+exec fui module list --json
+stdout '"id":"crypto","enabled":true'
+exec fui module disable investments --yes
+exec fui module list --json
+stdout '"id":"crypto","enabled":false'
+exec fui help --json
+cmp stdout expense-help.json
