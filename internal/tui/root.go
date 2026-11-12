@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/module"
@@ -31,9 +32,10 @@ const (
 	minHeight = 24
 )
 
-// reservedRows is the vertical space Root reserves for the tab bar and the status bar, leaving
-// the rest to the active screen.
-const reservedRows = 4
+// reservedRows is the vertical space Root reserves for the tab bar (three lines), the status bar
+// and the blank line above it, plus one for the rule under each screen title, leaving the rest to
+// the active screen.
+const reservedRows = 6
 
 // UseCases is the union of every MVP screen's needs: the app layer (shared with the CLI) plus the
 // reporting layer the dashboard uses for spending and runway.
@@ -271,26 +273,68 @@ func (r *Root) View() string {
 	if r.showHelp {
 		body = r.viewHelp()
 	}
-	return r.viewTabs() + "\n\n" + body + "\n\n" + r.viewStatus()
+	return r.viewTabs() + "\n" + body + "\n\n" + r.viewStatus()
 }
 
 // tabNames are the seven screens in tab order; a tab with no Screen is rendered disabled.
 var tabNames = [...]string{"Dashboard", "Transactions", "Accounts", "Budget", "Reports", "Import", "Settings"}
 
+// Tab borders: the active tab is open at the bottom so it merges with the rule that continues to
+// the right edge, as in the lipgloss tabs example.
+var (
+	tabBorder = lipgloss.Border{
+		Top: "─", Bottom: "─", Left: "│", Right: "│",
+		TopLeft: "╭", TopRight: "╮", BottomLeft: "┴", BottomRight: "┴",
+	}
+	activeTabBorder = lipgloss.Border{
+		Top: "─", Bottom: " ", Left: "│", Right: "│",
+		TopLeft: "╭", TopRight: "╮", BottomLeft: "┘", BottomRight: "└",
+	}
+)
+
+// viewTabs renders the bordered tab bar, dropping padding and then the inactive tabs' numbers when
+// the terminal is too narrow for all seven labels.
 func (r *Root) viewTabs() string {
-	parts := make([]string, len(tabNames))
-	for i, name := range tabNames {
-		label := fmt.Sprintf("%d %s", i+1, name)
-		switch {
-		case r.tabs[i] == nil:
-			parts[i] = r.th.DisabledTab.Render(label)
-		case screens.ID(i) == r.active:
-			parts[i] = r.th.ActiveTab.Render(label)
-		default:
-			parts[i] = r.th.InactiveTab.Render(label)
+	row := lipgloss.JoinHorizontal(lipgloss.Top, r.tabParts()...)
+	gap := lipgloss.NewStyle().Border(tabBorder, false, false, true, false).
+		BorderForeground(r.th.Tokens.Accent).
+		Render(strings.Repeat(" ", max(0, r.width-lipgloss.Width(row))))
+	return lipgloss.JoinHorizontal(lipgloss.Bottom, row, gap)
+}
+
+// tabParts renders each tab with the roomiest variant that fits the terminal width.
+func (r *Root) tabParts() []string {
+	var parts []string
+	for _, v := range []struct {
+		pad      int
+		numbered bool
+	}{{1, true}, {0, true}, {0, false}} {
+		parts = r.renderTabs(v.pad, v.numbered)
+		if r.width == 0 || lipgloss.Width(lipgloss.JoinHorizontal(lipgloss.Top, parts...)) <= r.width {
+			break
 		}
 	}
-	return strings.Join(parts, "  ")
+	return parts
+}
+
+func (r *Root) renderTabs(pad int, numbered bool) []string {
+	tab := lipgloss.NewStyle().Border(tabBorder, true).BorderForeground(r.th.Tokens.Accent).Padding(0, pad)
+	parts := make([]string, len(tabNames))
+	for i, name := range tabNames {
+		label := name
+		if numbered || screens.ID(i) == r.active {
+			label = fmt.Sprintf("%d %s", i+1, name)
+		}
+		switch {
+		case r.tabs[i] == nil:
+			parts[i] = tab.Render(r.th.DisabledTab.Render(label))
+		case screens.ID(i) == r.active:
+			parts[i] = tab.Border(activeTabBorder, true).Render(r.th.ActiveTab.Render(label))
+		default:
+			parts[i] = tab.Render(r.th.InactiveTab.Render(label))
+		}
+	}
+	return parts
 }
 
 func (r *Root) viewStatus() string {

@@ -443,13 +443,13 @@ func (m *Model) txRows(items []app.TxView) []components.Row {
 func (m *Model) View() string {
 	switch m.mode {
 	case modeForm:
-		return m.viewForm()
+		return components.Modal(m.th, m.width, m.height, m.viewForm())
 	case modeReconcileForm:
-		return m.viewReconcileForm()
+		return components.Modal(m.th, m.width, m.height, m.viewReconcileForm())
 	case modeReconcilePreview:
 		return m.viewReconcilePreview()
 	case modeConfirm:
-		return m.viewList() + "\n\n" + m.confirm.View()
+		return components.Modal(m.th, m.width, m.height, m.confirm.View())
 	case modeDetail:
 		return m.viewDetail()
 	case modeList:

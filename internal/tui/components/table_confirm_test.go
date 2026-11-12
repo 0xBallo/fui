@@ -15,7 +15,7 @@ func TestTableNavigationAndRender(t *testing.T) {
 	tbl := components.NewTable([]components.Column{{Title: "A", Width: 3}}, theme.Default())
 	tbl.SetColumns([]components.Column{{Title: "Name", Width: 6, Align: lipgloss.Right}, {Title: "N", Width: 2}})
 	tbl.SetWidth(40)
-	tbl.SetHeight(2)
+	tbl.SetHeight(5) // two visible rows plus the three lines of table chrome
 	tbl.SetShowSelect(true)
 	if got := tbl.View(); !strings.Contains(got, "(no data)") {
 		t.Fatalf("empty view = %q", got)

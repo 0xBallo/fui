@@ -1,8 +1,13 @@
-1 Dashboard  2 Transactions  3 Accounts  4 Budget  5 Reports  6 Import  7 Settings
-
+╭─────────╮╭────────────╮╭──────────╮╭──────╮╭───────╮╭──────╮╭────────╮        
+│Dashboard││Transactions││3 Accounts││Budget││Reports││Import││Settings│        
+┴─────────┴┴────────────┴┘          └┴──────┴┴───────┴┴──────┴┴────────┴────────
 Accounts
+────────
 
-Account                  Kind                  Balance
-Checking                 checking             1,207.50
+╭────────────────────────┬────────────┬────────────────╮
+│Account                 │Kind        │         Balance│
+├────────────────────────┼────────────┼────────────────┤
+│Checking                │checking    │        1,207.50│
+╰────────────────────────┴────────────┴────────────────╯
 
 ? help · q quit

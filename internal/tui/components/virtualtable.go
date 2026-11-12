@@ -2,9 +2,8 @@
 package components
 
 import (
-	"strings"
-
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/0xballo/fui/internal/tui/theme"
@@ -65,13 +64,18 @@ func (t *Table) Rows() []Row {
 	return t.rows
 }
 
-// SetHeight sets the maximum number of rows visible in the viewport.
+// SetHeight sets the lines the table may use; three go to its borders and header separator, the
+// rest (at least one) to visible rows.
 func (t *Table) SetHeight(h int) {
 	if h > 0 {
-		t.height = h
+		t.height = max(1, h-tableChrome)
 		t.adjustOffset()
 	}
 }
+
+// tableChrome is the number of lines View adds beyond header and rows: top border, header
+// separator and bottom border.
+const tableChrome = 3
 
 // SetWidth sets the available display width for the table.
 func (t *Table) SetWidth(w int) {
@@ -191,64 +195,64 @@ func (t *Table) adjustOffset() {
 	}
 }
 
-// View renders the visible rows and header of the table.
+// View renders the header and the visible rows inside a rounded lipgloss table. Only the rows in
+// the viewport are handed to lipgloss, so rendering cost stays independent of the row count.
 func (t *Table) View() string {
-	var b strings.Builder
-	b.WriteString(t.renderHeader())
-	b.WriteByte('\n')
-
-	if len(t.rows) == 0 {
-		b.WriteString(t.theme.Muted.Render("  (no data)"))
-		return b.String()
-	}
-
-	end := min(len(t.rows), t.offset+t.height)
-	for i := t.offset; i < end; i++ {
-		b.WriteString(t.renderRow(i))
-		if i < end-1 {
-			b.WriteByte('\n')
-		}
-	}
-	return b.String()
-}
-
-func (t *Table) renderHeader() string {
-	var cols []string
+	var cols []Column
 	if t.showSelect {
-		cols = append(cols, "[ ]")
+		cols = append(cols, Column{Title: "[ ]", Width: 3, Align: lipgloss.Left})
 	}
-	for _, col := range t.columns {
-		title := ansi.Truncate(col.Title, col.Width, "…")
-		styled := lipgloss.NewStyle().Width(col.Width).Align(col.Align).Render(title)
-		cols = append(cols, styled)
+	cols = append(cols, t.columns...)
+
+	headers := make([]string, len(cols))
+	for i, col := range cols {
+		headers[i] = ansi.Truncate(col.Title, col.Width, "…")
 	}
-	return t.theme.Header.Render(strings.Join(cols, " "))
+	end := min(len(t.rows), t.offset+t.height)
+	rows := make([][]string, 0, end-t.offset)
+	for i := t.offset; i < end; i++ {
+		rows = append(rows, t.cells(t.rows[i], cols))
+	}
+
+	cell := func(col Column) lipgloss.Style { return lipgloss.NewStyle().Width(col.Width).Align(col.Align) }
+	out := table.New().
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(t.theme.Tokens.Border)).
+		Headers(headers...).
+		Rows(rows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			switch {
+			case row == table.HeaderRow:
+				return t.theme.Header.Inherit(cell(cols[col]))
+			case t.offset+row == t.cursor:
+				return t.theme.Selected.Inherit(cell(cols[col]))
+			}
+			return cell(cols[col])
+		}).
+		Render()
+	if len(t.rows) == 0 {
+		out += "\n" + t.theme.Muted.Render("  (no data)")
+	}
+	return out
 }
 
-func (t *Table) renderRow(idx int) string {
-	row := t.rows[idx]
-	var cols []string
+// cells returns row's cell texts for cols, truncated to each column's width.
+func (t *Table) cells(row Row, cols []Column) []string {
+	out := make([]string, 0, len(cols))
 	if t.showSelect {
 		mark := "[ ]"
 		if t.selected[row.ID] {
 			mark = "[x]"
 		}
-		cols = append(cols, mark)
+		out = append(out, mark)
+		cols = cols[1:]
 	}
-
-	for j, col := range t.columns {
-		cellVal := ""
+	for j, col := range cols {
+		v := ""
 		if j < len(row.Cells) {
-			cellVal = row.Cells[j]
+			v = row.Cells[j]
 		}
-		truncated := ansi.Truncate(cellVal, col.Width, "…")
-		rendered := lipgloss.NewStyle().Width(col.Width).Align(col.Align).Render(truncated)
-		cols = append(cols, rendered)
+		out = append(out, ansi.Truncate(v, col.Width, "…"))
 	}
-
-	line := strings.Join(cols, " ")
-	if idx == t.cursor {
-		return t.theme.Selected.Render(line)
-	}
-	return line
+	return out
 }

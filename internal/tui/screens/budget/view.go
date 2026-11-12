@@ -79,9 +79,9 @@ func (m *Model) envelopeRows() []components.Row {
 func (m *Model) View() string {
 	switch m.mode {
 	case modeSetForm, modeAssignForm, modeMoveForm:
-		return m.viewForm()
+		return components.Modal(m.th, m.width, m.height, m.viewForm())
 	case modeConfirm:
-		return m.viewList() + "\n\n" + m.confirm.View()
+		return components.Modal(m.th, m.width, m.height, m.confirm.View())
 	case modeList:
 		return m.viewList()
 	}

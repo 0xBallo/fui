@@ -194,13 +194,13 @@ func (m *Model) View() string {
 	case modeIdle:
 		return m.th.Title.Render("Import") + "\n\n" + m.th.Muted.Render("n new import")
 	case modeSource:
-		return m.viewSource()
+		return components.Modal(m.th, m.width, m.height, m.viewSource())
 	case modeMapping:
-		return m.viewMapping()
+		return components.Modal(m.th, m.width, m.height, m.viewMapping())
 	case modePreview:
 		return m.viewPreview()
 	case modeConfirm:
-		return m.viewPreview() + "\n\n" + m.confirm.View()
+		return components.Modal(m.th, m.width, m.height, m.confirm.View())
 	case modeResult:
 		return m.viewResult()
 	}

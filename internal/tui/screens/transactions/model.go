@@ -471,17 +471,17 @@ func (m *Model) txRows() []components.Row {
 func (m *Model) View() string {
 	switch m.mode {
 	case modeForm:
-		return m.viewForm()
+		return components.Modal(m.th, m.width, m.height, m.viewForm())
 	case modeConfirm:
-		return m.viewList() + "\n\n" + m.confirm.View()
+		return components.Modal(m.th, m.width, m.height, m.confirm.View())
 	case modeFilter:
-		return m.viewFilter()
+		return components.Modal(m.th, m.width, m.height, m.viewFilter())
 	case modeSearch:
 		return m.viewSearch()
 	case modeSplit:
-		return m.viewSplit()
+		return components.Modal(m.th, m.width, m.height, m.viewSplit())
 	case modeTags:
-		return m.viewTags()
+		return components.Modal(m.th, m.width, m.height, m.viewTags())
 	case modeCategorize:
 		return m.viewCategorize()
 	case modeList:

@@ -1,9 +1,14 @@
-1 Dashboard  2 Transactions  3 Accounts  4 Budget  5 Reports  6 Import  7 Settings
-
+╭─────────╮╭──────────────╮╭────────╮╭──────╮╭───────╮╭──────╮╭────────╮        
+│Dashboard││2 Transactions││Accounts││Budget││Reports││Import││Settings│        
+┴─────────┴┘              └┴────────┴┴──────┴┴───────┴┴──────┴┴────────┴────────
 Transactions
+────────────
 
-Date       Account          Description              Category       Status             Amount
-06/10/2026 Checking         Supermarket              Groceries      booked             -42.50
+╭──────────┬────────────────┬────────────────────────┬──────────────┬──────────┬──────────────╮
+│Date      │Account         │Description             │Category      │Status    │        Amount│
+├──────────┼────────────────┼────────────────────────┼──────────────┼──────────┼──────────────┤
+│06/10/2026│Checking        │Supermarket             │Groceries     │booked    │        -42.50│
+╰──────────┴────────────────┴────────────────────────┴──────────────┴──────────┴──────────────╯
 1 transaction   -42.50 EUR
 
 ? help · q quit
