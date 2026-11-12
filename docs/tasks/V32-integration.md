@@ -4,3 +4,4 @@ Branch `feat/v-integration`. Owned: `cmd/fui/`, `internal/cli/root.go` + `help.j
 Protocol: `docs/tasks/_PROTOCOL.md` (binding).
 
 Register all v0.2 CLI commands (module annotations) and TUI screens per module (router rebuild on module change, fixed numeric keys); `help --json` golden per preset (expense, full) now differs; testscript e2e per use case (budget, recurring, loans, rules, reconcile, tags/splits, reports, forecast) and the module matrix (each optional module off once); `module_disabled` exercised; skill updated; coverage gate green; CI green.
+- Settings Appearance: emit a theme-changed message on selection and re-theme the running TUI immediately (live preview, spec "Scelta del tema"); handle `settings.ModulesChangedMsg` by rebuilding router + dashboard.
