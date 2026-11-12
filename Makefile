@@ -3,7 +3,7 @@ PKGS    ?= ./...
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: fmt fmt-check generate lint test check bench build
+.PHONY: fmt fmt-check generate lint test check bench build cover
 
 fmt:
 	gofumpt -w .
@@ -26,6 +26,9 @@ check: fmt-check generate lint test
 
 bench:
 	$(GO) test -run '^$$' -bench . -benchmem $(PKGS)
+
+cover:
+	./.github/workflows/scripts/coverage.sh
 
 build:
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o dist/ ./cmd/...

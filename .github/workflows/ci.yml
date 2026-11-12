@@ -146,3 +146,14 @@ jobs:
           go-version: ${{ env.GO_LATEST }}
           cache: true
       - run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o dist/ ./cmd/...
+
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_LATEST }}
+          cache: true
+      - run: ./.github/workflows/scripts/coverage.sh --enforce
