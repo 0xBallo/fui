@@ -40,6 +40,10 @@ linters:
           files: ["**/internal/domain/**", "!**/internal/domain/simulate/**", "!$test"]
           list-mode: strict
           allow: [$gostd, github.com/0xballo/fui/internal/domain]
+        module:
+          files: ["**/internal/module/**", "!$test"]
+          list-mode: strict
+          allow: [$gostd]
         app-no-adapters:
           files: ["**/internal/app/**"]
           deny:
