@@ -22,6 +22,44 @@ type Account struct {
 	Iban                sql.NullString
 }
 
+type Budget struct {
+	ID            int64
+	Name          string
+	Mode          string
+	AmountMinor   int64
+	Currency      string
+	Carry         int64
+	ThresholdWarn int64
+	ThresholdOver int64
+	CreatedAt     string
+	UpdatedAt     string
+}
+
+type BudgetAmount struct {
+	ID          int64
+	BudgetID    int64
+	Year        int64
+	Month       int64
+	AmountMinor int64
+}
+
+type BudgetMove struct {
+	ID           int64
+	Date         string
+	FromBudgetID sql.NullInt64
+	ToBudgetID   sql.NullInt64
+	AmountMinor  int64
+	Currency     string
+	CreatedAt    string
+}
+
+type BudgetTarget struct {
+	ID         int64
+	BudgetID   int64
+	CategoryID sql.NullInt64
+	TagID      sql.NullInt64
+}
+
 type Category struct {
 	ID        int64
 	Name      string
