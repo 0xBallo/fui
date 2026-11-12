@@ -89,31 +89,6 @@ func (m *Model) viewFilter() string {
 	return m.th.Title.Render("Filter transactions") + "\n\n" + m.filterForm.View()
 }
 
-func (m *Model) openSearch() {
-	m.searchField = components.NewAutocomplete("Search:", "description contains…", m.th)
-	m.searchField.SetValue(m.req.Text)
-	m.mode = modeSearch
-	m.searchField.Focus()
-}
-
-func (m *Model) handleSearchKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
-		m.mode = modeList
-		return m, nil
-	case "enter":
-		m.req.Text = m.searchField.Value()
-		return m, m.load()
-	}
-	updated, cmd := m.searchField.Update(msg)
-	m.searchField = updated
-	return m, cmd
-}
-
-func (m *Model) viewSearch() string {
-	return m.viewList() + "\n\n" + m.searchField.View()
-}
-
 func (m *Model) openCategorize() {
 	ids := m.table.SelectedIDs()
 	if len(ids) == 0 {

@@ -183,6 +183,49 @@ func TestTransactionsSearch(t *testing.T) {
 	}
 }
 
+func TestTransactionsSearchEscClears(t *testing.T) {
+	fx, scr := newFixture(t)
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-12.50", Description: "Coffee", Date: "2026-06-01"})
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-30", Description: "Groceries run", Date: "2026-06-02"})
+	scr = run(t, scr, scr.Init())
+
+	scr, _ = sendRunes(scr, "/")
+	scr, _ = sendRunes(scr, "Coffee")
+	scr, cmd := sendKey(scr, tea.KeyEnter)
+	scr = run(t, scr, cmd)
+	if strings.Contains(scr.View(), "Groceries run") {
+		t.Fatalf("expected the search to have narrowed the list first")
+	}
+
+	scr, _ = sendRunes(scr, "/")
+	scr, cmd = sendKey(scr, tea.KeyEsc)
+	scr = run(t, scr, cmd)
+
+	view := scr.View()
+	if !strings.Contains(view, "Groceries run") || !strings.Contains(view, "Coffee") {
+		t.Fatalf("expected esc to clear the search and show every transaction again, got:\n%s", view)
+	}
+}
+
+func TestTransactionsSearchDebounceNarrowsList(t *testing.T) {
+	fx, scr := newFixture(t)
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-12.50", Description: "Coffee", Date: "2026-06-01"})
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-30", Description: "Groceries run", Date: "2026-06-02"})
+	scr = run(t, scr, scr.Init())
+
+	scr, _ = sendRunes(scr, "/")
+	if !strings.Contains(scr.View(), "Search:") {
+		t.Fatalf("expected the search field to be visible while typing, got:\n%s", scr.View())
+	}
+	scr, cmd := sendRunes(scr, "Coffee")
+	scr = run(t, scr, cmd) // waits out the real debounce timer and applies the result
+
+	view := scr.View()
+	if !strings.Contains(view, "Coffee") || strings.Contains(view, "Groceries run") {
+		t.Fatalf("expected only Coffee after the debounce fires, got:\n%s", view)
+	}
+}
+
 func TestTransactionsFilterByCategory(t *testing.T) {
 	fx, scr := newFixture(t)
 	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-12.50", Description: "Coffee", Date: "2026-06-01"})

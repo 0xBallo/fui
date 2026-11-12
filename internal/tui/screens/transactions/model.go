@@ -83,7 +83,10 @@ type Model struct {
 	filterAccount, filterCategory, filterStatus components.Autocomplete
 	filterFrom, filterTo, filterMin, filterMax  components.Autocomplete
 
-	searchField components.Autocomplete
+	searchField  components.Autocomplete
+	searchSeq    int
+	searchCancel context.CancelFunc
+	tick         func(seq int) tea.Cmd
 
 	categorizeField components.Autocomplete
 }
@@ -92,7 +95,7 @@ var _ screens.Screen = (*Model)(nil)
 
 // New builds the transactions screen over uc, formatting amounts and dates with loc.
 func New(uc UseCases, loc domain.Locale, th theme.Theme) *Model {
-	m := &Model{uc: uc, loc: loc, th: th, km: DefaultKeyMap()}
+	m := &Model{uc: uc, loc: loc, th: th, km: DefaultKeyMap(), tick: defaultTick}
 	m.table = components.NewTable([]components.Column{
 		{Title: "Date", Width: 10, Align: lipgloss.Left},
 		{Title: "Account", Width: 16, Align: lipgloss.Left},
@@ -189,6 +192,13 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	case editTargetMsg:
 		m.startEditForm(msg.tx)
 		return m, nil
+	case debounceMsg:
+		if msg.seq != m.searchSeq {
+			return m, nil // superseded by a later keystroke
+		}
+		return m, m.runSearch(msg.seq)
+	case searchResultMsg:
+		return m.applySearchResult(msg)
 	case needReconcileMsg:
 		m.confirmPurpose = msg.purpose
 		m.confirm.Show("Reconciled transaction", "This transaction is reconciled. Continue anyway?")
