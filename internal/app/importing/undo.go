@@ -16,6 +16,20 @@ type UndoPlan struct {
 	Transactions []domain.TransactionID
 }
 
+// ListBatches returns every import batch, most recent first.
+func (s *Service) ListBatches(ctx context.Context) ([]app.ImportBatch, error) {
+	var out []app.ImportBatch
+	err := s.store.Read(ctx, func(r app.Repos) error {
+		var err error
+		out, err = r.Imports().Batches(ctx)
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list import batches: %w", err)
+	}
+	return out, nil
+}
+
 // PlanUndo lists the transactions of the batch. It fails with domain.ErrReconciled when one of
 // them is already reconciled.
 func (s *Service) PlanUndo(ctx context.Context, batch domain.ImportBatchID) (UndoPlan, error) {

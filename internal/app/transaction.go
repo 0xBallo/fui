@@ -126,6 +126,23 @@ type TxPage struct {
 	Next  *TxCursor
 }
 
+// ResolveTxFilter resolves a ListTxRequest into the TxFilter a repository understands, the same
+// way ListTx does: account and category names against the archive, the amount range in the
+// currency of the selected accounts. Other use cases that filter transactions the way `tx list`
+// does (for example `export`) call this instead of duplicating name and amount resolution.
+func (s *Service) ResolveTxFilter(ctx context.Context, req ListTxRequest) (TxFilter, error) {
+	var f TxFilter
+	err := s.store.Read(ctx, func(r Repos) error {
+		accts, cats, err := loadNames(ctx, r)
+		if err != nil {
+			return err
+		}
+		f, err = s.txFilter(req, accts, cats)
+		return err
+	})
+	return f, err
+}
+
 // ListTx returns one page of the matching transactions.
 func (s *Service) ListTx(ctx context.Context, req ListTxRequest) (TxPage, error) {
 	limit := req.Limit
