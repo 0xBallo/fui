@@ -1,0 +1,6 @@
+# V13 — App: tags, payees, splits
+Branch `feat/v-app-split`. Owned: `internal/app/tagging/` (new) or `internal/app/{tag,payee,split}*.go`, `TxFilter` tag support across domain/store/memstore (`domain/txfilter.go`, store List, property test), `ListTxRequest` tag field.
+
+Protocol: `docs/tasks/_PROTOCOL.md` (binding). App layer: use cases with the Plan/Apply pattern (see `internal/app/plan.go`, existing use cases), `context.Context` first, imports only `domain`/`module`; tests against `internal/testutil/memstore` (table-driven + rapid where listed). Module gate: use cases of a module call `Require(<id>)` on the `module.Set` the service holds/receives (see how `internal/app/module.go` exposes it; add the minimal plumbing if missing). No CLI/TUI here. Read the merged domain types and store ports first. Coverage of touched app packages ≥ 85%. Plan: `docs/PLAN-v0.2.md` §3–4.
+
+Module core. 1. Plan/Apply: tag add/rename/rm/merge, tag/untag tx, payee add/alias/rename/merge, split/unsplit tx (rows validated by `domain.ValidateSplits`). 2. Add tags to `domain.TxFilter` (AND across filters, OR among tags) + SQL + oracle test (V07 left a TODO). 3. FUI export/import round-trip includes tags and splits if the fui/1 format supports them (check `pkg/fuiproto`; if not, REQ). rapid: split edit keeps the sum.
