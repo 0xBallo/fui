@@ -1,0 +1,32 @@
+# UC-10 (docs/specs/funzionali.md "Casi d'uso"): use fui in scripts and pipelines.
+exec fui init --currency EUR
+exec fui account add Checking --kind checking --currency EUR --opening-balance 1000
+
+# help --json is the full, stable command tree an agent or script can introspect once per
+# session instead of parsing --help text.
+exec fui help --json
+stdout '"path":"fui account add".*"output_schema":"account"'
+
+# Exit code 0: a normal write succeeds.
+exec fui add -- -10,00 Coffee -c Groceries -a Checking --json
+stdout '"amount":-1000'
+
+# Exit code 1: a user-input error (no account named like that).
+! exec fui add -- -1,00 Snack -a "No Such Account" --json
+stderr '"code":"not_found"'
+
+# Exit code 2: an internal/data error (fui cannot open a corrupt archive file).
+cp $WORK/not-a-database.db $WORK/bad.db
+! exec fui account list --db $WORK/bad.db --json
+stderr '"code":"db_corrupted"'
+
+# Agent mode (FUI_AGENT=1) never prompts: every write needs an explicit --yes, even on a
+# single-transaction (non-bulk) write that would otherwise just go through.
+env FUI_AGENT=1
+! exec fui add -- -5,00 Snack -c Groceries -a Checking --json
+stderr '"code":"confirmation_required"'
+exec fui add -- -5,00 Snack -c Groceries -a Checking --json --yes
+stdout '"amount":-500'
+env FUI_AGENT=
+-- not-a-database.db --
+this is not a sqlite file

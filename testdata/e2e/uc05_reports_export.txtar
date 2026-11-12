@@ -1,0 +1,28 @@
+# UC-05 (docs/specs/funzionali.md "Casi d'uso"): analyze spending by category and period, and
+# export it.
+exec fui init --currency EUR
+exec fui account add Checking --kind checking --currency EUR --opening-balance 1000
+exec fui add -- -30,00 Rent -c Housing -a Checking --date 2026-01-05
+exec fui add -- -12,50 Esselunga -c Groceries -a Checking --date 2026-01-10
+exec fui add -- -2,50 Coffee -c Groceries -a Checking --date 2026-01-11
+
+# A table report for a human, scoped to the month.
+exec fui report run categories --month 2026-01
+stdout 'Housing\s+30,00'
+stdout 'Groceries\s+15,00'
+stdout 'TOTAL\s+45,00'
+
+# The same report as JSON, for a script to consume (amounts in minor units).
+exec fui report run categories --month 2026-01 --json
+stdout '"category_name":"Housing","total":3000'
+stdout '"category_name":"Groceries","total":1500'
+stdout '"total":4500\}$'
+
+# And as RFC 4180 CSV, for a spreadsheet.
+exec fui report run categories --month 2026-01 --csv
+stdout 'CATEGORY,TOTAL'
+stdout 'Housing,"30,00"'
+
+# Cash flow for the same month: all three transactions are outflow, no inflow yet.
+exec fui report run cashflow --month 2026-01 --json
+stdout '"inflow":0,"outflow":4500,"net":-4500'

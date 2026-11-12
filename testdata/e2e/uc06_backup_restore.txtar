@@ -1,0 +1,33 @@
+# UC-06 (docs/specs/funzionali.md "Casi d'uso"): back up and restore the archive.
+#
+# KNOWN BUG (see .task-report.md "Requests to other tasks" for T04/T07): Service.ApplyRestore
+# (internal/app/backup.go) takes its own pre-restore safety backup and then calls
+# sqlite.Store.Restore, which takes the *same* pre-restore safety backup again internally; both
+# use reason "restore" and the same one-second-resolution timestamp, so the second one always
+# collides with "output file already exists" and the restore is aborted. This script therefore
+# covers backup and every pre-apply safety gate of restore (which all work correctly today), but
+# does not assert a successful `restore --yes`.
+exec fui init --currency EUR
+exec fui account add Checking --kind checking --currency EUR --opening-balance 1000
+exec fui add -- -42,00 Groceries -c Groceries -a Checking
+
+exec fui backup --json
+stdout '"path":".*fui-20260115-000000-manual\.db"'
+exists $XDG_DATA_HOME/fui/backups/fui-20260115-000000-manual.db
+
+# Taking a second manual backup at the same frozen instant collides on the file name: an explicit
+# signal that something is wrong, rather than a silent overwrite of an existing backup.
+! exec fui backup --json
+stderr '"code":"error"'
+
+# restore --dry-run only shows the plan: it must not touch the archive or create any new file.
+exec fui restore $XDG_DATA_HOME/fui/backups/fui-20260115-000000-manual.db --dry-run --json
+stdout '"op":"update","entity":"archive"'
+exec fui account show Checking --json
+stdout '"balance":95800'
+
+# Without --yes and without a terminal, a bulk change such as restore is refused, not guessed at.
+! exec fui restore $XDG_DATA_HOME/fui/backups/fui-20260115-000000-manual.db --json
+stderr '"code":"confirmation_required"'
+exec fui account show Checking --json
+stdout '"balance":95800'

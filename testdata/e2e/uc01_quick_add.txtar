@@ -1,0 +1,24 @@
+# UC-01 (docs/specs/funzionali.md "Casi d'uso"): log an expense with a single command.
+exec fui init --currency EUR
+stdout 'Created 20 categories\.'
+
+exec fui account add Checking --kind checking --currency EUR --opening-balance 1000
+stdout 'Checking\s+checking\s+EUR\s+1\.000,00'
+
+# The amount comes before the description, with a comma decimal separator (it-IT locale); a
+# leading "-" needs "--" first so pflag does not mistake it for a flag.
+exec fui add -- -12,50 Esselunga -c Groceries -a Checking
+stdout 'Esselunga\s+-12,50\s+booked'
+
+exec fui add -- -3,00 Caffe -c Groceries -a Checking --date 2026-01-10
+stdout 'Caffe\s+-3,00\s+booked'
+
+# --json renders the same transactions as stable, machine-readable records, oldest first.
+exec fui tx list --account Checking --json
+stdout '"description":"Esselunga".*"amount":-1250'
+stdout '"description":"Caffe".*"amount":-300'
+
+# The account balance reflects both transactions against the opening balance (1000.00 - 12.50 -
+# 3.00 = 984.50 EUR, i.e. 98450 minor units).
+exec fui account show Checking --json
+stdout '"balance":98450'

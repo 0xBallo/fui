@@ -1,0 +1,24 @@
+# UC-04 (docs/specs/funzionali.md "Casi d'uso"): see every account's balance.
+#
+# NOTE: the functional spec also asks for total net worth here (app.NetWorth exists in
+# internal/app/fx.go), but no merged CLI command exposes it yet -- see .task-report.md's
+# "Requests to other tasks" for T09. This script covers the balances half of UC-04 only.
+exec fui init --currency EUR
+exec fui account add Checking --kind checking --currency EUR --opening-balance 1000
+exec fui account add Savings --kind savings --currency EUR --opening-balance 5000
+exec fui add -- -42,00 Groceries -c Groceries -a Checking
+
+exec fui account list
+stdout 'Checking\s+checking\s+EUR\s+958,00\s+no'
+stdout 'Savings\s+savings\s+EUR\s+5\.000,00\s+no'
+
+exec fui account list --json
+stdout '"name":"Checking".*"balance":95800'
+stdout '"name":"Savings".*"balance":500000'
+
+# An archived account is excluded from the default listing but included with --include-archived.
+exec fui account archive Savings
+exec fui account list --json
+! stdout '"name":"Savings"'
+exec fui account list --include-archived --json
+stdout '"name":"Savings".*"archived":true'
