@@ -45,6 +45,16 @@ modules.
 | `fui export --format json|csv|fui --all` | Export transactions or the whole archive |
 | `fui report run categories\|cashflow [--month YYYY-MM]` | Spending-by-category or cash-flow report |
 | `fui kpi runway [--at DATE]` | Months of liquidity left at current spending |
+| `fui tag add / list / rename / merge / rm`, `fui tx tag / untag ID TAG...` | Manage tags and tag transactions |
+| `fui payee add / list / rename / alias / merge` | Manage payees and their aliases |
+| `fui tx split ID --row "cat=amount[:note]"...` / `fui tx unsplit ID` | Split a transaction across categories |
+| `fui rule add / list / test / apply / edit / rm` | Categorization rules (`apply --dry-run` first) |
+| `fui reconcile ACCOUNT --balance AMOUNT --date DATE` | Compare with a statement balance; closes only at zero difference |
+| `fui budget set / list / status / assign / move / copy` | Budgets (module `budget`) |
+| `fui recurring add / list / run / skip / confirm` | Recurring transactions (module `recurring`) |
+| `fui forecast [--horizon DAYS]` | Cash-flow forecast (module `recurring`, needs `analytics`) |
+| `fui loan add / show / schedule / event / run / confirm` | Loans and mortgages (module `loans`) |
+| `fui report KIND` / `fui report save / list / run / rm` | Analytics and saved reports |
 | `fui backup` / `fui restore PATH --yes` | Back up or restore the archive |
 | `fui config get/set KEY [VALUE]` | Read or change configuration |
 | `fui skill show` / `fui skill install` | Print or install this skill document |
