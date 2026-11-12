@@ -1,0 +1,13 @@
+# Budget module: caps.
+exec fui init --preset expense --currency EUR
+exec fui account add Checking --kind checking --currency EUR --opening-balance 1000
+exec fui add -- -30,00 Coop -c Groceries -a Checking
+exec fui budget set Groceries 400
+exec fui budget set Groceries 500 --month 2026-01
+exec fui budget list --json
+stdout 'Groceries'
+exec fui budget status --month 2026-01 --json
+stdout '"spent":3000'
+exec fui budget copy --from 2026-01 --to 2026-02 --yes
+exec fui budget status --month 2026-02
+stdout 'Groceries'

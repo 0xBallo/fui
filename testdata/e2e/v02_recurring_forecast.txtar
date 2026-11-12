@@ -1,0 +1,12 @@
+# Recurring module and the cash forecast.
+exec fui init --preset expense --currency EUR
+exec fui account add Checking --kind checking --currency EUR --opening-balance 1000
+exec fui recurring add --account Checking --amount -9,99 --description Netflix --every 1 --unit months --start 2025-12-20
+exec fui recurring list --json
+stdout 'Netflix'
+exec fui recurring run --until today --dry-run
+exec fui recurring run --until today --yes
+# forecast reads the analytics module too.
+exec fui module enable analytics
+exec fui forecast --horizon 60 --json
+stdout 'Checking'

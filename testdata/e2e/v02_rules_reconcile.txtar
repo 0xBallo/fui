@@ -1,0 +1,22 @@
+# Rules and reconcile (core module).
+exec fui init --currency EUR
+exec fui account add Checking --kind checking --currency EUR --opening-balance 1000
+exec fui add -- -12,00 'Supermarket Rossi' -a Checking
+exec fui rule add groceries --contains supermarket --category Groceries --priority 10
+exec fui rule list --json
+stdout '"name":"groceries"'
+exec fui rule test 'SUPERMARKET X' --account Checking --amount -5,00
+stdout 'groceries'
+exec fui rule apply --account Checking --dry-run
+exec fui rule apply --account Checking --yes
+exec fui tx list --category Groceries --json
+stdout 'Supermarket'
+exec fui rule edit groceries --priority 5 --disable
+exec fui rule rm groceries --yes
+
+# Reconcile: a wrong statement balance does not close, the right one does.
+exec fui reconcile Checking --balance 1,00 --date 2026-01-15 --yes
+stdout 'DIFFERENCE'
+! stdout 'Reconciliation closed'
+exec fui reconcile Checking --balance 988,00 --date 2026-01-15 --yes
+stdout 'Reconciliation closed'

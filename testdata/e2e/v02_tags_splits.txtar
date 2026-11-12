@@ -1,0 +1,22 @@
+# Tags, payees and splits (core module).
+exec fui init --currency EUR
+exec fui account add Checking --kind checking --currency EUR --opening-balance 1000
+exec fui add -- -40,00 Esselunga -c Groceries -a Checking
+exec fui tag add vacanze
+exec fui tag list --json
+stdout '"name":"vacanze"'
+exec fui tx tag 1 vacanze
+exec fui tx list --tag vacanze --json
+stdout 'Esselunga'
+exec fui tx untag 1 vacanze
+exec fui tx list --tag vacanze --json
+! stdout 'Esselunga'
+exec fui tag rename vacanze vacanza
+exec fui tag rm vacanza --yes
+exec fui payee add Amazon --alias AMZN
+exec fui payee list --json
+stdout 'Amazon'
+exec fui tx split 1 --row 'Groceries=-30,00' --row 'Transport=-10,00:taxi'
+stdout 'Transport\s+-10,00\s+taxi'
+exec fui tx unsplit 1
+! exec fui tx split 1 --row 'Groceries=-30,00' --row 'Transport=-5,00'

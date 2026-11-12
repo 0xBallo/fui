@@ -1,0 +1,14 @@
+# Loans module (full preset) and analytics reports.
+exec fui init --preset full --currency EUR
+exec fui account add Checking --kind checking --currency EUR --opening-balance 5000
+exec fui loan add Mutuo --kind mortgage --principal 100000 --term-months 120 --rate 3,00 --rate-type fixed --debit Checking --disbursed 2025-01-01
+exec fui loan show Mutuo --json
+stdout 'Mutuo'
+exec fui loan schedule Mutuo --at 2026-01-01
+exec fui report remaining-debt --loan Mutuo --period 2025-12
+exec fui report networth --period 2025-12
+exec fui report save nw networth --period last-3-months
+exec fui report list --json
+stdout '"name":"nw"'
+exec fui report run nw
+exec fui report rm nw --yes
