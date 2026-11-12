@@ -58,6 +58,9 @@ type Model struct {
 	currentTheme string
 	themeTbl     components.Table
 
+	lists Lists
+	subs  []sub
+
 	confirm        components.ConfirmDialog
 	pendingDisable app.DisableModulePlan
 }
@@ -125,6 +128,7 @@ func (m *Model) SetTheme(th theme.Theme) {
 	if m.mode != modeConfirm {
 		m.confirm = components.NewConfirmDialog(th)
 	}
+	m.rebuildSubs()
 }
 
 // Init loads the enabled modules and the active theme.
@@ -138,17 +142,23 @@ func (m *Model) SetSize(w, h int) {
 	m.moduleTbl.SetWidth(w)
 	m.themeTbl.SetHeight(min(rows, len(themeNames)))
 	m.themeTbl.SetWidth(w)
+	for _, s := range m.subs {
+		s.scr.SetSize(w, h)
+	}
 }
 
 // Title identifies the screen in the tab bar.
 func (m *Model) Title() string { return "Settings" }
 
 // KeyMap exposes the bindings for the global help view.
-func (m *Model) KeyMap() []key.Binding { return m.km.Bindings() }
+func (m *Model) KeyMap() []key.Binding { return m.subKeyMap() }
 
-// InputActive always reports false: the settings screen has no free-text field, only lists and a
-// yes/no confirmation, none of which need to steal single-letter global bindings.
-func (m *Model) InputActive() bool { return false }
+// InputActive reports whether the active sub-view has a form open; the shell's own sections have
+// no free-text field, only lists and a yes/no confirmation.
+func (m *Model) InputActive() bool {
+	s := m.activeSub()
+	return s != nil && s.InputActive()
+}
 
 // loadedMsg carries the enabled module set, module metadata, and the active theme back into
 // Update.
@@ -201,6 +211,7 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	case modulesAppliedMsg:
 		m.enabled, m.modules = msg.enabled, msg.infos
 		m.moduleTbl.SetRows(m.moduleRows())
+		m.rebuildSubs()
 		m.mode = modeList
 		return m, tea.Batch(m.notify(msg.notice), emitModulesChanged(msg.enabled))
 	case disablePlannedMsg:
@@ -215,12 +226,13 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
-	return m, nil
+	return m.updateSub(msg)
 }
 
 func (m *Model) applyLoaded(msg loadedMsg) {
 	m.enabled, m.modules = msg.enabled, msg.infos
 	m.moduleTbl.SetRows(m.moduleRows())
+	m.rebuildSubs()
 	m.currentTheme = msg.theme
 	m.themeTbl.SetRows(m.themeRows())
 	if i := slices.Index(themeNames, msg.theme); i >= 0 {
@@ -244,11 +256,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	if m.mode == modeConfirm {
 		return m.handleConfirmKey(msg)
 	}
+	if s := m.activeSub(); s != nil && (s.InputActive() || !key.Matches(msg, m.km.Section)) {
+		return m.updateSub(msg)
+	}
 	switch {
 	case key.Matches(msg, m.km.Section):
-		restore := m.restoreTheme()
-		m.section = (m.section + 1) % section(len(sectionNames))
-		return m, restore
+		return m, m.nextSection()
 	case key.Matches(msg, m.km.Up):
 		m.activeTable().MoveUp(1)
 		return m, m.previewTheme()
@@ -449,9 +462,12 @@ func (m *Model) themeRows() []components.Row {
 // View renders the active section and, when open, the disable confirmation dialog.
 func (m *Model) View() string {
 	out := m.viewSectionTabs() + "\n\n"
-	if m.section == sectionAppearance {
+	switch {
+	case m.activeSub() != nil:
+		out += m.activeSub().View()
+	case m.section == sectionAppearance:
 		out += m.viewAppearance()
-	} else {
+	default:
 		out += m.viewModules()
 	}
 	if m.mode == modeConfirm {
@@ -462,8 +478,9 @@ func (m *Model) View() string {
 
 func (m *Model) viewSectionTabs() string {
 	title := m.th.Title.Render("Settings")
-	parts := make([]string, len(sectionNames))
-	for i, name := range sectionNames {
+	labels := m.sectionLabels()
+	parts := make([]string, len(labels))
+	for i, name := range labels {
 		if section(i) == m.section {
 			parts[i] = m.th.ActiveTab.Render(name)
 		} else {

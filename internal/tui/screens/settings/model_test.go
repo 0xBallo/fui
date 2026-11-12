@@ -12,6 +12,7 @@ import (
 	"github.com/0xballo/fui/internal/tui/screens"
 	"github.com/0xballo/fui/internal/tui/screens/screentest"
 	"github.com/0xballo/fui/internal/tui/screens/settings"
+	"github.com/0xballo/fui/internal/tui/screens/settings/lists"
 	"github.com/0xballo/fui/internal/tui/theme"
 )
 
@@ -271,5 +272,63 @@ func TestSettingsSetThemeKeepsSection(t *testing.T) {
 	scr.(*settings.Model).SetTheme(theme.Default())
 	if !strings.Contains(scr.View(), "Preview: latte") {
 		t.Fatalf("SetTheme must keep section and cursor:\n%s", scr.View())
+	}
+}
+
+func TestSettingsListSectionsNavigateAndLoad(t *testing.T) {
+	fx := screentest.New(t)
+	cfg := config.Defaults()
+	cfg.ConfigFile = filepath.Join(t.TempDir(), "config.toml")
+	if err := cfg.SaveToFile(cfg.ConfigFile); err != nil {
+		t.Fatalf("SaveToFile: %v", err)
+	}
+	m := settings.New(fx.Service, &cfg, &cfg, theme.Default())
+	m.SetLists(settings.Lists{Categories: fx.Service, Tags: fx.Service})
+	m.SetSize(100, 30)
+	var scr screens.Screen = m
+	scr = run(t, scr, scr.Init())
+
+	for _, name := range []string{"Categories", "Tags"} {
+		scr, _ = sendKey(scr, tea.KeyTab) // Modules -> Appearance, then each list in turn
+		if name == "Categories" {
+			scr, _ = sendKey(scr, tea.KeyTab)
+		}
+		if !strings.Contains(scr.View(), name) {
+			t.Fatalf("section %s missing:\n%s", name, scr.View())
+		}
+	}
+
+	// A form in the active sub-view owns the keyboard, so tab must not switch section.
+	scr, cmd := sendRunes(scr, "a")
+	scr = run(t, scr, cmd)
+	if !scr.InputActive() {
+		t.Fatal("add form should capture input")
+	}
+	scr, _ = sendKey(scr, tea.KeyTab)
+	if !scr.InputActive() {
+		t.Fatal("tab inside a form must stay in the sub-view")
+	}
+	scr, _ = sendKey(scr, tea.KeyEsc)
+	if scr.InputActive() {
+		t.Fatal("esc should close the form")
+	}
+	if len(scr.KeyMap()) <= len(settings.DefaultKeyMap().Bindings()) {
+		t.Fatal("sub-view bindings missing from the key map")
+	}
+
+	// Cycling past the last list returns to Modules.
+	scr, _ = sendKey(scr, tea.KeyTab)
+	if !strings.Contains(scr.View(), "Enabled modules") {
+		t.Fatalf("expected Modules after the last section:\n%s", scr.View())
+	}
+}
+
+func TestSettingsRecurrencesSectionNeedsRecurringModule(t *testing.T) {
+	_, scr := newFixture(t)
+	m := scr.(*settings.Model)
+	m.SetLists(settings.Lists{Recurrences: struct{ lists.RecurrencesUseCases }{}})
+	scr = run(t, scr, scr.Init()) // default modules include recurring
+	if !strings.Contains(scr.View(), "Recurrences") {
+		t.Fatalf("recurring enabled: tab expected:\n%s", scr.View())
 	}
 }

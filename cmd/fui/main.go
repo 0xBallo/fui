@@ -200,6 +200,7 @@ func tuiConfig(cfg *config.Config, deps *cli.Deps, store *sqlite.Store, clk app.
 		Settings:     deps.Service,
 		ModuleConfig: cfg,
 		ThemeConfig:  cfg,
+		Lists:        settingsLists(cfg, deps),
 	}
 }
 

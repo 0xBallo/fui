@@ -67,6 +67,8 @@ type Config struct {
 	Settings     settings.UseCases
 	ModuleConfig settings.ModuleConfig
 	ThemeConfig  settings.ThemeConfig
+	// Lists adds the CRUD sections (categories, tags, rules, recurrences, import profiles) to Settings.
+	Lists settings.Lists
 }
 
 // Root is the top-level Bubble Tea model: it routes between the screens (fixed keys 1..7),
@@ -127,7 +129,9 @@ func (r *Root) rebuild() {
 		r.tabs[screens.TabImport] = importer.New(cfg.Importer, r.loc, r.th)
 	}
 	if cfg.Settings != nil && cfg.ModuleConfig != nil && cfg.ThemeConfig != nil {
-		r.tabs[screens.TabSettings] = settings.New(cfg.Settings, cfg.ModuleConfig, cfg.ThemeConfig, r.th)
+		scr := settings.New(cfg.Settings, cfg.ModuleConfig, cfg.ThemeConfig, r.th)
+		scr.SetLists(cfg.Lists)
+		r.tabs[screens.TabSettings] = scr
 	}
 	if r.tabs[r.active] == nil {
 		r.active = screens.TabDashboard
