@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/backup"
 	"github.com/0xballo/fui/internal/clock"
@@ -33,6 +35,40 @@ func TestBackupRotate(t *testing.T) {
 	}
 	if len(files) != 2 {
 		t.Fatalf("len(backups) = %d, want 2", len(files))
+	}
+}
+
+func TestBackupSameSecondNameCollision(t *testing.T) {
+	root := t.TempDir()
+	store, _ := mustOpenStore(t, root, 2)
+
+	gotNames := make([]string, 0, 3)
+	for i := 0; i < 3; i++ {
+		path, err := store.Backup(context.Background(), app.BackupReasonImport)
+		if err != nil {
+			t.Fatalf("backup %d: %v", i, err)
+		}
+		gotNames = append(gotNames, filepath.Base(path))
+	}
+
+	wantCreated := []string{
+		"fui-20260102-030405-import.db",
+		"fui-20260102-030405-import-2.db",
+		"fui-20260102-030405-import-3.db",
+	}
+	if diff := cmp.Diff(wantCreated, gotNames); diff != "" {
+		t.Fatalf("created names mismatch (-want +got):\n%s", diff)
+	}
+
+	files, err := backup.List(filepath.Join(root, "data", "backups"))
+	if err != nil {
+		t.Fatalf("backup.List: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("len(backups) = %d, want 2", len(files))
+	}
+	if files[0].Name != "fui-20260102-030405-import-2.db" || files[1].Name != "fui-20260102-030405-import-3.db" {
+		t.Fatalf("remaining backups = [%s, %s], want [-2, -3]", files[0].Name, files[1].Name)
 	}
 }
 

@@ -35,7 +35,7 @@ const (
 // TimeFormat defines the layout YYYYMMDD-HHMMSS used in backup file names.
 const TimeFormat = "20060102-150405"
 
-var backupRegex = regexp.MustCompile(`^fui-(\d{8}-\d{6})-(manual|import|migrate|bulk|restore)\.db$`)
+var backupRegex = regexp.MustCompile(`^fui-(\d{8}-\d{6})-(manual|import|migrate|bulk|restore)(?:-(\d+))?\.db$`)
 
 // IsValidReason reports whether r is one of the recognized backup reasons.
 func IsValidReason(r Reason) bool {
@@ -53,6 +53,7 @@ type File struct {
 	Name      string
 	Time      time.Time
 	Reason    Reason
+	Counter   int
 	SizeBytes int64
 	ModTime   time.Time
 }
@@ -62,7 +63,7 @@ func FileName(t time.Time, reason Reason) (string, error) {
 	if !IsValidReason(reason) {
 		return "", fmt.Errorf("invalid backup reason %q", reason)
 	}
-	return fmt.Sprintf("fui-%s-%s.db", t.Format(TimeFormat), reason), nil
+	return fileNameWithCounter(t, reason, 1), nil
 }
 
 // FilePath returns the full canonical path for a backup file within dir.
@@ -76,17 +77,11 @@ func FilePath(dir string, t time.Time, reason Reason) (string, error) {
 
 // ParseName extracts the timestamp and reason from a backup file name.
 func ParseName(name string) (time.Time, Reason, error) {
-	matches := backupRegex.FindStringSubmatch(name)
-	if matches == nil {
-		return time.Time{}, "", fmt.Errorf("file %q does not match backup naming pattern", name)
-	}
-
-	parsedTime, err := time.Parse(TimeFormat, matches[1])
+	parsedTime, reason, _, err := parseNameDetails(name)
 	if err != nil {
-		return time.Time{}, "", fmt.Errorf("parse backup timestamp %q: %w", matches[1], err)
+		return time.Time{}, "", err
 	}
-
-	return parsedTime, Reason(matches[2]), nil
+	return parsedTime, reason, nil
 }
 
 // EnsureDir creates the backup directory with 0700 permissions if it does not exist.
@@ -113,7 +108,7 @@ func List(dir string) ([]File, error) {
 		if entry.IsDir() {
 			continue
 		}
-		t, reason, err := ParseName(entry.Name())
+		t, reason, counter, err := parseNameDetails(entry.Name())
 		if err != nil {
 			// Skip files that do not match the backup naming pattern.
 			continue
@@ -129,6 +124,7 @@ func List(dir string) ([]File, error) {
 			Name:      entry.Name(),
 			Time:      t,
 			Reason:    reason,
+			Counter:   counter,
 			SizeBytes: info.Size(),
 			ModTime:   info.ModTime(),
 		})
@@ -136,12 +132,70 @@ func List(dir string) ([]File, error) {
 
 	sort.Slice(files, func(i, j int) bool {
 		if files[i].Time.Equal(files[j].Time) {
+			if files[i].Counter != files[j].Counter {
+				return files[i].Counter < files[j].Counter
+			}
 			return files[i].Name < files[j].Name
 		}
 		return files[i].Time.Before(files[j].Time)
 	})
 
 	return files, nil
+}
+
+// NextFilePath returns a collision-free backup path in dir.
+// It keeps the canonical naming format and appends -2, -3, ... when needed.
+func NextFilePath(dir string, t time.Time, reason Reason) (string, error) {
+	name, err := FileName(t, reason)
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, name)
+	if _, err := os.Stat(path); err == nil {
+		for counter := 2; ; counter++ {
+			candidate := filepath.Join(dir, fileNameWithCounter(t, reason, counter))
+			if _, statErr := os.Stat(candidate); errors.Is(statErr, os.ErrNotExist) {
+				return candidate, nil
+			} else if statErr != nil {
+				return "", fmt.Errorf("stat backup file %q: %w", candidate, statErr)
+			}
+		}
+	} else if errors.Is(err, os.ErrNotExist) {
+		return path, nil
+	} else {
+		return "", fmt.Errorf("stat backup file %q: %w", path, err)
+	}
+}
+
+func parseNameDetails(name string) (time.Time, Reason, int, error) {
+	matches := backupRegex.FindStringSubmatch(name)
+	if matches == nil {
+		return time.Time{}, "", 0, fmt.Errorf("file %q does not match backup naming pattern", name)
+	}
+
+	parsedTime, err := time.Parse(TimeFormat, matches[1])
+	if err != nil {
+		return time.Time{}, "", 0, fmt.Errorf("parse backup timestamp %q: %w", matches[1], err)
+	}
+
+	counter := 1
+	if matches[3] != "" {
+		if _, scanErr := fmt.Sscanf(matches[3], "%d", &counter); scanErr != nil {
+			return time.Time{}, "", 0, fmt.Errorf("parse backup counter %q: %w", matches[3], scanErr)
+		}
+		if counter < 2 {
+			return time.Time{}, "", 0, fmt.Errorf("invalid backup counter %q", matches[3])
+		}
+	}
+
+	return parsedTime, Reason(matches[2]), counter, nil
+}
+
+func fileNameWithCounter(t time.Time, reason Reason, counter int) string {
+	if counter <= 1 {
+		return fmt.Sprintf("fui-%s-%s.db", t.Format(TimeFormat), reason)
+	}
+	return fmt.Sprintf("fui-%s-%s-%d.db", t.Format(TimeFormat), reason, counter)
 }
 
 // Rotate removes the oldest backup files in dir matching the naming pattern,

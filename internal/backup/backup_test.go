@@ -56,6 +56,7 @@ func TestParseName(t *testing.T) {
 		wantErr    bool
 	}{
 		{name: "fui-20261111-231530-manual.db", wantReason: backup.ReasonManual, wantYear: 2026},
+		{name: "fui-20261111-231530-manual-2.db", wantReason: backup.ReasonManual, wantYear: 2026},
 		{name: "fui-20260102-030405-import.db", wantReason: backup.ReasonImport, wantYear: 2026},
 		{name: "fui-20251231-120000-migrate.db", wantReason: backup.ReasonMigrate, wantYear: 2025},
 		{name: "other-20261111-231530-manual.db", wantErr: true},
@@ -79,6 +80,50 @@ func TestParseName(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestListAndRotateWithSameSecondSuffixes(t *testing.T) {
+	dir := t.TempDir()
+	names := []string{
+		"fui-20261111-120000-import.db",
+		"fui-20261111-120000-import-2.db",
+		"fui-20261111-120000-import-3.db",
+	}
+	for _, name := range names {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
+			t.Fatalf("WriteFile(%q): %v", name, err)
+		}
+	}
+
+	files, err := backup.List(dir)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(files) != 3 {
+		t.Fatalf("len(files) = %d, want 3", len(files))
+	}
+	for i, f := range files {
+		if f.Name != names[i] {
+			t.Fatalf("files[%d] = %q, want %q", i, f.Name, names[i])
+		}
+	}
+
+	deleted, err := backup.Rotate(dir, 2)
+	if err != nil {
+		t.Fatalf("Rotate: %v", err)
+	}
+	wantDeleted := []string{filepath.Join(dir, names[0])}
+	if diff := cmp.Diff(wantDeleted, deleted); diff != "" {
+		t.Fatalf("deleted mismatch (-want +got):\n%s", diff)
+	}
+
+	files, err = backup.List(dir)
+	if err != nil {
+		t.Fatalf("List after rotate: %v", err)
+	}
+	if len(files) != 2 || files[0].Name != names[1] || files[1].Name != names[2] {
+		t.Fatalf("remaining files = %+v, want %q and %q", files, names[1], names[2])
 	}
 }
 

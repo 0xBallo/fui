@@ -29,7 +29,7 @@ func (s *Store) backupLocked(ctx context.Context, reason backup.Reason) (string,
 	if err := backup.EnsureDir(s.backupDir); err != nil {
 		return "", fmt.Errorf("backup: ensure backup dir: %w", err)
 	}
-	path, err := backup.FilePath(s.backupDir, s.clock.Now().UTC(), reason)
+	path, err := backup.NextFilePath(s.backupDir, s.clock.Now().UTC(), reason)
 	if err != nil {
 		return "", fmt.Errorf("backup: resolve path: %w", err)
 	}

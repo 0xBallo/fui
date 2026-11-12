@@ -1,12 +1,6 @@
 # UC-03 (docs/specs/funzionali.md "Casi d'uso"): import a bank statement, detect a duplicate
 # re-import, undo a batch, then move transactions to another archive via the fui/1 .jsonl
 # export/import round trip.
-#
-# FUI_TEST_TODAY is bumped by one second between two "import" (backup reason) applies in the
-# same archive: the backup file name only has second resolution, so two bulk writes of the same
-# reason in the same frozen test second collide on "output file already exists" (see
-# .task-report.md: this is the general case of the restore double-backup bug covered by
-# uc06_backup_restore.txtar, not specific to restore).
 mkdir -p $XDG_CONFIG_HOME/fui
 cp profile.toml $XDG_CONFIG_HOME/fui/config.toml
 exec fui init --currency EUR
@@ -33,7 +27,6 @@ stdout '"removed_transactions":2'
 exec fui tx list --json
 stdout '^\[\]$'
 
-env FUI_TEST_TODAY=2026-01-15T00:00:01Z
 exec fui import statement.csv --connector csv --profile mybank --account Checking --yes --json
 stdout '"batch_id":1,"transactions":2'
 
