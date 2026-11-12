@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode/utf8"
 )
 
 // Format is the requested output format of a command.
@@ -53,12 +54,12 @@ func WriteTable(w io.Writer, t Rows, color bool) error {
 func columnWidths(t Rows) []int {
 	widths := make([]int, len(t.Header))
 	for i, h := range t.Header {
-		widths[i] = len(h)
+		widths[i] = cellWidth(h)
 	}
 	for _, row := range t.Body {
 		for i, cell := range row {
-			if i < len(widths) && len(cell) > widths[i] {
-				widths[i] = len(cell)
+			if i < len(widths) && cellWidth(cell) > widths[i] {
+				widths[i] = cellWidth(cell)
 			}
 		}
 	}
@@ -68,9 +69,10 @@ func columnWidths(t Rows) []int {
 func writeTableRow(w io.Writer, cells []string, widths []int, moneyCols []int, color bool) error {
 	parts := make([]string, len(cells))
 	for i, cell := range cells {
-		padded := cell + strings.Repeat(" ", widths[i]-len(cell))
+		pad := strings.Repeat(" ", widths[i]-cellWidth(cell))
+		padded := cell + pad
 		if color && containsInt(moneyCols, i) && strings.HasPrefix(cell, "-") {
-			padded = ansiRed + cell + ansiReset + strings.Repeat(" ", widths[i]-len(cell))
+			padded = ansiRed + cell + ansiReset + pad
 		}
 		parts[i] = padded
 	}
@@ -80,6 +82,10 @@ func writeTableRow(w io.Writer, cells []string, widths []int, moneyCols []int, c
 	}
 	return nil
 }
+
+// cellWidth counts runes so accented descriptions ("Caffè") stay aligned.
+// ponytail: East Asian wide runes and emoji count as 1; use a display-width library if they matter.
+func cellWidth(s string) int { return utf8.RuneCountInString(s) }
 
 func containsInt(xs []int, v int) bool {
 	for _, x := range xs {
