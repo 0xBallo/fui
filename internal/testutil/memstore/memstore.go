@@ -281,6 +281,13 @@ func (c categories) Usage(_ context.Context, id domain.CategoryID) (int, error) 
 			n++
 		}
 	}
+	for _, rows := range c.st.Splits {
+		for _, r := range rows {
+			if r.Category == id {
+				n++
+			}
+		}
+	}
 	return n, nil
 }
 
@@ -298,6 +305,16 @@ func (c categories) Reassign(_ context.Context, from, to domain.CategoryID) (int
 			c.st.Txs[id] = t
 			n++
 		}
+	}
+	for id, rows := range c.st.Splits {
+		moved := slices.Clone(rows)
+		for i := range moved {
+			if moved[i].Category == from {
+				moved[i].Category = to
+				n++
+			}
+		}
+		c.st.Splits[id] = moved
 	}
 	return n, nil
 }

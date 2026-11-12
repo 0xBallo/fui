@@ -117,9 +117,9 @@ type CategoryRepo interface {
 	Get(ctx context.Context, id domain.CategoryID) (domain.Category, error)
 	// List returns every category ordered by ID.
 	List(ctx context.Context) ([]domain.Category, error)
-	// Usage counts the transactions that reference the category.
+	// Usage counts the transactions and split rows that reference the category.
 	Usage(ctx context.Context, id domain.CategoryID) (int, error)
-	// Reassign moves every transaction of category from to category to and returns how many moved.
+	// Reassign moves every transaction and split row of category from to category to and returns how many moved.
 	Reassign(ctx context.Context, from, to domain.CategoryID) (int, error)
 }
 

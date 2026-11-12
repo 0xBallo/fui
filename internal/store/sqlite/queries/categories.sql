@@ -37,9 +37,19 @@ SELECT COUNT(*)
 FROM transactions
 WHERE category_id = @category_id;
 
+-- name: CountCategorySplitUsage :one
+SELECT COUNT(*)
+FROM transaction_splits
+WHERE category_id = @category_id;
+
 -- name: ReassignCategory :execrows
 UPDATE transactions
 SET
     category_id = @to_category_id,
     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE category_id = @from_category_id;
+
+-- name: ReassignSplitCategory :execrows
+UPDATE transaction_splits
+SET category_id = @to_category_id
 WHERE category_id = @from_category_id;

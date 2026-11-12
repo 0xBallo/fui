@@ -93,7 +93,11 @@ func (r categoryRepo) Usage(ctx context.Context, id domain.CategoryID) (int, err
 	if err != nil {
 		return 0, mapSQLError(err)
 	}
-	return int(n), nil
+	splits, err := r.repos.queries.CountCategorySplitUsage(ctx, int64(id))
+	if err != nil {
+		return 0, mapSQLError(err)
+	}
+	return int(n + splits), nil
 }
 
 func (r categoryRepo) Reassign(ctx context.Context, from, to domain.CategoryID) (int, error) {
@@ -110,5 +114,12 @@ func (r categoryRepo) Reassign(ctx context.Context, from, to domain.CategoryID) 
 	if err != nil {
 		return 0, mapConstraint(err)
 	}
-	return int(moved), nil
+	movedSplits, err := r.repos.queries.ReassignSplitCategory(ctx, gen.ReassignSplitCategoryParams{
+		FromCategoryID: int64(from),
+		ToCategoryID:   int64(to),
+	})
+	if err != nil {
+		return 0, mapConstraint(err)
+	}
+	return int(moved + movedSplits), nil
 }

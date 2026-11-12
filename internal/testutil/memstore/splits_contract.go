@@ -237,3 +237,44 @@ func tagRename(t *testing.T, r app.Repos, tx domain.TransactionID, trip, work do
 		t.Errorf("List = %+v, want only trip", all)
 	}
 }
+
+// contractSplitReassign: a category used only by a split row counts as used and can be merged.
+func contractSplitReassign(t *testing.T, f *fixture) {
+	ctx := context.Background()
+	acct := f.account(t, "A")
+	var food, home, target domain.Category
+	f.do(t, func(r app.Repos) (err error) {
+		if food, err = r.Categories().Insert(ctx, domain.Category{Name: "Food", Kind: domain.CategoryExpense}); err != nil {
+			return err
+		}
+		if home, err = r.Categories().Insert(ctx, domain.Category{Name: "Home", Kind: domain.CategoryExpense}); err != nil {
+			return err
+		}
+		target, err = r.Categories().Insert(ctx, domain.Category{Name: "Target", Kind: domain.CategoryExpense})
+		return err
+	})
+	tx := f.tx(t, domain.Transaction{AccountID: acct.ID, Date: mustDate(t, "2026-02-01"), Amount: mustMoney(t, -1000)})
+	f.do(t, func(r app.Repos) error {
+		rows := []domain.Split{
+			{Category: food.ID, Amount: mustMoney(t, -400)},
+			{Category: home.ID, Amount: mustMoney(t, -600), Note: "rent"},
+		}
+		if err := r.Splits().ReplaceSplits(ctx, tx.ID, rows); err != nil {
+			return err
+		}
+		if n, err := r.Categories().Usage(ctx, home.ID); err != nil || n != 1 {
+			t.Errorf("Usage of a split-only category = %d, %v; want 1", n, err)
+		}
+		if n, err := r.Categories().Reassign(ctx, home.ID, target.ID); err != nil || n != 1 {
+			t.Errorf("Reassign = %d, %v; want 1", n, err)
+		}
+		if err := r.Categories().Delete(ctx, home.ID); err != nil {
+			t.Errorf("Delete after reassign: %v", err)
+		}
+		got, err := r.Splits().SplitsOf(ctx, tx.ID)
+		if err != nil || len(got) != 2 || got[1].Category != target.ID || got[1].Note != "rent" || got[0].Category != food.ID {
+			t.Errorf("SplitsOf after reassign = %+v, %v; want second row on the target", got, err)
+		}
+		return nil
+	})
+}

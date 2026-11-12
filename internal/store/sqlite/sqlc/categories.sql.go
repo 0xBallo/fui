@@ -10,6 +10,19 @@ import (
 	"database/sql"
 )
 
+const countCategorySplitUsage = `-- name: CountCategorySplitUsage :one
+SELECT COUNT(*)
+FROM transaction_splits
+WHERE category_id = ?1
+`
+
+func (q *Queries) CountCategorySplitUsage(ctx context.Context, categoryID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countCategorySplitUsage, categoryID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countCategoryUsage = `-- name: CountCategoryUsage :one
 SELECT COUNT(*)
 FROM transactions
@@ -166,6 +179,25 @@ type ReassignCategoryParams struct {
 
 func (q *Queries) ReassignCategory(ctx context.Context, arg ReassignCategoryParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, reassignCategory, arg.ToCategoryID, arg.FromCategoryID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const reassignSplitCategory = `-- name: ReassignSplitCategory :execrows
+UPDATE transaction_splits
+SET category_id = ?1
+WHERE category_id = ?2
+`
+
+type ReassignSplitCategoryParams struct {
+	ToCategoryID   int64
+	FromCategoryID int64
+}
+
+func (q *Queries) ReassignSplitCategory(ctx context.Context, arg ReassignSplitCategoryParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, reassignSplitCategory, arg.ToCategoryID, arg.FromCategoryID)
 	if err != nil {
 		return 0, err
 	}
