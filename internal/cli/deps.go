@@ -11,6 +11,8 @@ import (
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/budgeting"
 	"github.com/0xballo/fui/internal/app/importing"
+	"github.com/0xballo/fui/internal/app/lending"
+	"github.com/0xballo/fui/internal/app/recurring"
 	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/app/rules"
 	"github.com/0xballo/fui/internal/config"
@@ -33,6 +35,11 @@ type Deps struct {
 	// Budgeting runs the budget module's use cases; nil in builds that have not wired it yet
 	// (requireBudgeting fails cleanly instead of panicking).
 	Budgeting *budgeting.Service
+	// Recurring runs the recurring-transaction CRUD, run, skip and confirm use cases.
+	Recurring *recurring.Service
+	// Loans runs the loan use cases: add, show, schedule, events, pending installments and
+	// their confirmation.
+	Loans *lending.Service
 	// Config is the resolved configuration; AgentMode reflects FUI_AGENT, Locale and Currency
 	// drive parsing and formatting.
 	Config *config.Config

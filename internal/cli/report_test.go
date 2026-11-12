@@ -37,6 +37,11 @@ func TestForecastJSONAndTableChart(t *testing.T) {
 	if !strings.Contains(tableOut, "DATE") || !strings.Contains(tableOut, "CHART") {
 		t.Fatalf("forecast --chart = %q, want DATE/CHART columns", tableOut)
 	}
+
+	defaultOut, _ := h.mustRun("forecast", "--json")
+	if !strings.Contains(defaultOut, `"days":90`) {
+		t.Fatalf("forecast default horizon = %q, want days=90", defaultOut)
+	}
 }
 
 func TestReportKindsJSON(t *testing.T) {
@@ -86,6 +91,12 @@ func TestReportSavedLifecycle(t *testing.T) {
 	removed, _ := h.mustRun("report", "rm", "monthly-networth", "--json")
 	if !strings.Contains(removed, `"removed":"monthly-networth"`) {
 		t.Fatalf("report rm = %q, want removed payload", removed)
+	}
+
+	h.mustRun("report", "save", "monthly-networth", "networth", "--period", "last-1-months")
+	textRemoved, _ := h.mustRun("report", "rm", "monthly-networth", "--yes")
+	if !strings.Contains(textRemoved, `Removed "monthly-networth".`) {
+		t.Fatalf("report rm text = %q, want confirmation", textRemoved)
 	}
 }
 

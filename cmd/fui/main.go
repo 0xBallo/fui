@@ -21,6 +21,8 @@ import (
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/budgeting"
 	"github.com/0xballo/fui/internal/app/importing"
+	"github.com/0xballo/fui/internal/app/lending"
+	"github.com/0xballo/fui/internal/app/recurring"
 	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/app/rules"
 	"github.com/0xballo/fui/internal/cli"
@@ -154,6 +156,8 @@ func wireStore(ctx context.Context, cfg *config.Config, appClock app.Clock, deps
 		Locale: domain.Locale(cfg.Locale), BaseCurrency: baseCurrency, MonthStartDay: cfg.MonthStartDay,
 		Mode: domain.BudgetMode(cfg.Budget.Mode), Modules: modules,
 	})
+	deps.Recurring = recurring.New(store, appClock, store, recurring.Config{Locale: domain.Locale(cfg.Locale)})
+	deps.Loans = lending.New(store, appClock, store, lending.Config{Locale: domain.Locale(cfg.Locale)})
 	deps.RunTUI = func(ctx context.Context) error {
 		return tui.Run(ctx, newTUIUseCases(deps.Service, rep), tui.Config{
 			Locale: domain.Locale(cfg.Locale), Theme: cfg.Theme,

@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"context"
 	"errors"
+	"io"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -79,6 +82,74 @@ func TestMissingField(t *testing.T) {
 	}
 	if derr.Code != domain.CodeMissingField {
 		t.Fatalf("missingField code = %q, want %q", derr.Code, domain.CodeMissingField)
+	}
+}
+
+func TestReportKindLabels(t *testing.T) {
+	labels := reportKindLabels()
+	want := map[string]bool{
+		"balance":          true,
+		"budget-vs-actual": true,
+		"remaining-debt":   true,
+		"interest-paid":    true,
+		"networth":         true,
+		"top-payees":       true,
+		"forecast":         true,
+		"spending":         true,
+		"cash-flow":        true,
+	}
+	for _, label := range labels {
+		delete(want, label)
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing labels: %v", want)
+	}
+}
+
+func TestSavedReportCommandsMetadata(t *testing.T) {
+	deps := &Deps{}
+
+	listCmd := newReportListCmd(deps)
+	if listCmd.Use != "list" {
+		t.Fatalf("list use = %q, want list", listCmd.Use)
+	}
+
+	runCmd := newReportRunSavedCmd(deps)
+	if runCmd.Use != "run NAME" {
+		t.Fatalf("run use = %q, want run NAME", runCmd.Use)
+	}
+
+	rmCmd := newReportRmCmd(deps)
+	if rmCmd.Use != "rm NAME" {
+		t.Fatalf("rm use = %q, want rm NAME", rmCmd.Use)
+	}
+}
+
+func TestSavedReportCommandsRequireAnalytics(t *testing.T) {
+	deps := &Deps{Stdout: io.Discard, Stderr: io.Discard}
+
+	saveCmd := newReportSaveCmd(deps)
+	saveCmd.SetContext(context.Background())
+	if err := saveCmd.RunE(saveCmd, []string{"name", "networth"}); err == nil || !strings.Contains(err.Error(), "analytics service") {
+		t.Fatalf("save err = %v, want analytics service error", err)
+	}
+
+	listCmd := newReportListCmd(deps)
+	listCmd.SetContext(context.Background())
+	if err := listCmd.RunE(listCmd, nil); err == nil || !strings.Contains(err.Error(), "analytics service") {
+		t.Fatalf("list err = %v, want analytics service error", err)
+	}
+
+	runCmd := newReportRunSavedCmd(deps)
+	runCmd.SetContext(context.Background())
+	if err := runCmd.RunE(runCmd, []string{"saved"}); err == nil || !strings.Contains(err.Error(), "analytics service") {
+		t.Fatalf("run err = %v, want analytics service error", err)
+	}
+
+	rmCmd := newReportRmCmd(deps)
+	rmCmd.SetContext(context.Background())
+	if err := rmCmd.RunE(rmCmd, []string{"saved"}); err == nil || !strings.Contains(err.Error(), "analytics service") {
+		t.Fatalf("rm err = %v, want analytics service error", err)
 	}
 }
 
