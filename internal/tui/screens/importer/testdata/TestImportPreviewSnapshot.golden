@@ -1,5 +1,7 @@
 Import
 
+n new import
+
 Connector: csv/fui/revolut...
 ╭─────╮
 │> csv│
@@ -10,7 +12,7 @@ CSV profile: mybank (import.profiles.<name>, csv only)
 Account ref/name: optional (csv connector)
 Since: optional, YYYY-MM-DD
 
-enter next/plan · tab/shift+tab move between fieldsMap unmapped accounts
+enter next/plan · tab/shift+tab move between fields · esc cancelMap unmapped accounts
 1 connector account(s) need a target
 
 Checking (EUR, checking): + create new account
