@@ -55,6 +55,7 @@ func NewRoot(deps *Deps) *cobra.Command {
 		{command: newResetCmd(deps), module: module.Core},
 		{command: newConfigCmd(deps), module: module.Core},
 		{command: newHelpJSONCmd(deps), module: module.Core},
+		{command: newForecastCmd(deps), module: module.Core},
 		{command: newReportCmd(deps), module: module.Core},
 		{command: newKPICmd(deps), module: module.Core},
 		{command: newCompletionCmd(), module: module.Core},
