@@ -61,6 +61,7 @@ type Repos interface {
 	Accounts() AccountRepo
 	Transactions() TransactionRepo
 	Categories() CategoryRepo
+	Rules() RuleRepo
 	Transfers() TransferRepo
 	FXRates() FXRateRepo
 	Imports() ImportRepo
@@ -121,6 +122,18 @@ type CategoryRepo interface {
 	Usage(ctx context.Context, id domain.CategoryID) (int, error)
 	// Reassign moves every transaction and split row of category from to category to and returns how many moved.
 	Reassign(ctx context.Context, from, to domain.CategoryID) (int, error)
+}
+
+// RuleRepo stores categorization rules. Names are unique case-insensitively.
+type RuleRepo interface {
+	Insert(ctx context.Context, rule domain.Rule) (domain.Rule, error)
+	Update(ctx context.Context, rule domain.Rule) error
+	Delete(ctx context.Context, name string) error
+	Get(ctx context.Context, name string) (domain.Rule, error)
+	// List returns every rule ordered by name (case-insensitive).
+	List(ctx context.Context) ([]domain.Rule, error)
+	// ListEnabledByPriority returns enabled rules ordered by priority ascending, then name.
+	ListEnabledByPriority(ctx context.Context) ([]domain.Rule, error)
 }
 
 // TransferRepo stores the group that links the two legs of a transfer. The legs themselves are

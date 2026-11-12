@@ -92,8 +92,6 @@ func (s *Store) populateFresh(ctx context.Context, tempPath string, opts app.Res
 	var kept keptSettings
 	var cats []domain.Category
 	if opts.KeepSettings {
-		// Rules and import profiles do not exist yet; connector-account associations
-		// reference accounts, which a reset always deletes.
 		if err := s.readSettings(ctx, &kept); err != nil {
 			return err
 		}
@@ -117,6 +115,11 @@ func (s *Store) populateFresh(ctx context.Context, tempPath string, opts app.Res
 				return fmt.Errorf("reset: create payee %q: %w", p.Name, err)
 			}
 		}
+		for _, rule := range kept.rules {
+			if _, err := r.Rules().Insert(ctx, rule); err != nil {
+				return fmt.Errorf("reset: create rule %q: %w", rule.Name, err)
+			}
+		}
 		return nil
 	})
 }
@@ -126,6 +129,7 @@ type keptSettings struct {
 	categories []domain.Category
 	tags       []domain.Tag
 	payees     []domain.Payee
+	rules      []domain.Rule
 }
 
 // readSettings lists the settings without taking s.mu (Reset already holds it).
@@ -144,6 +148,9 @@ func (s *Store) readSettings(ctx context.Context, out *keptSettings) error {
 	}
 	if out.payees, err = r.Payees().List(ctx); err != nil {
 		return fmt.Errorf("reset: list payees: %w", err)
+	}
+	if out.rules, err = r.Rules().List(ctx); err != nil {
+		return fmt.Errorf("reset: list rules: %w", err)
 	}
 	return nil
 }

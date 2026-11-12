@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -50,8 +51,22 @@ func categoryNames(t tb, s *Store) []string {
 	return out
 }
 
+func rulesList(t tb, s *Store) []domain.Rule {
+	t.Helper()
+	var out []domain.Rule
+	err := s.Read(context.Background(), func(r app.Repos) error {
+		var err error
+		out, err = r.Rules().List(context.Background())
+		return err
+	})
+	if err != nil {
+		t.Fatalf("list rules: %v", err)
+	}
+	return out
+}
+
 // seed fills every table a reset must empty, through raw SQL so rapid.T can call it too.
-func seed(t tb, s *Store, accounts int) {
+func seed(t tb, s *Store, accounts, salt int) {
 	t.Helper()
 	ctx := context.Background()
 	exec := func(q string, args ...any) {
@@ -61,9 +76,12 @@ func seed(t tb, s *Store, accounts int) {
 		}
 	}
 	for i := 1; i <= accounts; i++ {
-		exec(`INSERT INTO accounts (id, name, kind, currency, opening_balance_minor, opened_on) VALUES (?, ?, 'checking', 'EUR', 0, '2026-01-01')`, i, "Acc"+strconv.Itoa(i))
-		exec(`INSERT INTO transactions (account_id, date, amount_minor, currency, status, kind) VALUES (?, '2026-01-05', -500, 'EUR', 'booked', 'payment')`, i)
-		exec(`INSERT INTO connector_account_refs (connector, ref, account_id) VALUES ('c', ?, ?)`, "r"+strconv.Itoa(i), i)
+		name := fmt.Sprintf("Acc%d_%d", salt, i)
+		exec(`INSERT INTO accounts (name, kind, currency, opening_balance_minor, opened_on) VALUES (?, 'checking', 'EUR', 0, '2026-01-01')`, name)
+		exec(`INSERT INTO transactions (account_id, date, amount_minor, currency, status, kind)
+			VALUES ((SELECT id FROM accounts WHERE name = ?), '2026-01-05', -500, 'EUR', 'booked', 'payment')`, name)
+		exec(`INSERT INTO connector_account_refs (connector, ref, account_id)
+			VALUES ('c', ?, (SELECT id FROM accounts WHERE name = ?))`, fmt.Sprintf("r%d_%d", salt, i), name)
 	}
 	exec(`INSERT INTO fx_rates (currency, date, rate_scaled) VALUES ('USD', '2026-01-01', 1000000)`)
 	exec(`INSERT INTO import_batches (connector, source, source_sha256, imported_at) VALUES ('c', 's', 'x', '2026-01-01T00:00:00Z')`)
@@ -73,6 +91,8 @@ func seed(t tb, s *Store, accounts int) {
 	exec(`INSERT OR IGNORE INTO payee_aliases (payee_id, alias) SELECT id, 'ESSELUNGA SPA' FROM payees WHERE name = 'Esselunga'`)
 	exec(`INSERT INTO transaction_tags (transaction_id, tag_id) SELECT t.id, g.id FROM transactions t, tags g WHERE g.name = 'trip' LIMIT 1`)
 	exec(`INSERT INTO transaction_splits (transaction_id, category_id, amount_minor) SELECT t.id, c.id, -500 FROM transactions t, categories c LIMIT 1`)
+	exec(`INSERT INTO rules (name, priority, enabled, conditions, actions)
+		VALUES (?, 10, 1, '{}', '{"category_id":1}')`, fmt.Sprintf("Rule%d", salt))
 }
 
 func settingsDump(t tb, s *Store) []string {
@@ -100,7 +120,10 @@ func settingsDump(t tb, s *Store) []string {
 
 func assertEmptyExceptCategories(t tb, s *Store) {
 	t.Helper()
-	for _, table := range []string{"accounts", "transactions", "transfer_groups", "import_batches", "fx_rates", "connector_account_refs", "transaction_tags", "transaction_splits"} {
+	for _, table := range []string{
+		"accounts", "transactions", "transfer_groups", "import_batches", "fx_rates",
+		"connector_account_refs", "transaction_tags", "transaction_splits", "rules",
+	} {
 		if n := count(t, s, table); n != 0 {
 			t.Errorf("table %s has %d rows after reset, want 0", table, n)
 		}
@@ -116,7 +139,7 @@ func TestResetFull(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	seed(t, s, 2)
+	seed(t, s, 2, 0)
 
 	if err := s.Reset(ctx, app.ResetOptions{}); err != nil {
 		t.Fatalf("Reset: %v", err)
@@ -147,7 +170,7 @@ func TestResetFull(t *testing.T) {
 
 func TestResetCrashSafety(t *testing.T) {
 	s, _ := newTestStore(t)
-	seed(t, s, 1)
+	seed(t, s, 1, 0)
 	// A regular file where the backup dir should be makes the backup step fail, after the fresh
 	// file was built and before the rename.
 	blocker := filepath.Join(t.TempDir(), "blocker")
@@ -191,20 +214,28 @@ func TestResetKeepSettingsProperty(t *testing.T) {
 				rt.Fatalf("insert category: %v", err)
 			}
 		}
-		seed(rt, s, rapid.IntRange(0, 4).Draw(rt, "accounts"))
+		seed(rt, s, rapid.IntRange(0, 4).Draw(rt, "accounts"), iter)
 		before := categoryNames(rt, s)
 		beforeSettings := settingsDump(rt, s)
+		beforeRules := rulesList(rt, s)
 
 		if err := s.Reset(ctx, app.ResetOptions{KeepSettings: true}); err != nil {
 			rt.Fatalf("Reset: %v", err)
 		}
 
-		assertEmptyExceptCategories(rt, s)
+		for _, table := range []string{"accounts", "transactions", "transfer_groups", "import_batches", "fx_rates", "connector_account_refs"} {
+			if n := count(rt, s, table); n != 0 {
+				rt.Fatalf("table %s has %d rows after reset, want 0", table, n)
+			}
+		}
 		if diff := cmp.Diff(before, categoryNames(rt, s)); diff != "" {
 			rt.Fatalf("categories changed (-before +after):\n%s", diff)
 		}
 		if diff := cmp.Diff(beforeSettings, settingsDump(rt, s)); diff != "" {
 			rt.Fatalf("tags/payees changed (-before +after):\n%s", diff)
+		}
+		if diff := cmp.Diff(beforeRules, rulesList(rt, s)); diff != "" {
+			rt.Fatalf("rules changed (-before +after):\n%s", diff)
 		}
 	})
 }

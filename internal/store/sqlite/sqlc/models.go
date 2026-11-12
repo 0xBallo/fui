@@ -71,13 +71,6 @@ type PayeeAlias struct {
 	Alias   string
 }
 
-type Tag struct {
-	ID        int64
-	Name      string
-	CreatedAt string
-	UpdatedAt string
-}
-
 type Rule struct {
 	ID         int64
 	Name       string
@@ -87,6 +80,13 @@ type Rule struct {
 	Actions    string
 	CreatedAt  string
 	UpdatedAt  string
+}
+
+type Tag struct {
+	ID        int64
+	Name      string
+	CreatedAt string
+	UpdatedAt string
 }
 
 type Transaction struct {

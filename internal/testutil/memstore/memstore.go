@@ -30,6 +30,7 @@ type state struct {
 	Accounts   map[domain.AccountID]domain.Account
 	Txs        map[domain.TransactionID]domain.Transaction
 	Categories map[domain.CategoryID]domain.Category
+	Rules      map[string]domain.Rule
 	Groups     map[domain.TransferGroupID]domain.Money
 	FX         map[fxKey]domain.FXRate
 	Batches    map[domain.ImportBatchID]app.ImportBatch
@@ -46,6 +47,7 @@ func newState() *state {
 		Accounts:   map[domain.AccountID]domain.Account{},
 		Txs:        map[domain.TransactionID]domain.Transaction{},
 		Categories: map[domain.CategoryID]domain.Category{},
+		Rules:      map[string]domain.Rule{},
 		Groups:     map[domain.TransferGroupID]domain.Money{},
 		FX:         map[fxKey]domain.FXRate{},
 		Batches:    map[domain.ImportBatchID]app.ImportBatch{},
@@ -61,7 +63,7 @@ func newState() *state {
 func (s *state) clone() *state {
 	return &state{
 		Accounts: maps.Clone(s.Accounts), Txs: maps.Clone(s.Txs), Categories: maps.Clone(s.Categories),
-		Groups: maps.Clone(s.Groups), FX: maps.Clone(s.FX), Batches: maps.Clone(s.Batches),
+		Rules: maps.Clone(s.Rules), Groups: maps.Clone(s.Groups), FX: maps.Clone(s.FX), Batches: maps.Clone(s.Batches),
 		Refs: maps.Clone(s.Refs), LastID: maps.Clone(s.LastID),
 		Tags: maps.Clone(s.Tags), TxTags: maps.Clone(s.TxTags), Payees: maps.Clone(s.Payees), Splits: maps.Clone(s.Splits),
 	}
@@ -124,6 +126,7 @@ type repos struct {
 func (r *repos) Accounts() app.AccountRepo         { return accounts{r} }
 func (r *repos) Transactions() app.TransactionRepo { return transactions{r} }
 func (r *repos) Categories() app.CategoryRepo      { return categories{r} }
+func (r *repos) Rules() app.RuleRepo               { return rules{r} }
 func (r *repos) Transfers() app.TransferRepo       { return transfers{r} }
 func (r *repos) FXRates() app.FXRateRepo           { return fxRates{r} }
 func (r *repos) Imports() app.ImportRepo           { return imports{r} }

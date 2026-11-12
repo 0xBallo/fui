@@ -28,6 +28,7 @@ func newRepos(tx *sql.Tx, readOnly bool) *repos {
 func (r *repos) Accounts() app.AccountRepo         { return accountRepo{repos: r} }
 func (r *repos) Transactions() app.TransactionRepo { return transactionRepo{repos: r} }
 func (r *repos) Categories() app.CategoryRepo      { return categoryRepo{repos: r} }
+func (r *repos) Rules() app.RuleRepo               { return ruleRepo{repos: r} }
 func (r *repos) Transfers() app.TransferRepo       { return transferRepo{repos: r} }
 func (r *repos) FXRates() app.FXRateRepo           { return fxRateRepo{repos: r} }
 func (r *repos) Imports() app.ImportRepo           { return importRepo{repos: r} }

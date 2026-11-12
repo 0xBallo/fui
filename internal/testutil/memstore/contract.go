@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ func RunContract(t *testing.T, newStore func(t *testing.T) app.Store) {
 	for name, fn := range map[string]func(*testing.T, *fixture){
 		"accounts":       contractAccounts,
 		"categories":     contractCategories,
+		"rules":          contractRules,
 		"transactions":   contractTransactions,
 		"list":           contractList,
 		"lookups":        contractLookups,
@@ -34,6 +36,96 @@ func RunContract(t *testing.T, newStore func(t *testing.T) app.Store) {
 			t.Helper()
 			fn(t, &fixture{store: newStore(t)})
 		})
+	}
+}
+
+func contractRules(t *testing.T, f *fixture) {
+	ctx := context.Background()
+	rule := domain.Rule{
+		Name:     "Groceries",
+		Priority: 10,
+		Enabled:  true,
+		Conditions: domain.RuleConditions{
+			DescriptionContains: "market",
+		},
+		Actions: domain.RuleActions{
+			CategoryID: 1,
+		},
+	}
+	second := domain.Rule{
+		Name:       "Transport",
+		Priority:   1,
+		Enabled:    true,
+		Conditions: domain.RuleConditions{DescriptionContains: "bus"},
+		Actions:    domain.RuleActions{CategoryID: 3},
+	}
+	updated := rule
+	updated.Priority = 5
+	updated.Enabled = false
+	updated.Actions.TagIDs = []domain.TagID{2, 1}
+
+	f.do(t, func(r app.Repos) error {
+		if err := upsertContractRules(ctx, r.Rules(), rule, updated, second); err != nil {
+			return err
+		}
+		_, err := r.Rules().Insert(ctx, domain.Rule{
+			Name:       "gRoCeRiEs",
+			Priority:   20,
+			Enabled:    true,
+			Conditions: domain.RuleConditions{DescriptionContains: "other"},
+			Actions:    domain.RuleActions{CategoryID: 2},
+		})
+		wantErr(t, err, app.ErrAlreadyExists, "duplicate rule name (case-insensitive)")
+		checkEnabledRules(ctx, t, r.Rules(), second.Name)
+		checkDeleteRules(ctx, t, r.Rules(), updated.Name, second.Name)
+		return nil
+	})
+}
+
+func upsertContractRules(ctx context.Context, repo app.RuleRepo, first, updated, second domain.Rule) error {
+	inserted, err := repo.Insert(ctx, first)
+	if err != nil {
+		return err
+	}
+	if inserted.Name != first.Name || inserted.Priority != first.Priority || !inserted.Enabled {
+		return fmt.Errorf("inserted rule mismatch: got %+v", inserted)
+	}
+	if got, err := repo.Get(ctx, strings.ToLower(first.Name)); err != nil || got.Name != first.Name {
+		return fmt.Errorf("get inserted rule: got %+v, err %w", got, err)
+	}
+	if err := repo.Update(ctx, updated); err != nil {
+		return err
+	}
+	got, err := repo.Get(ctx, first.Name)
+	if err != nil {
+		return err
+	}
+	if got.Priority != updated.Priority || got.Enabled != updated.Enabled || len(got.Actions.TagIDs) != len(updated.Actions.TagIDs) {
+		return fmt.Errorf("updated rule mismatch: got %+v", got)
+	}
+	_, err = repo.Insert(ctx, second)
+	return err
+}
+
+func checkEnabledRules(ctx context.Context, t *testing.T, repo app.RuleRepo, want string) {
+	t.Helper()
+	enabled, err := repo.ListEnabledByPriority(ctx)
+	if err != nil || len(enabled) != 1 || enabled[0].Name != want {
+		t.Errorf("ListEnabledByPriority = %+v, %v", enabled, err)
+	}
+}
+
+func checkDeleteRules(ctx context.Context, t *testing.T, repo app.RuleRepo, deleted, remaining string) {
+	t.Helper()
+	if err := repo.Delete(ctx, deleted); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	wantErr(t, repo.Delete(ctx, deleted), domain.ErrNotFound, "Delete missing rule")
+	_, err := repo.Get(ctx, deleted)
+	wantErr(t, err, domain.ErrNotFound, "Get deleted rule")
+	all, err := repo.List(ctx)
+	if err != nil || len(all) != 1 || all[0].Name != remaining {
+		t.Errorf("List = %+v, %v; want only %s", all, err, remaining)
 	}
 }
 
