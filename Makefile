@@ -3,7 +3,7 @@ PKGS    ?= ./...
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: fmt fmt-check generate lint test check bench build cover
+.PHONY: fmt fmt-check generate lint test check bench build cover hooks
 
 fmt:
 	gofumpt -w .
@@ -32,3 +32,7 @@ cover:
 
 build:
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o dist/ ./cmd/...
+
+# hooks enables the versioned git hooks in .githooks (pre-commit: fmt, build, vet, lint, test).
+hooks:
+	git config core.hooksPath .githooks

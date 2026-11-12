@@ -2,7 +2,7 @@
 
 Nov 12, 2026 · @Mattia Ballo
 
-**Versione 1.2** — 12 novembre 2026 · allineata alle FS 1.2, con i temi Catppuccin della TUI; le modifiche rispetto alle versioni precedenti sono nella sezione Cronologia delle versioni
+**Versione 1.3** — 13 novembre 2026 · allineata alle FS 1.2, con i temi Catppuccin della TUI e il git flow con `develop`; le modifiche rispetto alle versioni precedenti sono nella sezione Cronologia delle versioni
 
 ## Panoramica e principi tecnici
 
@@ -442,23 +442,17 @@ La base sono [Effective Go](https://go.dev/doc/effective_go) e le [Go Code Revie
 
 ## Flusso Git
 
-FUI usa il trunk-based development: `main` è sempre rilasciabile, i branch vivono al massimo pochi giorni e ogni commit è atomico, compila e passa i test. La storia resta lineare, così `git bisect` trova una regressione in pochi passi.
+FUI usa un git flow leggero con due branch stabili: `main` corrisponde a PROD (le versioni rilasciate), `develop` a PREVIEW (lo sviluppo integrato). Il lavoro avviene su branch brevi che entrano con squash merge, così ogni tema occupa un solo commit sui branch stabili, mentre sul branch di lavoro si committa liberamente.
 
 **Branch**
 
-- `main` protetto: niente push diretti, CI verde obbligatoria, storia lineare, commit firmati (firma SSH).
-- Branch di lavoro `<tipo>/<scope>-<descrizione>`, es. `feat/import-widiba-xlsx`, `fix/budget-rollover`; nati da `main` e riallineati con `rebase`, mai con merge.
-- `release/vX.Y` solo quando serve correggere una versione già uscita mentre `main` è più avanti: la correzione entra prima in `main`, poi si porta con `cherry-pick -x`.
-- Funzioni incomplete restano in `main` dietro un flag di configurazione `experimental.<nome>`, non in branch lunghi.
+- `main` (PROD) e `develop` (PREVIEW) protetti: di norma niente commit diretti, si entra solo da pull request con CI verde.
+- Feature branch `<tipo>/<scope>-<descrizione>` (es. `feat/import-widiba-xlsx`, `fix/budget-rollover`): nascono da `develop` ed entrano in `develop` con **squash merge**.
+- Hotfix branch `hotfix/<descrizione>`: nascono da `main` per correggere PROD ed entrano in `main` con **squash merge**; subito dopo `main` si riporta su `develop` con un merge.
+- Rilascio: una PR da `develop` a `main` unita con merge commit (non squash, così i due branch restano allineati), dopo il bump della versione; poi il tag su `main` (vedi "Versioni e rilasci").
+- Funzioni incomplete possono entrare in `develop` dietro un flag di configurazione `experimental.<nome>` invece di restare in branch lunghi.
 
-**Commit atomici**
-
-- Un commit = un cambiamento logico, descrivibile in una riga senza "e".
-- Ogni commit compila e passa `make check`; prima di aprire la PR si verifica con `git rebase -x 'make check' main`.
-- Refactoring e cambi di comportamento in commit separati: il refactoring non cambia i test esistenti, il cambio di comportamento sì.
-- Una migrazione di schema sta in un commit dedicato, insieme al suo test e al codice `sqlc` rigenerato.
-- Un bug fix inizia con un test che riproduce il bug; test e correzione stanno nello stesso commit, così la storia non contiene commit rossi.
-- Codice generato, golden file aggiornati e il cambiamento che li richiede stanno nello stesso commit.
+**Commit** — su feature e hotfix branch si possono fare più commit sullo stesso tema, senza obbligo di atomicità: lo squash merge li riduce a un unico commit. L'hook `pre-commit` garantisce comunque che ogni commit compili e passi lint e test. Un bug fix include il test che lo riproduce; codice generato e golden file aggiornati stanno nello stesso branch del cambiamento che li richiede.
 
 **Messaggi: Conventional Commits** — formato `<tipo>(<scope>): <descrizione all'imperativo, minuscola, ≤ 72 caratteri>`, corpo che spiega il perché, footer con riferimenti alle issue.
 
@@ -472,16 +466,15 @@ FUI usa il trunk-based development: `main` è sempre rilasciabile, i branch vivo
 | `docs` | Documentazione, ADR, skill | nessuno |
 | `build`, `ci`, `chore` | Build, pipeline, manutenzione | nessuno |
 
-Scope tra `domain`, `app`, `cli`, `tui`, `store`, `import`, `connector/revolut`, `connector/widiba`, `proto`, `config`, `skill`, `module`. Un cambiamento incompatibile su output JSON, protocollo `fui/1`, configurazione o comandi usa `!` e il footer `BREAKING CHANGE:`. Il formato è controllato da un hook `commit-msg` e in CI.
+Scope tra `domain`, `app`, `cli`, `tui`, `store`, `import`, `connector/revolut`, `connector/widiba`, `proto`, `config`, `skill`, `module`. Un cambiamento incompatibile su output JSON, protocollo `fui/1`, configurazione o comandi usa `!` e il footer `BREAKING CHANGE:`. Il formato vale per i commit dei branch di lavoro ed è controllato in CI; il titolo della PR segue lo stesso formato, perché diventa il messaggio del commit di squash.
 
 **Pull request**
 
-1. Branch aggiornato su `main`, `make check` verde in locale.
-2. PR piccola, idealmente sotto le 400 righe modificate esclusi codice generato e golden file; altrimenti si divide.
-3. Descrizione con cosa cambia, perché, come è stato verificato e lo use case o il requisito delle FS coinvolto.
-4. CI verde su tutti i job obbligatori.
-5. Revisione con checklist (sotto); da sviluppatore unico, auto-revisione del diff completo il giorno dopo per le modifiche al dominio e allo schema.
-6. Merge con "Rebase and merge", che conserva i commit atomici; "Squash" solo se la PR contiene un unico cambiamento logico.
+1. Feature branch verso `develop`, hotfix branch verso `main`; titolo nel formato Conventional Commits.
+2. Descrizione con cosa cambia, perché, come è stato verificato e lo use case o il requisito delle FS coinvolto.
+3. Tutti i job obbligatori della CI verdi prima del merge, imposto dalla protezione dei branch.
+4. Auto-revisione del diff completo; per dominio e schema, il giorno dopo.
+5. Merge con "Squash and merge" per feature e hotfix branch; "Create a merge commit" solo per la PR di rilascio `develop` → `main` e per riportare `main` su `develop`.
 
 **Checklist di revisione**
 
@@ -492,9 +485,9 @@ Scope tra `domain`, `app`, `cli`, `tui`, `store`, `import`, `connector/revolut`,
 - [ ] Messaggi di errore chiari con codice stabile; aiuto `--help` con esempio per i comandi nuovi.
 - [ ] Nessun dato personale reale in `testdata`.
 
-**Hook locali** — gestiti con `lefthook` e versionati: `pre-commit` esegue `gofumpt` e il lint sui file toccati, `commit-msg` controlla il formato, `pre-push` esegue `make check`. Gli hook velocizzano il ciclo ma non sostituiscono la CI, che resta l'unico controllo vincolante.
+**Hook locali** — versionati in `.githooks/` e attivati una volta con `make hooks` (`core.hooksPath`). Il `pre-commit` esegue formattazione, `go build`, `go vet`, `golangci-lint` e `go test`, e blocca il commit se uno fallisce. Gli hook velocizzano il ciclo ma non sostituiscono la CI, che resta il controllo vincolante.
 
-**Versioni e rilasci** — SemVer con versioni `0.x` fino alla stabilità del formato JSON e del protocollo: in `0.x` un cambio incompatibile aumenta la minor. Un rilascio è un tag annotato e firmato `vX.Y.Z` su `main`; il changelog si genera dai commit con `git-cliff`, e la pipeline pubblica i binari.
+**Versioni e rilasci** — SemVer con versioni `0.x` fino alla stabilità del formato JSON e del protocollo: in `0.x` un cambio incompatibile aumenta la minor. La versione vive nel tag: prima di rilasciare su `main` si decide il bump (patch, minor o major, dai tipi dei commit squashati dall'ultimo tag), si unisce la PR di rilascio e si crea il tag annotato `vX.Y.Z` sul commit di `main`; `make build` incorpora la versione da `git describe`. Un hotfix produce un bump di patch e il suo tag. Il changelog si genera dai commit con `git-cliff`, e la pipeline pubblica i binari.
 
 ## Test e prevenzione delle regressioni
 
@@ -550,7 +543,7 @@ Le regressioni si prevengono su tre fronti: invarianti verificate automaticament
 
 ## CI/CD e distribuzione
 
-La pipeline gira su GitHub Actions ed esegue gli stessi target del `Makefile` usati in locale: se `make check` passa sul portatile, passa anche in CI. Un tag `vX.Y.Z` su `main` produce un rilascio completo senza passi manuali.
+La pipeline gira su GitHub Actions per ogni pull request e per ogni push su `develop` e `main`, ed esegue gli stessi target del `Makefile` usati in locale: se `make check` passa sul portatile, passa anche in CI. Un tag `vX.Y.Z` su `main` produce un rilascio completo senza passi manuali.
 
 **Target del Makefile**
 
@@ -580,7 +573,7 @@ La pipeline gira su GitHub Actions ed esegue gli stessi target del `Makefile` us
 
 **Rilascio**
 
-1. Tag annotato e firmato `vX.Y.Z` su un commit di `main` con CI verde.
+1. Bump della versione e tag annotato e firmato `vX.Y.Z` su un commit di `main` con CI verde (dopo la PR di rilascio da `develop` o un hotfix).
 2. `goreleaser` compila `fui` e i connettori con `CGO_ENABLED=0`, `-trimpath` e versione, commit e data incorporati, per `linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`.
 3. Pubblica archivi, `checksums.txt`, SBOM e firme `cosign`, più il changelog generato da `git-cliff`.
 4. Aggiorna il tap Homebrew; i completamenti di shell e la pagina di manuale sono inclusi negli archivi.
@@ -598,13 +591,14 @@ Le decisioni architetturali si registrano come ADR in `docs/adr/NNNN-titolo.md` 
 | 0003 | `sqlc` al posto di un ORM; migrazioni `goose` solo in avanti con backup automatico |
 | 0004 | Pattern Plan/Apply per tutte le scritture, base di `--dry-run`, anteprime TUI e sicurezza degli agenti |
 | 0005 | Protocollo `fui/1` in `pkg/fuiproto` come unico pacchetto pubblico |
-| 0006 | Trunk-based development, Conventional Commits, merge con rebase |
+| 0006 | Trunk-based development, Conventional Commits, merge con rebase (sostituito da 0013) |
 | 0007 | Golden file come contratto per output JSON, `help --json`, stream dei connettori e schema |
 | 0008 | Percorsi XDG anche su macOS per coerenza con le FS |
 | 0009 | Moduli come registro statico che agisce su esposizione e query; schema sempre completo, nessuna migrazione legata ai moduli |
 | 0010 | Ricerca testuale con FTS5 trigram su una colonna normalizzata in Go; un unico `TxFilter` per CLI, TUI, export e report |
 | 0011 | Reset come ricostruzione in file temporaneo con rename atomico e backup escluso dalla rotazione |
 | 0012 | Temi della TUI dalla palette Catppuccin tramite token semantici; tema `auto` con rilevamento dello sfondo (OSC 11, poi `COLORFGBG`, poi scuro) |
+| 0013 | Git flow con `develop` (PREVIEW) e `main` (PROD), squash merge di feature e hotfix branch, hook `pre-commit` e tag di versione al rilascio |
 
 **Da decidere**
 
@@ -620,6 +614,14 @@ Le decisioni architetturali si registrano come ADR in `docs/adr/NNNN-titolo.md` 
 - [ ] Verificare come la major di Bubble Tea scelta espone il colore di sfondo e la notifica del cambio di tema, che determinano l'implementazione del rilevamento.
 
 ## Cronologia delle versioni
+
+**Versione 1.3** — 13 novembre 2026, git flow con `develop` e squash merge
+
+| Sezione | Modifica |
+| --- | --- |
+| Flusso Git | `main` = PROD, `develop` = PREVIEW; feature branch da `develop` e hotfix da `main`, uniti con squash merge; niente obbligo di commit atomici; hook `pre-commit` con build, lint e test; CI verde obbligatoria prima del merge; bump della versione e tag prima del rilascio su `main` |
+| CI/CD e distribuzione | CI anche sui push su `develop`; rilascio da `main` dopo la PR di rilascio |
+| Decisioni tecniche e punti aperti | ADR 0013 sostituisce ADR 0006 |
 
 **Versione 1.2** — 12 novembre 2026, temi della TUI basati su Catppuccin
 

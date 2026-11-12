@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
 
 # A re-push to the same PR cancels the previous run instead of queuing behind it.
