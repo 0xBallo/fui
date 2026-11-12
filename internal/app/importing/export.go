@@ -71,6 +71,7 @@ type exportData struct {
 	accounts map[domain.AccountID]domain.Account
 	cats     map[domain.CategoryID]domain.Category
 	payees   map[domain.PayeeID]domain.Payee
+	splits   map[domain.TransactionID][]domain.Split
 	tags     map[domain.TransactionID][]domain.Tag
 	balances map[domain.AccountID]domain.Money // final balance of the accounts involved
 	balDate  domain.Date
@@ -79,7 +80,7 @@ type exportData struct {
 func (s *Service) loadExport(ctx context.Context, r app.Repos, f domain.TxFilter) (exportData, error) {
 	d := exportData{
 		accounts: map[domain.AccountID]domain.Account{}, cats: map[domain.CategoryID]domain.Category{},
-		payees: map[domain.PayeeID]domain.Payee{}, tags: map[domain.TransactionID][]domain.Tag{},
+		payees: map[domain.PayeeID]domain.Payee{}, splits: map[domain.TransactionID][]domain.Split{}, tags: map[domain.TransactionID][]domain.Tag{},
 		balances: map[domain.AccountID]domain.Money{}, balDate: f.To(),
 	}
 	if err := d.loadLookups(ctx, r); err != nil {
@@ -88,6 +89,9 @@ func (s *Service) loadExport(ctx context.Context, r app.Repos, f domain.TxFilter
 	var err error
 	if d.txs, err = r.Transactions().List(ctx, f, nil, 0); err != nil {
 		return d, fmt.Errorf("list transactions: %w", err)
+	}
+	if err := d.loadSplits(ctx, r); err != nil {
+		return d, err
 	}
 	if err := d.loadTags(ctx, r); err != nil {
 		return d, err
@@ -125,6 +129,20 @@ func (d *exportData) loadLookups(ctx context.Context, r app.Repos) error {
 	}
 	for _, p := range payees {
 		d.payees[p.ID] = p
+	}
+	return nil
+}
+
+// loadSplits fetches the split rows of every exported transaction.
+func (d *exportData) loadSplits(ctx context.Context, r app.Repos) error {
+	for _, t := range d.txs {
+		rows, err := r.Splits().SplitsOf(ctx, t.ID)
+		if err != nil {
+			return fmt.Errorf("splits of transaction %d: %w", t.ID, err)
+		}
+		if len(rows) > 0 {
+			d.splits[t.ID] = rows
+		}
 	}
 	return nil
 }
@@ -306,6 +324,17 @@ func (d exportData) fuiTx(t domain.Transaction) *fuiproto.TransactionRecord {
 	}
 	if t.TransferGroupID != 0 {
 		rec.Transfer = "fui-t" + strconv.FormatInt(int64(t.TransferGroupID), 10)
+	}
+	splits := d.splits[t.ID]
+	if len(splits) > 0 {
+		rec.Splits = make([]fuiproto.TransactionSplit, len(splits))
+		for i, split := range splits {
+			rec.Splits[i] = fuiproto.TransactionSplit{
+				Category: d.cats[split.Category].Name,
+				Amount:   split.Amount.Minor(),
+				Note:     split.Note,
+			}
+		}
 	}
 	return rec
 }

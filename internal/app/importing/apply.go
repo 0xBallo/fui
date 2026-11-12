@@ -66,6 +66,7 @@ type writer struct {
 	payees  map[string]domain.PayeeID // by NormalizePayee of the name or an alias
 	tags    map[string]domain.TagID   // by Tag.Key
 	txs     []domain.Transaction      // prepared transaction of every included row, by row index
+	splits  [][]domain.Split          // prepared split rows of every included row, by row index
 	rowTags [][]domain.TagID          // tag IDs to set on each included row, by row index
 }
 
@@ -93,6 +94,11 @@ func (w *writer) run(ctx context.Context, res *ImportResult) error {
 		t, err := w.r.Transactions().Insert(ctx, w.txs[i])
 		if err != nil {
 			return fmt.Errorf("create transaction of line %d: %w", row.Line, err)
+		}
+		if rows := w.splits[i]; len(rows) > 0 {
+			if err := w.r.Splits().ReplaceSplits(ctx, t.ID, rows); err != nil {
+				return fmt.Errorf("create splits of line %d: %w", row.Line, err)
+			}
 		}
 		if ids := w.rowTags[i]; len(ids) > 0 {
 			if err := w.r.Tags().SetTags(ctx, t.ID, ids); err != nil {
@@ -162,6 +168,7 @@ func (w *writer) prepare(ctx context.Context, batch domain.ImportBatchID, res *I
 		return err
 	}
 	w.txs = make([]domain.Transaction, len(w.p.Rows))
+	w.splits = make([][]domain.Split, len(w.p.Rows))
 	w.rowTags = make([][]domain.TagID, len(w.p.Rows))
 	for i, row := range w.p.Rows {
 		if !row.Include {
@@ -180,6 +187,9 @@ func (w *writer) prepare(ctx context.Context, batch domain.ImportBatchID, res *I
 			if tx.PayeeID, err = w.payee(ctx, row, res); err != nil {
 				return err
 			}
+		}
+		if w.splits[i], err = w.splitsFor(ctx, row, tx.Amount.Currency(), res); err != nil {
+			return err
 		}
 		if w.rowTags[i], err = w.tagsFor(ctx, row, res); err != nil {
 			return err
@@ -207,6 +217,32 @@ func (w *writer) category(ctx context.Context, row Row, res *ImportResult) (doma
 	}
 	for _, planned := range w.p.NewCategories {
 		if strings.EqualFold(planned.Name, row.Category) {
+			c = planned
+		}
+	}
+	c, err = w.r.Categories().Insert(ctx, c)
+	if err != nil {
+		return 0, fmt.Errorf("create category %q: %w", c.Name, err)
+	}
+	w.cats[key] = c.ID
+	res.Categories++
+	return c.ID, nil
+}
+
+func (w *writer) splitCategory(ctx context.Context, row Row, name string, res *ImportResult) (domain.CategoryID, error) {
+	if name == "" {
+		return 0, nil
+	}
+	key := strings.ToLower(name)
+	if id, ok := w.cats[key]; ok {
+		return id, nil
+	}
+	c, err := domain.NewCategory(name, kindFor(row.Tx))
+	if err != nil {
+		return 0, fmt.Errorf("split category of line %d: %w", row.Line, err)
+	}
+	for _, planned := range w.p.NewCategories {
+		if strings.EqualFold(planned.Name, name) {
 			c = planned
 		}
 	}
@@ -269,6 +305,28 @@ func (w *writer) tagsFor(ctx context.Context, row Row, res *ImportResult) ([]dom
 		}
 	}
 	return ids, nil
+}
+
+func (w *writer) splitsFor(ctx context.Context, row Row, cur domain.Currency, res *ImportResult) ([]domain.Split, error) {
+	if len(row.Splits) == 0 {
+		return nil, nil
+	}
+	out := make([]domain.Split, len(row.Splits))
+	for i, split := range row.Splits {
+		catID, err := w.splitCategory(ctx, row, split.Category, res)
+		if err != nil {
+			return nil, err
+		}
+		amt, err := domain.NewMoney(split.Amount, cur)
+		if err != nil {
+			return nil, fmt.Errorf("split amount of line %d row %d: %w", row.Line, i, err)
+		}
+		out[i] = domain.Split{Category: catID, Amount: amt, Note: split.Note}
+	}
+	if err := domain.ValidateSplits(row.Tx.Amount, out); err != nil {
+		return nil, fmt.Errorf("splits of line %d: %w", row.Line, err)
+	}
+	return out, nil
 }
 
 // link creates the transfer groups: the legs that share a label, then the accepted proposals.

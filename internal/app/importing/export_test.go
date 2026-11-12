@@ -24,8 +24,13 @@ func seedExport(t *testing.T) env {
 	a := e.seedAccount(t, "Main, the \"first\"", "", "")
 	b := e.seedAccount(t, "Savings", "", "")
 	var cat domain.Category
+	var catHome domain.Category
 	err := e.store.WithTx(context.Background(), func(r app.Repos) (err error) {
 		cat, err = r.Categories().Insert(context.Background(), domain.Category{Name: "Food", Kind: domain.CategoryExpense})
+		if err != nil {
+			return err
+		}
+		catHome, err = r.Categories().Insert(context.Background(), domain.Category{Name: "Home", Kind: domain.CategoryExpense})
 		if err != nil {
 			return err
 		}
@@ -33,6 +38,7 @@ func seedExport(t *testing.T) env {
 		if err != nil {
 			return err
 		}
+		var firstID domain.TransactionID
 		for _, tx := range []domain.Transaction{
 			{
 				AccountID: a.ID, Date: date("2026-10-01"), Amount: money(-1250), Description: "Lunch, \"pizza\"", CategoryID: cat.ID,
@@ -48,9 +54,19 @@ func seedExport(t *testing.T) env {
 			},
 			{AccountID: a.ID, Date: date("2026-10-03"), Amount: money(500), Status: domain.StatusPending, Kind: domain.KindOther},
 		} {
-			if _, err := r.Transactions().Insert(context.Background(), tx); err != nil {
+			inserted, err := r.Transactions().Insert(context.Background(), tx)
+			if err != nil {
 				return err
 			}
+			if tx.ExternalID == "bank-1" {
+				firstID = inserted.ID
+			}
+		}
+		if err := r.Splits().ReplaceSplits(context.Background(), firstID, []domain.Split{
+			{Category: cat.ID, Amount: money(-1000), Note: "food"},
+			{Category: catHome.ID, Amount: money(-250), Note: "home"},
+		}); err != nil {
+			return err
 		}
 		return nil
 	})
@@ -141,6 +157,10 @@ func TestExportFUIIsAValidStream(t *testing.T) {
 	}
 	if txs[0].ID != "bank-1" || txs[0].Status != fuiproto.TransactionStatusBooked || txs[0].Category != "Food" || txs[0].Notes != "with Bob" {
 		t.Fatalf("reconciled transaction exported as %+v", txs[0])
+	}
+	if len(txs[0].Splits) != 2 || txs[0].Splits[0].Category != "Food" || txs[0].Splits[1].Category != "Home" ||
+		txs[0].Splits[0].Amount+txs[0].Splits[1].Amount != txs[0].Amount {
+		t.Fatalf("split rows exported as %+v", txs[0].Splits)
 	}
 	if !strings.HasPrefix(txs[1].ID, "fui-") || txs[1].Transfer == "" || txs[1].Transfer != txs[2].Transfer {
 		t.Fatalf("transfer legs = %+v %+v", txs[1], txs[2])

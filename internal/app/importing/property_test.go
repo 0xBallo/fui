@@ -38,7 +38,13 @@ func drawStream(t *rapid.T, withCategories bool) (sliceSource, int) {
 	n := 0
 	ext := func() string { n++; return fmt.Sprintf("x%d", n) }
 	day := rapid.IntRange(1, 28)
-	for range rapid.IntRange(0, 25).Draw(t, "transactions") {
+	nTx := rapid.IntRange(0, 25).Draw(t, "transactions")
+	if withCategories && nTx == 0 {
+		nTx = 1
+	}
+	firstTx := -1
+	hadPayee, hadTags, hadSplits := false, false, false
+	for range nTx {
 		desc := strings.Join(rapid.SliceOfN(rapid.SampledFrom(words), 1, 3).Draw(t, "words"), " ")
 		cat, payee, txTags := "", "", []string(nil)
 		if withCategories {
@@ -46,13 +52,60 @@ func drawStream(t *rapid.T, withCategories bool) (sliceSource, int) {
 			payee = rapid.SampledFrom(append([]string{""}, payeeNames...)).Draw(t, "payee")
 			txTags = rapid.SliceOfN(rapid.SampledFrom(tagNames), 0, len(tagNames)).Draw(t, "tags")
 		}
-		recs = append(recs, txRec(fmt.Sprintf("r%d", rapid.IntRange(0, nAcct-1).Draw(t, "account")), ext(),
-			fmt.Sprintf("2026-09-%02d", day.Draw(t, "day")), rapid.Int64Range(-100000, 100000).Draw(t, "amount"), desc,
-			kind(rapid.SampledFrom(plainKinds).Draw(t, "kind")), category(cat), payeeName(payee), withTags(txTags...),
+		amount := rapid.Int64Range(-100000, 100000).Draw(t, "amount")
+		if payee != "" {
+			hadPayee = true
+		}
+		if len(txTags) > 0 {
+			hadTags = true
+		}
+		mods := []func(*fuiproto.TransactionRecord){
+			kind(rapid.SampledFrom(plainKinds).Draw(t, "kind")),
+			category(cat),
+			payeeName(payee),
+			withTags(txTags...),
 			func(r *fuiproto.TransactionRecord) {
 				r.Notes = rapid.SampledFrom([]string{"", "note"}).Draw(t, "notes")
 				r.Status = rapid.SampledFrom([]fuiproto.TransactionStatus{"booked", "pending"}).Draw(t, "status")
-			}))
+			},
+		}
+		if withCategories && rapid.Bool().Draw(t, "split") {
+			a := amount + 1
+			b := int64(-1)
+			if amount < 0 {
+				a, b = amount-1, 1
+			}
+			mods = append(mods, withSplits(
+				fuiproto.TransactionSplit{Category: catNames[0], Amount: a, Note: "a"},
+				fuiproto.TransactionSplit{Category: catNames[1], Amount: b, Note: "b"},
+			))
+			hadSplits = true
+		}
+		recs = append(recs, txRec(fmt.Sprintf("r%d", rapid.IntRange(0, nAcct-1).Draw(t, "account")), ext(),
+			fmt.Sprintf("2026-09-%02d", day.Draw(t, "day")), amount, desc, mods...))
+		if firstTx < 0 {
+			firstTx = len(recs) - 1
+		}
+	}
+	if withCategories && firstTx >= 0 && recs[firstTx].Transaction != nil {
+		tx := recs[firstTx].Transaction
+		if !hadPayee {
+			tx.Payee = payeeNames[0]
+		}
+		if !hadTags {
+			tx.Tags = []string{tagNames[0]}
+		}
+		if !hadSplits {
+			a := tx.Amount + 1
+			b := int64(-1)
+			if tx.Amount < 0 {
+				a, b = tx.Amount-1, 1
+			}
+			tx.Splits = []fuiproto.TransactionSplit{
+				{Category: catNames[0], Amount: a, Note: "a"},
+				{Category: catNames[1], Amount: b, Note: "b"},
+			}
+		}
 	}
 	if nAcct >= 2 {
 		for i := range rapid.IntRange(0, 3).Draw(t, "transfers") {
@@ -186,9 +239,14 @@ func (e env) view(t tb) []string {
 				tagList[i] = tg.Name
 			}
 			slices.Sort(tagList)
-			lines[tx.ID] = fmt.Sprintf("tx %s %s %d %q %q %q %s %s %s payee=%q tags=%q", name[tx.AccountID], tx.Date, tx.Amount.Minor(),
+			splitRows := must(r.Splits().SplitsOf(ctx, tx.ID))
+			splitList := make([]string, len(splitRows))
+			for i, split := range splitRows {
+				splitList[i] = fmt.Sprintf("%q:%d:%q", catName[split.Category], split.Amount.Minor(), split.Note)
+			}
+			lines[tx.ID] = fmt.Sprintf("tx %s %s %d %q %q %q %s %s %s payee=%q tags=%q splits=%q", name[tx.AccountID], tx.Date, tx.Amount.Minor(),
 				tx.Description, catName[tx.CategoryID], tx.Notes, tx.Status, tx.Kind, tx.ExternalID,
-				payeeOf[tx.PayeeID], strings.Join(tagList, ","))
+				payeeOf[tx.PayeeID], strings.Join(tagList, ","), strings.Join(splitList, ","))
 			if tx.TransferGroupID != 0 {
 				legs[tx.TransferGroupID] = append(legs[tx.TransferGroupID], lines[tx.ID])
 			}

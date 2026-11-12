@@ -21,10 +21,14 @@ func (b *builder) addRow(ctx context.Context, rec *fuiproto.TransactionRecord) e
 	row := Row{
 		Line: line, Class: domain.DedupNew, Include: true, AccountRef: rec.Account, Tx: tx,
 		Category: strings.TrimSpace(rec.Category), Transfer: strings.TrimSpace(rec.Transfer),
-		Payee: strings.TrimSpace(rec.Payee), Tags: sanitizeTags(rec.Tags),
+		Splits: parseSplits(rec.Splits), Payee: strings.TrimSpace(rec.Payee), Tags: sanitizeTags(rec.Tags),
 	}
-	if row.Category != "" {
-		if _, err := domain.NewCategory(row.Category, domain.CategoryExpense); err != nil {
+	if err := validateCategoryName(row.Category); err != nil {
+		b.plan.Errors = append(b.plan.Errors, RowError{Line: line, Message: err.Error()})
+		return nil
+	}
+	for i := range row.Splits {
+		if err := validateCategoryName(row.Splits[i].Category); err != nil {
 			b.plan.Errors = append(b.plan.Errors, RowError{Line: line, Message: err.Error()})
 			return nil
 		}
@@ -48,6 +52,7 @@ func (b *builder) addRow(ctx context.Context, rec *fuiproto.TransactionRecord) e
 		}
 	}
 	b.noteCategory(&row)
+	b.noteSplitCategories(&row)
 	b.notePayee(&row)
 	b.noteTags(&row)
 	b.ibans[len(b.plan.Rows)] = rec.CounterpartyIBAN
@@ -120,6 +125,29 @@ func sanitizeTags(tags []string) []string {
 		out = append(out, t)
 	}
 	return out
+}
+
+func parseSplits(rows []fuiproto.TransactionSplit) []SplitRow {
+	if len(rows) == 0 {
+		return nil
+	}
+	out := make([]SplitRow, len(rows))
+	for i, row := range rows {
+		out[i] = SplitRow{
+			Category: strings.TrimSpace(row.Category),
+			Amount:   row.Amount,
+			Note:     strings.TrimSpace(row.Note),
+		}
+	}
+	return out
+}
+
+func validateCategoryName(name string) error {
+	if name == "" {
+		return nil
+	}
+	_, err := domain.NewCategory(name, domain.CategoryExpense)
+	return err
 }
 
 // notePoint remembers the balance_after of the row for the coherence check. A pending row is
@@ -205,17 +233,30 @@ func (b *builder) noteCategory(row *Row) {
 	if row.Category == "" {
 		return
 	}
-	key := strings.ToLower(row.Category)
+	row.Category = b.noteCategoryName(row.Category, row.Class, kindFor(row.Tx))
+}
+
+func (b *builder) noteSplitCategories(row *Row) {
+	for i := range row.Splits {
+		row.Splits[i].Category = b.noteCategoryName(row.Splits[i].Category, row.Class, kindFor(row.Tx))
+	}
+}
+
+func (b *builder) noteCategoryName(name string, class domain.DedupClass, kind domain.CategoryKind) string {
+	if name == "" {
+		return ""
+	}
+	key := strings.ToLower(name)
 	if c, ok := b.cats[key]; ok {
-		row.Category = c.Name
-		return
+		return c.Name
 	}
-	if row.Class == domain.DedupDuplicate || b.newCats[key] {
-		return
+	if class == domain.DedupDuplicate || b.newCats[key] {
+		return name
 	}
-	c, _ := domain.NewCategory(row.Category, kindFor(row.Tx)) // name validated in addRow
+	c, _ := domain.NewCategory(name, kind) // name validated in addRow
 	b.newCats[key] = true
 	b.plan.NewCategories = append(b.plan.NewCategories, c)
+	return name
 }
 
 // notePayee canonicalises the payee name (matched by name or alias) and lists it if it is not

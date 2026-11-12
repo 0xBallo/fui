@@ -267,6 +267,48 @@ func TestPlanCategories(t *testing.T) {
 	}
 }
 
+func TestPlanAndApplySplitRows(t *testing.T) {
+	e := newEnv(nil)
+	src := stream("fui", "", account("r1", "R1", "EUR"),
+		txRec("r1", "a", "2026-10-01", -100, "x",
+			withSplits(
+				fuiproto.TransactionSplit{Category: "Food", Amount: -40, Note: "food"},
+				fuiproto.TransactionSplit{Category: "Home", Amount: -60, Note: "home"},
+			),
+			payeeName("Shop"), withTags("weekly")))
+	plan := e.plan(t, src, createAccounts)
+	if len(plan.Rows) != 1 || len(plan.Rows[0].Splits) != 2 {
+		t.Fatalf("plan rows = %+v", plan.Rows)
+	}
+	if len(plan.NewCategories) != 2 || len(plan.NewPayees) != 1 || len(plan.NewTags) != 1 {
+		t.Fatalf("plan new entities = cats:%+v payees:%+v tags:%+v", plan.NewCategories, plan.NewPayees, plan.NewTags)
+	}
+	res := must(e.svc.ApplyImport(context.Background(), plan))
+	if res.Transactions != 1 || res.Categories != 2 || res.Payees != 1 || res.Tags != 1 {
+		t.Fatalf("result = %+v", res)
+	}
+	err := e.store.Read(context.Background(), func(r app.Repos) error {
+		txs, err := r.Transactions().List(context.Background(), must(domain.NewTxFilter(domain.TxFilterSpec{})), nil, 0)
+		if err != nil {
+			return err
+		}
+		if len(txs) != 1 {
+			t.Fatalf("transactions = %d, want 1", len(txs))
+		}
+		splits, err := r.Splits().SplitsOf(context.Background(), txs[0].ID)
+		if err != nil {
+			return err
+		}
+		if len(splits) != 2 || splits[0].Note != "food" || splits[1].Note != "home" {
+			t.Fatalf("splits = %+v", splits)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestApplyWritesBatchAndBacksUp(t *testing.T) {
 	e := newEnv(nil)
 	src := stream("bank", "abc", account("r1", "Bank R1", "EUR"),

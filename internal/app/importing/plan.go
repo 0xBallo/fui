@@ -40,12 +40,20 @@ type Row struct {
 	Include    bool
 	AccountRef string
 	Tx         domain.Transaction
-	Category   string   // category name to apply, created when missing
+	Category   string // category name to apply, created when missing
+	Splits     []SplitRow
 	Payee      string   // payee name to apply, created when missing
 	Tags       []string // tag names to apply, created when missing
 	Transfer   string   // transfer label shared by the two legs, as written in the stream
 	Matched    []domain.TransactionID
 	Rules      RuleEffect // what the categorization rules set on this row
+}
+
+// SplitRow is one split row attached to an imported transaction row.
+type SplitRow struct {
+	Category string
+	Amount   int64
+	Note     string
 }
 
 // RowError is a row that could not be converted or that the source reported as invalid.

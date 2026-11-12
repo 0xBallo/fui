@@ -119,6 +119,10 @@ func withTags(names ...string) func(*fuiproto.TransactionRecord) {
 	return func(t *fuiproto.TransactionRecord) { t.Tags = names }
 }
 
+func withSplits(rows ...fuiproto.TransactionSplit) func(*fuiproto.TransactionRecord) {
+	return func(t *fuiproto.TransactionRecord) { t.Splits = rows }
+}
+
 func counterparty(iban string) func(*fuiproto.TransactionRecord) {
 	return func(t *fuiproto.TransactionRecord) { t.CounterpartyIBAN = iban }
 }
