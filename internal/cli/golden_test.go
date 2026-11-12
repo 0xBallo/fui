@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/0xballo/fui/internal/module"
 )
 
 // update is set by "go test ./internal/cli/... -run TestGolden -update" to refresh the golden
@@ -75,6 +77,23 @@ func TestGoldenHelpJSON(t *testing.T) {
 	h := newHarness(t)
 	out, _ := h.mustRun("help", "--json")
 	checkGolden(t, "help.json", []byte(out))
+}
+
+// TestGoldenHelpJSONPresets freezes "fui help --json" per module preset: disabled modules' commands
+// must be absent.
+func TestGoldenHelpJSONPresets(t *testing.T) {
+	for _, preset := range []string{"expense", "full"} {
+		t.Run(preset, func(t *testing.T) {
+			set, err := module.Preset(preset)
+			if err != nil {
+				t.Fatalf("Preset(%s): %v", preset, err)
+			}
+			h := newHarness(t)
+			h.cfg.Modules.Enabled = set.IDs()
+			out, _ := h.mustRun("help", "--json")
+			checkGolden(t, "help_"+preset+".json", []byte(out))
+		})
+	}
 }
 
 // TestGoldenModuleListJSON freezes the stable machine-readable module list.

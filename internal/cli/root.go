@@ -45,7 +45,7 @@ func NewRoot(deps *Deps) *cobra.Command {
 		{command: newInitCmd(deps), module: module.Core},
 		{command: newModuleCmd(deps), module: module.Core},
 		{command: newAddCmd(deps), module: module.Core},
-		{command: newTxCmd(deps), module: module.Core},
+		{command: newTxCmdWithTags(deps), module: module.Core},
 		{command: newTransferCmd(deps), module: module.Core},
 		{command: newAccountCmd(deps), module: module.Core},
 		{command: newCategoryCmd(deps), module: module.Core},
@@ -55,7 +55,7 @@ func NewRoot(deps *Deps) *cobra.Command {
 		{command: newResetCmd(deps), module: module.Core},
 		{command: newConfigCmd(deps), module: module.Core},
 		{command: newHelpJSONCmd(deps), module: module.Core},
-		{command: newForecastCmd(deps), module: module.Core},
+		{command: newForecastCmd(deps), module: module.Recurring},
 		{command: newReportCmd(deps), module: module.Core},
 		{command: newKPICmd(deps), module: module.Core},
 		{command: newCompletionCmd(), module: module.Core},
@@ -63,6 +63,13 @@ func NewRoot(deps *Deps) *cobra.Command {
 		{command: newExportCmd(deps), module: module.Core},
 		{command: newConnectorCmd(deps), module: module.Core},
 		{command: newSkillCmd(deps), module: module.Core},
+		{command: newTagCmd(deps), module: module.Core},
+		{command: newPayeeCmd(deps), module: module.Core},
+		{command: newRuleCmd(deps), module: module.Core},
+		{command: newReconcileCmd(deps), module: module.Core},
+		{command: newBudgetCmd(deps), module: module.Budget},
+		{command: newRecurringCmd(deps), module: module.Recurring},
+		{command: newLoanCmd(deps), module: module.Loans},
 	})
 	if err := configureDynamicCompletions(root, deps); err != nil {
 		root.PersistentPreRunE = func(*cobra.Command, []string) error { return err }
@@ -71,6 +78,14 @@ func NewRoot(deps *Deps) *cobra.Command {
 		root.PersistentPreRunE = func(*cobra.Command, []string) error { return err }
 	}
 	return root
+}
+
+// newTxCmdWithTags is the tx group plus the tag and split subcommands, which V32 registers here
+// because tx.go belongs to the MVP command set.
+func newTxCmdWithTags(deps *Deps) *cobra.Command {
+	cmd := newTxCmd(deps)
+	cmd.AddCommand(newTxTagCmd(deps), newTxUntagCmd(deps), newTxSplitCmd(deps), newTxUnsplitCmd(deps))
+	return cmd
 }
 
 func addTopLevelModuleCommands(root *cobra.Command, entries []topLevelModuleCommand) {
