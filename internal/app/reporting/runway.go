@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 
 	"github.com/0xballo/fui/internal/domain"
 )
@@ -56,9 +55,9 @@ func (useCase Runway) Run(ctx context.Context, params RunwayParams) (RunwayResul
 	if err != nil {
 		return RunwayResult{}, err
 	}
-	missing := appendMissingCurrencies(missingFromBalances, missingFromMovements...)
+	missing := mergeMissingRates(missingFromBalances, missingFromMovements)
 	if len(missing) > 0 {
-		return RunwayResult{}, missingRates(missing, asOf)
+		return RunwayResult{}, missingRates(missing)
 	}
 	computed, err := domain.Runway(asOf, params.MonthStartDay, balances, movements)
 	if err != nil {
@@ -87,7 +86,7 @@ func (useCase Runway) resolveAsOf(asOf domain.Date) (domain.Date, error) {
 	return today, nil
 }
 
-func (useCase Runway) loadBalances(ctx context.Context, asOf domain.Date, params RunwayParams) ([]domain.RunwayBalance, []domain.Currency, error) {
+func (useCase Runway) loadBalances(ctx context.Context, asOf domain.Date, params RunwayParams) ([]domain.RunwayBalance, map[domain.Currency]domain.Date, error) {
 	accounts, err := useCase.deps.source.ListAccounts(ctx, AccountFilter{
 		AccountIDs:      params.AccountIDs,
 		IncludeArchived: false,
@@ -96,7 +95,7 @@ func (useCase Runway) loadBalances(ctx context.Context, asOf domain.Date, params
 		return nil, nil, fmt.Errorf("list accounts: %w", err)
 	}
 	items := make([]domain.RunwayBalance, 0, len(accounts))
-	var missing []domain.Currency
+	missing := map[domain.Currency]domain.Date{}
 	for _, account := range accounts {
 		balance, err := useCase.deps.source.BalanceAt(ctx, account.ID, asOf)
 		if err != nil {
@@ -104,7 +103,7 @@ func (useCase Runway) loadBalances(ctx context.Context, asOf domain.Date, params
 		}
 		converted, err := useCase.convertAt(ctx, balance, params.BaseCurrency, asOf)
 		if errors.Is(err, errRateMissing) {
-			missing = appendMissingCurrencies(missing, account.Currency)
+			addMissingRate(missing, account.Currency, asOf)
 			continue
 		}
 		if err != nil {
@@ -118,7 +117,7 @@ func (useCase Runway) loadBalances(ctx context.Context, asOf domain.Date, params
 	return items, missing, nil
 }
 
-func (useCase Runway) loadMovements(ctx context.Context, asOf domain.Date, params RunwayParams) ([]domain.RunwayMovement, []domain.Currency, error) {
+func (useCase Runway) loadMovements(ctx context.Context, asOf domain.Date, params RunwayParams) ([]domain.RunwayMovement, map[domain.Currency]domain.Date, error) {
 	period, err := runwayPeriod(asOf, params.MonthStartDay)
 	if err != nil {
 		return nil, nil, fmt.Errorf("runway period: %w", err)
@@ -131,11 +130,11 @@ func (useCase Runway) loadMovements(ctx context.Context, asOf domain.Date, param
 		return nil, nil, fmt.Errorf("list transactions: %w", err)
 	}
 	movements := make([]domain.RunwayMovement, 0, len(transactions))
-	var missing []domain.Currency
+	missing := map[domain.Currency]domain.Date{}
 	for _, tx := range transactions {
 		converted, err := useCase.convertAt(ctx, tx.Amount, params.BaseCurrency, tx.Date)
 		if errors.Is(err, errRateMissing) {
-			missing = appendMissingCurrencies(missing, tx.Amount.Currency())
+			addMissingRate(missing, tx.Amount.Currency(), tx.Date)
 			continue
 		}
 		if err != nil {
@@ -166,12 +165,20 @@ func runwayPeriod(asOf domain.Date, monthStartDay int) (domain.Period, error) {
 	return domain.NewPeriod(start, end)
 }
 
-func appendMissingCurrencies(missing []domain.Currency, additions ...domain.Currency) []domain.Currency {
-	for _, currency := range additions {
-		if slices.Contains(missing, currency) {
-			continue
-		}
-		missing = append(missing, currency)
+func mergeMissingRates(first, second map[domain.Currency]domain.Date) map[domain.Currency]domain.Date {
+	merged := make(map[domain.Currency]domain.Date, len(first)+len(second))
+	for currency, date := range first {
+		merged[currency] = date
 	}
-	return missing
+	for currency, date := range second {
+		addMissingRate(merged, currency, date)
+	}
+	return merged
+}
+
+func addMissingRate(missing map[domain.Currency]domain.Date, currency domain.Currency, date domain.Date) {
+	current, ok := missing[currency]
+	if !ok || date.Before(current) {
+		missing[currency] = date
+	}
 }

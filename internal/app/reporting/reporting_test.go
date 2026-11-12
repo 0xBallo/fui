@@ -297,10 +297,10 @@ func TestRunwayFailsWhenFXRateMissing(t *testing.T) {
 	if got := fmt.Sprint(de.Details["currencies"]); got != "[USD]" {
 		t.Fatalf("currencies = %s, want [USD]", got)
 	}
-	if got := fmt.Sprint(de.Details["date"]); got != "2026-11-15" {
-		t.Fatalf("date = %s, want 2026-11-15", got)
+	if got := fmt.Sprint(de.Details["date"]); got != "2026-08-01" {
+		t.Fatalf("date = %s, want 2026-08-01", got)
 	}
-	want := "missing exchange rate for USD on 2026-11-15 (set one with: fui fx set USD <rate> --date 2026-11-15)"
+	want := "missing exchange rate for USD on 2026-08-01 (set one with: fui fx set USD <rate> --date 2026-08-01)"
 	if de.Message != want {
 		t.Fatalf("message = %q, want %q", de.Message, want)
 	}
@@ -341,6 +341,102 @@ func TestRunwayCollectsAllMissingFXCurrencies(t *testing.T) {
 	}
 	if got := fmt.Sprint(de.Details["currencies"]); got != "[JPY USD]" {
 		t.Fatalf("currencies = %s, want [JPY USD]", got)
+	}
+}
+
+func TestRunwayMissingRateUsesEarliestMovementDate(t *testing.T) {
+	useCase, err := NewRunway(&fakeSource{
+		accounts: []domain.Account{
+			account(t, 1, "USD wallet", domain.AccountCash, "USD", false),
+		},
+		balances: map[domain.AccountID]domain.Money{
+			1: money(t, 10_000, "USD"),
+		},
+		transactions: []domain.Transaction{
+			makeTx(t, 1, date(t, 2026, 5, 1), -10_000, "USD", domain.KindPayment, 0),
+			makeTx(t, 1, date(t, 2026, 8, 1), -10_000, "USD", domain.KindPayment, 0),
+			makeTx(t, 1, date(t, 2026, 9, 1), -10_000, "USD", domain.KindPayment, 0),
+			makeTx(t, 1, date(t, 2026, 10, 1), -10_000, "USD", domain.KindPayment, 0),
+		},
+	}, fixedClock{now: time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = useCase.Run(context.Background(), RunwayParams{
+		MonthStartDay: 1,
+		BaseCurrency:  cur(t, "EUR"),
+	})
+	var de *domain.Error
+	if !errors.As(err, &de) {
+		t.Fatalf("err = %v, want domain.Error", err)
+	}
+	if de.Code != "rate_missing" {
+		t.Fatalf("code = %q, want rate_missing", de.Code)
+	}
+	if got := fmt.Sprint(de.Details["date"]); got != "2026-05-01" {
+		t.Fatalf("date = %s, want 2026-05-01", got)
+	}
+	if !strings.Contains(de.Message, "--date 2026-05-01") {
+		t.Fatalf("message = %q, want hint with earliest movement date", de.Message)
+	}
+}
+
+func TestSpendingReturnsRateMissingWithAllCurrencies(t *testing.T) {
+	useCase, err := NewSpending(&fakeSource{
+		transactions: []domain.Transaction{
+			makeTx(t, 1, date(t, 2026, 5, 1), -10_000, "USD", domain.KindPayment, 0),
+			makeTx(t, 1, date(t, 2026, 9, 1), -10_000, "JPY", domain.KindPayment, 0),
+		},
+	}, fixedClock{now: time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = useCase.Run(context.Background(), SpendingParams{
+		Period:       period(t, date(t, 2026, 5, 1), date(t, 2026, 11, 30)),
+		BaseCurrency: cur(t, "EUR"),
+	})
+	var de *domain.Error
+	if !errors.As(err, &de) {
+		t.Fatalf("err = %v, want domain.Error", err)
+	}
+	if de.Code != "rate_missing" {
+		t.Fatalf("code = %q, want rate_missing", de.Code)
+	}
+	if got := fmt.Sprint(de.Details["currencies"]); got != "[JPY USD]" {
+		t.Fatalf("currencies = %s, want [JPY USD]", got)
+	}
+	if got := fmt.Sprint(de.Details["date"]); got != "2026-05-01" {
+		t.Fatalf("date = %s, want 2026-05-01", got)
+	}
+}
+
+func TestCashFlowReturnsRateMissingWithAllCurrencies(t *testing.T) {
+	useCase, err := NewCashFlow(&fakeSource{
+		transactions: []domain.Transaction{
+			makeTx(t, 1, date(t, 2026, 5, 1), -10_000, "USD", domain.KindPayment, 0),
+			makeTx(t, 1, date(t, 2026, 10, 1), -10_000, "JPY", domain.KindPayment, 0),
+		},
+	}, fixedClock{now: time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = useCase.Run(context.Background(), CashFlowParams{
+		Period:        period(t, date(t, 2026, 5, 1), date(t, 2026, 11, 30)),
+		MonthStartDay: 1,
+		BaseCurrency:  cur(t, "EUR"),
+	})
+	var de *domain.Error
+	if !errors.As(err, &de) {
+		t.Fatalf("err = %v, want domain.Error", err)
+	}
+	if de.Code != "rate_missing" {
+		t.Fatalf("code = %q, want rate_missing", de.Code)
+	}
+	if got := fmt.Sprint(de.Details["currencies"]); got != "[JPY USD]" {
+		t.Fatalf("currencies = %s, want [JPY USD]", got)
+	}
+	if got := fmt.Sprint(de.Details["date"]); got != "2026-05-01" {
+		t.Fatalf("date = %s, want 2026-05-01", got)
 	}
 }
 

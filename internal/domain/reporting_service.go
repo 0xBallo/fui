@@ -1,12 +1,16 @@
 package domain
 
 import (
+	"errors"
 	"fmt"
 	"slices"
+	"strings"
 )
 
 // RateLookup returns the rate from one currency to another on a date.
 type RateLookup func(from Currency, to Currency, at Date) (Rate, error)
+
+const codeRateMissing Code = "rate_missing"
 
 // CategoryTotal is one line of spending grouped by category.
 type CategoryTotal struct {
@@ -30,9 +34,14 @@ func SpendingByCategory(period Period, transactions []Transaction, base Currency
 	}
 	totals := map[CategoryID]Money{}
 	total := Money{cur: base}
+	missing := newMissingRateTracker()
 	for _, transaction := range transactions {
 		include, converted, err := includeAndConvert(transaction, period, base, rateLookup)
 		if err != nil {
+			if isRateMissing(err) {
+				missing.add(transaction.Amount.Currency(), transaction.Date)
+				continue
+			}
 			return nil, Money{}, err
 		}
 		if !include || converted.Sign() >= 0 {
@@ -57,6 +66,9 @@ func SpendingByCategory(period Period, transactions []Transaction, base Currency
 			return nil, Money{}, err
 		}
 	}
+	if missing.hasAny() {
+		return nil, Money{}, missing.err()
+	}
 	return flattenCategoryTotals(totals), total, nil
 }
 
@@ -69,9 +81,14 @@ func CashFlowByMonth(period Period, monthStartDay int, transactions []Transactio
 	if err != nil {
 		return nil, err
 	}
+	missing := newMissingRateTracker()
 	for _, transaction := range transactions {
 		include, converted, err := includeAndConvert(transaction, period, base, rateLookup)
 		if err != nil {
+			if isRateMissing(err) {
+				missing.add(transaction.Amount.Currency(), transaction.Date)
+				continue
+			}
 			return nil, err
 		}
 		if !include {
@@ -99,6 +116,9 @@ func CashFlowByMonth(period Period, monthStartDay int, transactions []Transactio
 			return nil, err
 		}
 		months[month.From()] = line
+	}
+	if missing.hasAny() {
+		return nil, missing.err()
 	}
 	return flattenCashFlow(months), nil
 }
@@ -206,4 +226,62 @@ func flattenCashFlow(months map[Date]CashFlowMonth) []CashFlowMonth {
 		rows = append(rows, months[key])
 	}
 	return rows
+}
+
+func isRateMissing(err error) bool {
+	var domainErr *Error
+	return errors.As(err, &domainErr) && domainErr.Code == codeRateMissing
+}
+
+type missingRateTracker struct {
+	earliestByCurrency map[Currency]Date
+}
+
+func newMissingRateTracker() missingRateTracker {
+	return missingRateTracker{earliestByCurrency: map[Currency]Date{}}
+}
+
+func (tracker missingRateTracker) hasAny() bool {
+	return len(tracker.earliestByCurrency) > 0
+}
+
+func (tracker missingRateTracker) add(currency Currency, date Date) {
+	if date.IsZero() || currency.IsZero() {
+		return
+	}
+	earliest, ok := tracker.earliestByCurrency[currency]
+	if !ok || date.Before(earliest) {
+		tracker.earliestByCurrency[currency] = date
+	}
+}
+
+func (tracker missingRateTracker) err() error {
+	codes := make([]string, 0, len(tracker.earliestByCurrency))
+	currencyDates := make(map[string]string, len(tracker.earliestByCurrency))
+	earliest := Date{}
+	for currency, date := range tracker.earliestByCurrency {
+		code := currency.Code()
+		codes = append(codes, code)
+		currencyDates[code] = date.String()
+		if earliest.IsZero() || date.Before(earliest) {
+			earliest = date
+		}
+	}
+	slices.Sort(codes)
+	verb, hintCurrency := "rate", codes[0]
+	if len(codes) > 1 {
+		verb, hintCurrency = "rates", "<CURRENCY>"
+	}
+	return &Error{
+		Code: codeRateMissing,
+		Message: fmt.Sprintf(
+			"missing exchange %s for %s on %s (set one with: fui fx set %s <rate> --date %s)",
+			verb, strings.Join(codes, ", "), earliest, hintCurrency, earliest,
+		),
+		Details: map[string]any{
+			"currencies":     codes,
+			"date":           earliest.String(),
+			"currency_dates": currencyDates,
+		},
+	}
 }
