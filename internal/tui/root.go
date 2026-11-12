@@ -39,11 +39,15 @@ type UseCases interface {
 }
 
 // Config holds the user-facing settings Root applies: the locale used to format amounts and
-// dates, the theme name ("default" or "high-contrast"), and the first day of the accounting month
-// (1..31, see domain.MonthPeriod) used by the dashboard's spending and runway reports.
+// dates, the theme ("auto" by default, detecting the terminal background; otherwise one of the
+// Catppuccin flavors, "terminal", or "high-contrast"), the light/dark flavors "auto" picks
+// between, and the first day of the accounting month (1..31, see domain.MonthPeriod) used by the
+// dashboard's spending and runway reports.
 type Config struct {
 	Locale        domain.Locale
 	Theme         string
+	ThemeLight    string
+	ThemeDark     string
 	MonthStartDay int
 }
 
@@ -67,13 +71,16 @@ type Root struct {
 var _ tea.Model = (*Root)(nil)
 
 // New builds Root over uc, the MVP screens, and cfg. Locale defaults to en-US and Theme to
-// "default" when unset.
+// "auto" when unset; "auto" and "high-contrast" detect the terminal's background with
+// theme.OSCDetector (OSC 11, falling back to COLORFGBG, then assuming a dark background).
 func New(uc UseCases, cfg Config) *Root {
 	loc := cfg.Locale
 	if loc == "" {
 		loc = domain.LocaleENUS
 	}
-	th := theme.ByName(cfg.Theme)
+	th := theme.Resolve(theme.Config{
+		Theme: cfg.Theme, ThemeLight: cfg.ThemeLight, ThemeDark: cfg.ThemeDark,
+	}, theme.OSCDetector{})
 	r := &Root{loc: loc, th: th, km: DefaultKeyMap()}
 	r.tabs[screens.TabDashboard] = dashboard.New(uc, loc, th, cfg.MonthStartDay)
 	r.tabs[screens.TabTransactions] = transactions.New(uc, loc, th)

@@ -1,13 +1,53 @@
-// Package theme defines the visual styling and palettes for the TUI, supporting
-// standard adaptive terminal palettes and an accessible high-contrast variant.
+// Package theme defines the visual styling and color palettes for the TUI: the four Catppuccin
+// flavors (Latte, Frappé, Macchiato, Mocha), a 16-color "terminal" fallback, and an accessible
+// "high-contrast" variant. Components never reference palette colors directly; they render
+// through the semantic Tokens this package maps onto each flavor (see "Token semantici" in the
+// technical spec), so a new flavor or a palette tweak never touches screen code.
 package theme
 
 import "github.com/charmbracelet/lipgloss"
 
-// Theme encapsulates lipgloss styles for UI elements to ensure consistent
-// presentation across screens and components.
+// Tokens are the semantic color roles every theme must define, independent of any particular
+// Catppuccin flavor. Screens and components never see Tokens directly: they use the lipgloss
+// styles in Theme, which are built from Tokens once per theme.
+type Tokens struct {
+	// Base, Surface and Selection are background roles: the terminal background, panels, and the
+	// highlighted row.
+	Base      lipgloss.Color
+	Surface   lipgloss.Color
+	Selection lipgloss.Color
+	// Text, Muted and Border are foreground roles for body text, secondary text, and borders.
+	Text   lipgloss.Color
+	Muted  lipgloss.Color
+	Border lipgloss.Color
+	// Accent marks the active screen, focus, and titles.
+	Accent lipgloss.Color
+	// Income and Expense color inflows and outflows; always paired with a sign, never the only
+	// signal.
+	Income  lipgloss.Color
+	Expense lipgloss.Color
+	// Warning and Over mark budgets near or past their threshold; always paired with a label.
+	Warning lipgloss.Color
+	Over    lipgloss.Color
+	// Pending and Reconciled mark transaction states; always paired with a symbol.
+	Pending    lipgloss.Color
+	Reconciled lipgloss.Color
+	// Series1..Series8 color chart and sparkline series.
+	Series1 lipgloss.Color
+	Series2 lipgloss.Color
+	Series3 lipgloss.Color
+	Series4 lipgloss.Color
+	Series5 lipgloss.Color
+	Series6 lipgloss.Color
+	Series7 lipgloss.Color
+	Series8 lipgloss.Color
+}
+
+// Theme encapsulates lipgloss styles for UI elements to ensure consistent presentation across
+// screens and components. Every style is built from Tokens so no component needs its own colors.
 type Theme struct {
 	Name        string
+	Tokens      Tokens
 	Base        lipgloss.Style
 	Title       lipgloss.Style
 	Header      lipgloss.Style
@@ -28,76 +68,29 @@ type Theme struct {
 	BarFill     lipgloss.Style
 }
 
-// Default provides adaptive colors adjusting to light and dark terminal backgrounds.
-func Default() Theme {
-	border := lipgloss.AdaptiveColor{Light: "#767676", Dark: "#555555"}
-	accent := lipgloss.AdaptiveColor{Light: "#0284C7", Dark: "#38BDF8"}
-	fg := lipgloss.AdaptiveColor{Light: "#1F2937", Dark: "#F3F4F6"}
-	muted := lipgloss.AdaptiveColor{Light: "#6B7280", Dark: "#9CA3AF"}
-	pos := lipgloss.AdaptiveColor{Light: "#059669", Dark: "#34D399"}
-	neg := lipgloss.AdaptiveColor{Light: "#DC2626", Dark: "#F87171"}
-	warn := lipgloss.AdaptiveColor{Light: "#D97706", Dark: "#FBBF24"}
-	selBg := lipgloss.AdaptiveColor{Light: "#E0E7FF", Dark: "#1E293B"}
-
+// fromTokens builds every Theme style from t, the only place in the package that wires a
+// semantic token to a concrete lipgloss property.
+func fromTokens(name string, t Tokens) Theme {
 	return Theme{
-		Name:        "default",
-		Base:        lipgloss.NewStyle().Foreground(fg),
-		Title:       lipgloss.NewStyle().Bold(true).Foreground(accent),
-		Header:      lipgloss.NewStyle().Bold(true).Foreground(fg),
-		ActiveTab:   lipgloss.NewStyle().Bold(true).Foreground(accent).Underline(true),
-		InactiveTab: lipgloss.NewStyle().Foreground(muted),
-		DisabledTab: lipgloss.NewStyle().Foreground(muted).Faint(true),
-		Border:      lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(border),
-		Selected:    lipgloss.NewStyle().Background(selBg).Bold(true),
-		Muted:       lipgloss.NewStyle().Foreground(muted),
-		Positive:    lipgloss.NewStyle().Foreground(pos),
-		Negative:    lipgloss.NewStyle().Foreground(neg),
-		Warning:     lipgloss.NewStyle().Foreground(warn),
-		Error:       lipgloss.NewStyle().Bold(true).Foreground(neg),
-		StatusBar:   lipgloss.NewStyle().Foreground(muted),
-		HelpKey:     lipgloss.NewStyle().Bold(true).Foreground(accent),
-		HelpDesc:    lipgloss.NewStyle().Foreground(muted),
-		Dialog:      lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(accent).Padding(1, 2),
-		BarFill:     lipgloss.NewStyle().Foreground(accent),
+		Name:        name,
+		Tokens:      t,
+		Base:        lipgloss.NewStyle().Foreground(t.Text),
+		Title:       lipgloss.NewStyle().Bold(true).Foreground(t.Accent),
+		Header:      lipgloss.NewStyle().Bold(true).Foreground(t.Text),
+		ActiveTab:   lipgloss.NewStyle().Bold(true).Foreground(t.Accent).Underline(true),
+		InactiveTab: lipgloss.NewStyle().Foreground(t.Muted),
+		DisabledTab: lipgloss.NewStyle().Foreground(t.Muted).Faint(true),
+		Border:      lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(t.Border),
+		Selected:    lipgloss.NewStyle().Background(t.Selection).Bold(true),
+		Muted:       lipgloss.NewStyle().Foreground(t.Muted),
+		Positive:    lipgloss.NewStyle().Foreground(t.Income),
+		Negative:    lipgloss.NewStyle().Foreground(t.Expense),
+		Warning:     lipgloss.NewStyle().Foreground(t.Warning),
+		Error:       lipgloss.NewStyle().Bold(true).Foreground(t.Expense),
+		StatusBar:   lipgloss.NewStyle().Foreground(t.Muted),
+		HelpKey:     lipgloss.NewStyle().Bold(true).Foreground(t.Accent),
+		HelpDesc:    lipgloss.NewStyle().Foreground(t.Muted),
+		Dialog:      lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(t.Accent).Padding(1, 2),
+		BarFill:     lipgloss.NewStyle().Foreground(t.Series1),
 	}
-}
-
-// HighContrast provides maximum contrast for accessibility in constrained lighting or vision needs.
-func HighContrast() Theme {
-	white := lipgloss.Color("#FFFFFF")
-	black := lipgloss.Color("#000000")
-	yellow := lipgloss.Color("#FFFF00")
-	cyan := lipgloss.Color("#00FFFF")
-	green := lipgloss.Color("#00FF00")
-	red := lipgloss.Color("#FF5555")
-
-	return Theme{
-		Name:        "high-contrast",
-		Base:        lipgloss.NewStyle().Foreground(white),
-		Title:       lipgloss.NewStyle().Bold(true).Foreground(yellow),
-		Header:      lipgloss.NewStyle().Bold(true).Foreground(white).Underline(true),
-		ActiveTab:   lipgloss.NewStyle().Bold(true).Foreground(yellow).Reverse(true),
-		InactiveTab: lipgloss.NewStyle().Foreground(white),
-		DisabledTab: lipgloss.NewStyle().Foreground(white).Faint(true),
-		Border:      lipgloss.NewStyle().Border(lipgloss.ThickBorder()).BorderForeground(white),
-		Selected:    lipgloss.NewStyle().Background(yellow).Foreground(black).Bold(true),
-		Muted:       lipgloss.NewStyle().Foreground(white),
-		Positive:    lipgloss.NewStyle().Bold(true).Foreground(green),
-		Negative:    lipgloss.NewStyle().Bold(true).Foreground(red),
-		Warning:     lipgloss.NewStyle().Bold(true).Foreground(yellow),
-		Error:       lipgloss.NewStyle().Bold(true).Background(red).Foreground(white),
-		StatusBar:   lipgloss.NewStyle().Foreground(white),
-		HelpKey:     lipgloss.NewStyle().Bold(true).Foreground(cyan),
-		HelpDesc:    lipgloss.NewStyle().Foreground(white),
-		Dialog:      lipgloss.NewStyle().Border(lipgloss.DoubleBorder()).BorderForeground(yellow).Padding(1, 2),
-		BarFill:     lipgloss.NewStyle().Foreground(cyan),
-	}
-}
-
-// ByName returns the appropriate theme matching the requested configuration.
-func ByName(name string) Theme {
-	if name == "high-contrast" {
-		return HighContrast()
-	}
-	return Default()
 }
