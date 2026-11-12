@@ -18,6 +18,7 @@ const (
 	DefaultBackupKeep    = 10
 	DefaultTimeout       = 120 * time.Second
 	DefaultLogLevel      = "warn"
+	DefaultBudgetMode    = BudgetModeCap
 )
 
 // Defaults returns a new Config instance initialized with code-defined defaults.
@@ -34,6 +35,9 @@ func Defaults() Config {
 		ThemeDark:     DefaultThemeDark,
 		Modules: ModulesConfig{
 			Enabled: defaultModules.IDs(),
+		},
+		Budget: BudgetConfig{
+			Mode: DefaultBudgetMode,
 		},
 		Backup: BackupConfig{
 			Keep: DefaultBackupKeep,

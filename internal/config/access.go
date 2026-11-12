@@ -34,6 +34,8 @@ func (c *Config) Get(key string) (string, error) {
 		return c.ThemeDark, nil
 	case "modules.enabled":
 		return joinModuleIDs(c.Modules.Enabled), nil
+	case "budget.mode":
+		return c.Budget.Mode, nil
 	case "backup.keep":
 		return strconv.Itoa(c.Backup.Keep), nil
 	case "connectors.timeout":
@@ -234,6 +236,12 @@ func (c *Config) setThemeField(key, value string) (bool, error) {
 
 func (c *Config) setComplexField(key, value string) (bool, error) {
 	switch key {
+	case "budget.mode":
+		if err := validateBudgetMode(value); err != nil {
+			return true, err
+		}
+		c.Budget.Mode = value
+		return true, nil
 	case "backup.keep":
 		keep, err := strconv.Atoi(value)
 		if err != nil {

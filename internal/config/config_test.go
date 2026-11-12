@@ -49,6 +49,9 @@ func TestDefaults(t *testing.T) {
 	if cfg.Backup.Keep != 10 {
 		t.Errorf("backup.keep = %d, want 10", cfg.Backup.Keep)
 	}
+	if cfg.Budget.Mode != "cap" {
+		t.Errorf("budget.mode = %q, want cap", cfg.Budget.Mode)
+	}
 	if cfg.Connectors.Timeout.Duration() != 120*time.Second {
 		t.Errorf("connectors.timeout = %v, want 120s", cfg.Connectors.Timeout)
 	}
@@ -266,6 +269,11 @@ func TestInvalidValues(t *testing.T) {
 			wantErr: `"backup.keep"`,
 		},
 		{
+			name:    "invalid budget.mode",
+			toml:    `[budget]` + "\n" + `mode = "rolling"`,
+			wantErr: `"budget.mode"`,
+		},
+		{
 			name:    "invalid timeout negative",
 			toml:    `[connectors]` + "\n" + `timeout = "-10s"`,
 			wantErr: `"connectors.timeout"`,
@@ -468,6 +476,10 @@ func TestGetSetAndPersistence(t *testing.T) {
 	if err != nil || val != "10" {
 		t.Fatalf("Get(backup.keep) = %q, err %v", val, err)
 	}
+	val, err = cfg.Get("budget.mode")
+	if err != nil || val != "cap" {
+		t.Fatalf("Get(budget.mode) = %q, err %v", val, err)
+	}
 	val, err = cfg.Get("modules.enabled")
 	if err != nil || val != "analytics,budget,core,recurring" {
 		t.Fatalf("Get(modules.enabled) = %q, err %v", val, err)
@@ -497,6 +509,9 @@ func TestGetSetAndPersistence(t *testing.T) {
 	}
 	if err := cfg.Set("backup.keep", "15"); err != nil {
 		t.Fatalf("Set(backup.keep) failed: %v", err)
+	}
+	if err := cfg.Set("budget.mode", "envelope"); err != nil {
+		t.Fatalf("Set(budget.mode) failed: %v", err)
 	}
 	if err := cfg.Set("connectors.timeout", "45s"); err != nil {
 		t.Fatalf("Set(connectors.timeout) failed: %v", err)
@@ -586,6 +601,9 @@ func TestGetSetAndPersistence(t *testing.T) {
 	}
 	if reloaded.Backup.Keep != 15 {
 		t.Errorf("reloaded backup.keep = %d, want 15", reloaded.Backup.Keep)
+	}
+	if reloaded.Budget.Mode != "envelope" {
+		t.Errorf("reloaded budget.mode = %q, want envelope", reloaded.Budget.Mode)
 	}
 	if reloaded.Connectors.Timeout.Duration() != 45*time.Second {
 		t.Errorf("reloaded timeout = %v, want 45s", reloaded.Connectors.Timeout)

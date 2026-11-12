@@ -41,6 +41,12 @@ const (
 	WeekStartSunday = "sunday"
 )
 
+// Supported budget modes.
+const (
+	BudgetModeCap      = "cap"
+	BudgetModeEnvelope = "envelope"
+)
+
 // Duration wraps time.Duration to provide TOML text marshaling and unmarshaling.
 type Duration time.Duration
 
@@ -118,6 +124,12 @@ type ModulesConfig struct {
 	Enabled []module.ID `toml:"enabled"`
 }
 
+// BudgetConfig holds the budget module's settings.
+type BudgetConfig struct {
+	// Mode selects how budgets are evaluated: "cap" (spending caps) or "envelope".
+	Mode string `toml:"mode"`
+}
+
 // Config represents the complete configuration and runtime environment of FUI.
 type Config struct {
 	// Resolved paths and operational options (not written to TOML).
@@ -141,6 +153,7 @@ type Config struct {
 	ThemeLight    string           `toml:"theme_light"`
 	ThemeDark     string           `toml:"theme_dark"`
 	Modules       ModulesConfig    `toml:"modules"`
+	Budget        BudgetConfig     `toml:"budget"`
 	Backup        BackupConfig     `toml:"backup"`
 	Connectors    ConnectorsConfig `toml:"connectors"`
 	Import        ImportConfig     `toml:"import"`

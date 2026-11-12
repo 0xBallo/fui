@@ -35,6 +35,9 @@ func (c *Config) Validate() error {
 	if err := validateModulesEnabled(c.Modules.Enabled); err != nil {
 		return err
 	}
+	if err := validateBudgetMode(c.Budget.Mode); err != nil {
+		return err
+	}
 	if err := validateBackupKeep(c.Backup.Keep); err != nil {
 		return err
 	}
@@ -101,6 +104,15 @@ func validateThemeFlavor(key, value string) error {
 
 func allThemes() []string {
 	return []string{ThemeAuto, ThemeLatte, ThemeFrappe, ThemeMacchiato, ThemeMocha, ThemeTerminal, ThemeHighContrast}
+}
+
+func validateBudgetMode(mode string) error {
+	switch mode {
+	case BudgetModeCap, BudgetModeEnvelope:
+		return nil
+	default:
+		return fmt.Errorf("invalid value for key %q: %q (allowed: %s, %s)", "budget.mode", mode, BudgetModeCap, BudgetModeEnvelope)
+	}
 }
 
 func validateBackupKeep(keep int) error {
