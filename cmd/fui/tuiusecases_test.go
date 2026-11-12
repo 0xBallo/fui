@@ -6,9 +6,11 @@ import (
 	"time"
 
 	"github.com/0xballo/fui/internal/app/reporting"
+	"github.com/0xballo/fui/internal/cli"
 	"github.com/0xballo/fui/internal/clock"
 	"github.com/0xballo/fui/internal/config"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 )
 
 // emptySource is a reporting.Source over an archive with no data.
@@ -72,5 +74,23 @@ func TestTUIUseCasesForwardReports(t *testing.T) {
 	}
 	if len(res.Rows) != 0 {
 		t.Fatalf("Spending rows = %d, want 0", len(res.Rows))
+	}
+}
+
+// TestTUIConfigWiresV02Screens checks the composition root hands the TUI every v0.2 use case, and
+// that the module set comes from the configuration.
+func TestTUIConfigWiresV02Screens(t *testing.T) {
+	cfg := config.Defaults()
+	eur, err := domain.ParseCurrency("EUR")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tc := tuiConfig(&cfg, &cli.Deps{}, nil, clock.NewFixed(time.Now()), eur)
+	if tc.Budget == nil || tc.Report == nil || tc.Importer == nil || tc.Settings == nil ||
+		tc.ModuleConfig == nil || tc.ThemeConfig == nil {
+		t.Fatalf("tuiConfig left a v0.2 port unset: %+v", tc)
+	}
+	if !tc.Modules.Has(module.Budget) {
+		t.Fatalf("default modules should include budget: %v", tc.Modules.IDs())
 	}
 }

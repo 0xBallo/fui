@@ -32,6 +32,7 @@ import (
 	"github.com/0xballo/fui/internal/connector"
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/logging"
+	"github.com/0xballo/fui/internal/module"
 	"github.com/0xballo/fui/internal/store/sqlite"
 	"github.com/0xballo/fui/internal/tui"
 )
@@ -159,12 +160,47 @@ func wireStore(ctx context.Context, cfg *config.Config, appClock app.Clock, deps
 	deps.Recurring = recurring.New(store, appClock, store, recurring.Config{Locale: domain.Locale(cfg.Locale)})
 	deps.Loans = lending.New(store, appClock, store, lending.Config{Locale: domain.Locale(cfg.Locale)})
 	deps.RunTUI = func(ctx context.Context) error {
-		return tui.Run(ctx, newTUIUseCases(deps.Service, rep), tui.Config{
-			Locale: domain.Locale(cfg.Locale), Theme: cfg.Theme,
-			ThemeLight: cfg.ThemeLight, ThemeDark: cfg.ThemeDark, MonthStartDay: cfg.MonthStartDay,
-		})
+		return tui.Run(ctx, newTUIUseCases(deps.Service, rep), tuiConfig(cfg, deps, store, appClock, baseCurrency))
 	}
 	return store.Close, nil
+}
+
+// tuiConfig builds the TUI configuration: the MVP settings plus the v0.2 screens' use cases. The
+// budgeting and analytics services are rebuilt per call from cfg, which the Settings screen updates
+// in memory, so enabling or disabling a module takes effect without restarting the TUI.
+func tuiConfig(cfg *config.Config, deps *cli.Deps, store *sqlite.Store, clk app.Clock, base domain.Currency) tui.Config {
+	modules := func() module.Set {
+		set, err := cfg.ModulesEnabled()
+		if err != nil {
+			return module.Default()
+		}
+		return set
+	}
+	loc := domain.Locale(cfg.Locale)
+	set := modules()
+	return tui.Config{
+		Locale: loc, Theme: cfg.Theme, ThemeLight: cfg.ThemeLight, ThemeDark: cfg.ThemeDark,
+		MonthStartDay: cfg.MonthStartDay, Modules: set,
+		Budget: budgetUseCases{build: func() *budgeting.Service {
+			return budgeting.New(store, clk, budgeting.Config{
+				Locale: loc, BaseCurrency: base, MonthStartDay: cfg.MonthStartDay,
+				Mode: domain.BudgetMode(cfg.Budget.Mode), Modules: modules(),
+			})
+		}},
+		Report: reportUseCases{
+			analytics: func() *reporting.Analytics {
+				return reporting.NewAnalytics(store, clk, store, reporting.Config{
+					Locale: loc, BaseCurrency: base, MonthStartDay: cfg.MonthStartDay,
+					HorizonDays: cfg.Forecast.Horizon, Modules: modules(),
+				})
+			},
+			svc: deps.Service, importing: deps.Importing,
+		},
+		Importer:     importUseCases{Service: deps.Importing, svc: deps.Service},
+		Settings:     deps.Service,
+		ModuleConfig: cfg,
+		ThemeConfig:  cfg,
+	}
 }
 
 // tuiUseCases adapts app.Service and the reporting use cases to internal/tui.UseCases: Service
