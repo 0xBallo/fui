@@ -56,3 +56,13 @@ effort ≤ medium, no flagship models.
 | 10 | Coordinator review of each branch, fixes sent back, merge, CI green on GitHub | — | — | — | — |
 
 Task files for waves 7–9 are written when the wave starts. The v0.2 plan is in `docs/PLAN-v0.2.md`.
+
+### Outcome (2026-11-12)
+
+All tasks T12–T21 merged on `main` after coordinator review (findings sent back and fixed by the owners).
+Agent changes vs the table: T15 ran on Copilot gpt-5.3-codex (Antigravity quota exhausted until ~2026-11-19);
+T21 was split into T21a (skill + ADRs, Copilot) and T21 (e2e + coverage, Claude). Coverage gate: total 86.0%,
+`internal/domain` 92.6%. Known MVP gaps: `--payee` filter has no payees table yet (v0.2, V01/V07); no non-core
+command exists yet, so `module_disabled` and per-preset `help --json` differences are only exercised from v0.2;
+`reset --keep-settings` keeps categories only (tags/rules/profiles are v0.2; connector associations reference
+deleted accounts).
