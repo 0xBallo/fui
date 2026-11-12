@@ -58,6 +58,26 @@ type ImportBatch struct {
 	UpdatedAt    string
 }
 
+type Payee struct {
+	ID        int64
+	Name      string
+	CreatedAt string
+	UpdatedAt string
+}
+
+type PayeeAlias struct {
+	ID      int64
+	PayeeID int64
+	Alias   string
+}
+
+type Tag struct {
+	ID        int64
+	Name      string
+	CreatedAt string
+	UpdatedAt string
+}
+
 type Transaction struct {
 	ID              int64
 	AccountID       int64
@@ -79,6 +99,19 @@ type Transaction struct {
 	CreatedAt       string
 	UpdatedAt       string
 	SearchText      string
+}
+
+type TransactionSplit struct {
+	ID            int64
+	TransactionID int64
+	CategoryID    int64
+	AmountMinor   int64
+	Note          string
+}
+
+type TransactionTag struct {
+	TransactionID int64
+	TagID         int64
 }
 
 type TransactionsFt struct {

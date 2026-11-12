@@ -62,6 +62,26 @@ CREATE TABLE connector_account_refs (
     UNIQUE (connector, ref)
 ) STRICT;
 
+CREATE TABLE tags (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+) STRICT;
+
+CREATE TABLE payees (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+) STRICT;
+
+CREATE TABLE payee_aliases (
+    id INTEGER PRIMARY KEY,
+    payee_id INTEGER NOT NULL REFERENCES payees (id) ON DELETE CASCADE,
+    alias TEXT NOT NULL UNIQUE COLLATE NOCASE
+) STRICT;
+
 CREATE TABLE transactions (
     id INTEGER PRIMARY KEY,
     account_id INTEGER NOT NULL REFERENCES accounts (id) ON DELETE RESTRICT,
@@ -70,7 +90,7 @@ CREATE TABLE transactions (
     value_date TEXT CHECK (value_date IS NULL OR length(value_date) = 10),
     amount_minor INTEGER NOT NULL,
     currency TEXT NOT NULL CHECK (length(currency) = 3),
-    payee_id INTEGER,
+    payee_id INTEGER REFERENCES payees (id) ON DELETE RESTRICT,
     description TEXT NOT NULL DEFAULT '',
     category_id INTEGER REFERENCES categories (id) ON DELETE RESTRICT,
     notes TEXT NOT NULL DEFAULT '',
@@ -94,6 +114,8 @@ CREATE INDEX idx_transactions_fingerprint
     ON transactions (fingerprint);
 CREATE INDEX idx_transactions_date_id
     ON transactions (date, id);
+CREATE INDEX idx_transactions_payee
+    ON transactions (payee_id);
 
 CREATE VIRTUAL TABLE transactions_fts USING fts5 (
     search_text,
@@ -101,3 +123,22 @@ CREATE VIRTUAL TABLE transactions_fts USING fts5 (
     content_rowid = 'id',
     tokenize = 'trigram'
 );
+
+CREATE TABLE transaction_tags (
+    transaction_id INTEGER NOT NULL REFERENCES transactions (id) ON DELETE CASCADE,
+    tag_id INTEGER NOT NULL REFERENCES tags (id) ON DELETE CASCADE,
+    PRIMARY KEY (transaction_id, tag_id)
+) STRICT, WITHOUT ROWID;
+
+CREATE INDEX idx_transaction_tags_tag ON transaction_tags (tag_id);
+
+CREATE TABLE transaction_splits (
+    id INTEGER PRIMARY KEY,
+    transaction_id INTEGER NOT NULL REFERENCES transactions (id) ON DELETE CASCADE,
+    category_id INTEGER NOT NULL REFERENCES categories (id) ON DELETE RESTRICT,
+    amount_minor INTEGER NOT NULL CHECK (amount_minor <> 0),
+    note TEXT NOT NULL DEFAULT ''
+) STRICT;
+
+CREATE INDEX idx_transaction_splits_transaction ON transaction_splits (transaction_id, id);
+CREATE INDEX idx_transaction_splits_category ON transaction_splits (category_id);

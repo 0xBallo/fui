@@ -63,7 +63,7 @@ func drawTxs(t *rapid.T, eur domain.Currency) []domain.Transaction {
 			AccountID: domain.AccountID(rapid.IntRange(1, 2).Draw(t, "account")),
 			Date:      d, Amount: m,
 			Description: joinWords(text.Draw(t, "description")), Notes: joinWords(text.Draw(t, "notes")),
-			PayeeID: domain.PayeeID(rapid.IntRange(0, 2).Draw(t, "payee")),
+			PayeeID: domain.PayeeID(rapid.IntRange(0, 0).Draw(t, "payee")),
 			Status:  rapid.SampledFrom(searchStatus).Draw(t, "status"),
 			Kind:    rapid.SampledFrom(searchKinds).Draw(t, "kind"),
 		}

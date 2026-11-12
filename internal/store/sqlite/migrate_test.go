@@ -224,3 +224,57 @@ func newMigrateTestStore(t *testing.T) (*Store, *clock.Fixed) {
 	})
 	return store, clk
 }
+
+// TestMigrateFromV3KeepsTransactions runs 0004 on a populated v3 archive: the transactions table is
+// rebuilt (payee FK), so rows, ids and the FTS index must survive and the new constraints must hold.
+func TestMigrateFromV3KeepsTransactions(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "data", "fui.db")
+	ctx := context.Background()
+
+	db := mustOpenRawDB(t, dbPath)
+	migrationsFS, err := fs.Sub(migrationFS, "migrations")
+	if err != nil {
+		t.Fatalf("fs.Sub: %v", err)
+	}
+	provider, err := goose.NewProvider(goose.DialectSQLite3, db, migrationsFS)
+	if err != nil {
+		t.Fatalf("goose.NewProvider: %v", err)
+	}
+	if _, err := provider.UpTo(ctx, 3); err != nil {
+		t.Fatalf("migrate to v3: %v", err)
+	}
+	mustExec(t, db, `INSERT INTO accounts (name, kind, currency, opening_balance_minor, opened_on)
+		VALUES ('Checking', 'checking', 'EUR', 0, '2026-01-01')`)
+	mustExec(t, db, `INSERT INTO transactions (id, account_id, date, amount_minor, currency, payee_id, description, status, kind, search_text)
+		VALUES (7, 1, '2026-01-05', -500, 'EUR', 99, 'Coffee beans', 'booked', 'payment', 'coffee beans')`)
+	mustClose(t, db)
+
+	store, err := Open(ctx, Options{
+		Path: dbPath, BackupDir: filepath.Join(root, "data", "backups"), BackupKeep: 10,
+		Clock: clock.NewFixed(time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC)),
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	var id, amount int64
+	var payee sql.NullInt64
+	var searchText string
+	if err := store.writeDB.QueryRowContext(ctx,
+		"SELECT id, amount_minor, payee_id, search_text FROM transactions").Scan(&id, &amount, &payee, &searchText); err != nil {
+		t.Fatalf("scan migrated transaction: %v", err)
+	}
+	if id != 7 || amount != -500 || payee.Valid || searchText != "coffee beans" {
+		t.Errorf("migrated row = (%d, %d, %v, %q), want (7, -500, NULL, %q)", id, amount, payee, searchText, "coffee beans")
+	}
+	var hits int
+	if err := store.writeDB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM transactions WHERE id IN (SELECT rowid FROM transactions_fts WHERE search_text MATCH '"coffee"')`).Scan(&hits); err != nil || hits != 1 {
+		t.Errorf("fts hits after migration = %d, err %v; want 1", hits, err)
+	}
+	if _, err := store.writeDB.ExecContext(ctx, "UPDATE transactions SET payee_id = 99 WHERE id = 7"); err == nil {
+		t.Error("payee_id referencing a missing payee was accepted, want foreign key failure")
+	}
+}
