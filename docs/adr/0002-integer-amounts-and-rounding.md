@@ -11,7 +11,7 @@ IEEE-754 floating-point types (`float32`, `float64`) cannot accurately represent
 
 1. **Native binary floating point (`float64`):** Built-in and convenient, but inherently imprecise for decimal currency calculations.
 2. **Arbitrary-precision decimal library (e.g. `shopspring/decimal`):** Accurate representation, but adds an external dependency, heap allocations, and substantial runtime performance overhead.
-3. **Scaled integer arithmetic (`int64` minor units) with centralized half-away-from-zero rounding:** Amounts stored as integer minor units (cents), exchange rates scaled to $10^9$, asset quantities scaled to $10^8$, with half-away-from-zero rounding performed at a single centralized point in domain.
+3. **Scaled integer arithmetic (`int64` minor units) with centralized half-away-from-zero rounding:** Amounts stored as integer minor units (cents), exchange rates scaled to $10^9$, asset quantities stored as integer values with per-asset scale (`quantity_scale`), with half-away-from-zero rounding performed at a single centralized point in domain.
 
 ## Decision Outcome
 
