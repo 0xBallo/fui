@@ -42,9 +42,9 @@ jobs:
           make generate
           git diff --exit-code --stat -- . ':!go.sum'
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          version: v2.15.0
       - name: commit message format
         if: github.event_name == 'pull_request'
         run: ./.github/workflows/scripts/check-commits.sh "origin/${{ github.base_ref }}..HEAD"
