@@ -10,7 +10,8 @@ func TestErrorIsMatchesByCode(t *testing.T) {
 	sentinels := map[Code]*Error{
 		CodeAmbiguousName: ErrAmbiguousName, CodeNotFound: ErrNotFound,
 		CodeCurrencyMismatch: ErrCurrencyMismatch, CodeReconciled: ErrReconciled,
-		CodeOverflow: ErrOverflow, CodeInvalidAmount: ErrInvalidAmount,
+		CodeInvalidFilter: ErrInvalidFilter,
+		CodeOverflow:      ErrOverflow, CodeInvalidAmount: ErrInvalidAmount,
 		CodeInvalidDate: ErrInvalidDate, CodeMissingField: ErrMissingField,
 		CodeInvalidValue: ErrInvalidValue, CodeNotEnoughData: ErrNotEnoughData,
 	}

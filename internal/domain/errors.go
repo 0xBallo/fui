@@ -14,6 +14,7 @@ const (
 	CodeNotFound         Code = "not_found"
 	CodeCurrencyMismatch Code = "currency_mismatch"
 	CodeReconciled       Code = "reconciled"
+	CodeInvalidFilter    Code = "invalid_filter"
 	CodeOverflow         Code = "overflow"
 	CodeInvalidAmount    Code = "invalid_amount"
 	CodeInvalidDate      Code = "invalid_date"
@@ -27,7 +28,7 @@ const (
 func Codes() []Code {
 	return []Code{
 		CodeAmbiguousName, CodeNotFound, CodeCurrencyMismatch, CodeReconciled,
-		CodeOverflow, CodeInvalidAmount, CodeInvalidDate, CodeMissingField, CodeInvalidValue,
+		CodeInvalidFilter, CodeOverflow, CodeInvalidAmount, CodeInvalidDate, CodeMissingField, CodeInvalidValue,
 		CodeNotEnoughData,
 	}
 }
@@ -56,6 +57,7 @@ var (
 	ErrNotFound         = &Error{Code: CodeNotFound, Message: "not found"}
 	ErrCurrencyMismatch = &Error{Code: CodeCurrencyMismatch, Message: "currency mismatch"}
 	ErrReconciled       = &Error{Code: CodeReconciled, Message: "transaction is reconciled"}
+	ErrInvalidFilter    = &Error{Code: CodeInvalidFilter, Message: "invalid filter"}
 	ErrOverflow         = &Error{Code: CodeOverflow, Message: "arithmetic overflow"}
 	ErrInvalidAmount    = &Error{Code: CodeInvalidAmount, Message: "invalid amount"}
 	ErrInvalidDate      = &Error{Code: CodeInvalidDate, Message: "invalid date"}
