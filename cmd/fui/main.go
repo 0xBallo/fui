@@ -144,7 +144,8 @@ func wireStore(ctx context.Context, cfg *config.Config, appClock app.Clock, deps
 	})
 	deps.RunTUI = func(ctx context.Context) error {
 		return tui.Run(ctx, newTUIUseCases(deps.Service, rep), tui.Config{
-			Locale: domain.Locale(cfg.Locale), Theme: cfg.Theme, MonthStartDay: cfg.MonthStartDay,
+			Locale: domain.Locale(cfg.Locale), Theme: cfg.Theme,
+			ThemeLight: cfg.ThemeLight, ThemeDark: cfg.ThemeDark, MonthStartDay: cfg.MonthStartDay,
 		})
 	}
 	return store.Close, nil
