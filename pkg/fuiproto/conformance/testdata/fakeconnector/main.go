@@ -142,18 +142,26 @@ func emitRecords(path string, content []byte) error {
 		}
 
 		transactions++
+		tx := &fuiproto.TransactionRecord{
+			Account:     "fake-EUR",
+			ID:          fmt.Sprintf("fake-%03d", lineIndex+1),
+			Date:        date,
+			Amount:      amount,
+			Currency:    "EUR",
+			Description: description,
+			Status:      fuiproto.TransactionStatusBooked,
+			Kind:        fuiproto.TransactionKindPayment,
+		}
+		if amount < 0 {
+			half := amount / 2
+			tx.Splits = []fuiproto.TransactionSplit{
+				{Category: "Shopping", Amount: half, Note: "part 1"},
+				{Category: "Food", Amount: amount - half, Note: "part 2"},
+			}
+		}
 		if err := enc.Encode(fuiproto.Record{
-			Type: fuiproto.RecordTypeTransaction,
-			Transaction: &fuiproto.TransactionRecord{
-				Account:     "fake-EUR",
-				ID:          fmt.Sprintf("fake-%03d", lineIndex+1),
-				Date:        date,
-				Amount:      amount,
-				Currency:    "EUR",
-				Description: description,
-				Status:      fuiproto.TransactionStatusBooked,
-				Kind:        fuiproto.TransactionKindPayment,
-			},
+			Type:        fuiproto.RecordTypeTransaction,
+			Transaction: tx,
 		}); err != nil {
 			return err
 		}

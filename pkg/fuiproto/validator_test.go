@@ -613,6 +613,45 @@ func TestValidateStreamAdditionalBranches(t *testing.T) {
 			},
 			rowContains: "invalid value_date",
 		},
+		{
+			name: "transaction splits need at least two rows",
+			records: []Record{
+				{Type: RecordTypeMeta, Meta: &MetaRecord{Protocol: ProtocolFUI1, Connector: "x", Version: "0.1.0"}},
+				{Type: RecordTypeAccount, Account: &AccountRecord{Ref: "a", Name: "A", Currency: "EUR", Kind: AccountKindChecking}},
+				{Type: RecordTypeTransaction, Transaction: &TransactionRecord{
+					Account: "a", ID: "t", Date: "2026-11-11", Amount: -100, Currency: "EUR", Description: "x", Status: TransactionStatusBooked,
+					Splits: []TransactionSplit{{Category: "Food", Amount: -100}},
+				}},
+				{Type: RecordTypeEnd, End: &EndRecord{Transactions: 1}},
+			},
+			rowContains: "at least 2 rows",
+		},
+		{
+			name: "transaction split row requires category",
+			records: []Record{
+				{Type: RecordTypeMeta, Meta: &MetaRecord{Protocol: ProtocolFUI1, Connector: "x", Version: "0.1.0"}},
+				{Type: RecordTypeAccount, Account: &AccountRecord{Ref: "a", Name: "A", Currency: "EUR", Kind: AccountKindChecking}},
+				{Type: RecordTypeTransaction, Transaction: &TransactionRecord{
+					Account: "a", ID: "t", Date: "2026-11-11", Amount: -100, Currency: "EUR", Description: "x", Status: TransactionStatusBooked,
+					Splits: []TransactionSplit{{Category: "", Amount: -40}, {Category: "Food", Amount: -60}},
+				}},
+				{Type: RecordTypeEnd, End: &EndRecord{Transactions: 1}},
+			},
+			rowContains: "splits[0].category",
+		},
+		{
+			name: "transaction splits must match amount",
+			records: []Record{
+				{Type: RecordTypeMeta, Meta: &MetaRecord{Protocol: ProtocolFUI1, Connector: "x", Version: "0.1.0"}},
+				{Type: RecordTypeAccount, Account: &AccountRecord{Ref: "a", Name: "A", Currency: "EUR", Kind: AccountKindChecking}},
+				{Type: RecordTypeTransaction, Transaction: &TransactionRecord{
+					Account: "a", ID: "t", Date: "2026-11-11", Amount: -100, Currency: "EUR", Description: "x", Status: TransactionStatusBooked,
+					Splits: []TransactionSplit{{Category: "A", Amount: -40}, {Category: "B", Amount: -50}},
+				}},
+				{Type: RecordTypeEnd, End: &EndRecord{Transactions: 1}},
+			},
+			rowContains: "splits sum",
+		},
 	}
 
 	for _, tc := range tests {

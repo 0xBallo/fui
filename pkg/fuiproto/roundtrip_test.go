@@ -53,8 +53,12 @@ func TestRoundTripEncodeDecode(t *testing.T) {
 				},
 				CategoryHint: "groceries",
 				Category:     "food",
-				Tags:         []string{"home"},
-				Notes:        "memo",
+				Splits: []TransactionSplit{
+					{Category: "food", Amount: -1000, Note: "items"},
+					{Category: "household", Amount: -250},
+				},
+				Tags:  []string{"home"},
+				Notes: "memo",
 				Raw: map[string]any{
 					"external_id": "abc",
 				},

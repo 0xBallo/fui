@@ -136,28 +136,36 @@ type OriginalAmount struct {
 	Currency string `json:"currency"`
 }
 
+// TransactionSplit is one split row of a transaction.
+type TransactionSplit struct {
+	Category string `json:"category"`
+	Amount   int64  `json:"amount"`
+	Note     string `json:"note,omitempty"`
+}
+
 // TransactionRecord is the transaction record.
 type TransactionRecord struct {
-	Account          string            `json:"account"`
-	ID               string            `json:"id"`
-	Date             string            `json:"date"`
-	OperationDate    string            `json:"operation_date,omitempty"`
-	ValueDate        string            `json:"value_date,omitempty"`
-	Amount           int64             `json:"amount"`
-	Currency         string            `json:"currency"`
-	Description      string            `json:"description"`
-	Payee            string            `json:"payee,omitempty"`
-	CounterpartyIBAN string            `json:"counterparty_iban,omitempty"`
-	Status           TransactionStatus `json:"status"`
-	Kind             TransactionKind   `json:"kind,omitempty"`
-	Transfer         string            `json:"transfer,omitempty"`
-	Original         *OriginalAmount   `json:"original,omitempty"`
-	BalanceAfter     *int64            `json:"balance_after,omitempty"`
-	CategoryHint     string            `json:"category_hint,omitempty"`
-	Category         string            `json:"category,omitempty"`
-	Tags             []string          `json:"tags,omitempty"`
-	Notes            string            `json:"notes,omitempty"`
-	Raw              map[string]any    `json:"raw,omitempty"`
+	Account          string             `json:"account"`
+	ID               string             `json:"id"`
+	Date             string             `json:"date"`
+	OperationDate    string             `json:"operation_date,omitempty"`
+	ValueDate        string             `json:"value_date,omitempty"`
+	Amount           int64              `json:"amount"`
+	Currency         string             `json:"currency"`
+	Description      string             `json:"description"`
+	Payee            string             `json:"payee,omitempty"`
+	CounterpartyIBAN string             `json:"counterparty_iban,omitempty"`
+	Status           TransactionStatus  `json:"status"`
+	Kind             TransactionKind    `json:"kind,omitempty"`
+	Transfer         string             `json:"transfer,omitempty"`
+	Original         *OriginalAmount    `json:"original,omitempty"`
+	BalanceAfter     *int64             `json:"balance_after,omitempty"`
+	CategoryHint     string             `json:"category_hint,omitempty"`
+	Category         string             `json:"category,omitempty"`
+	Splits           []TransactionSplit `json:"splits,omitempty"`
+	Tags             []string           `json:"tags,omitempty"`
+	Notes            string             `json:"notes,omitempty"`
+	Raw              map[string]any     `json:"raw,omitempty"`
 }
 
 // BalanceRecord is an optional reconciliation balance.

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"strings"
 	"time"
 )
 
@@ -324,6 +325,32 @@ func validateTransaction(record TransactionRecord) string {
 		if record.Original.Currency == "" {
 			return "original currency is required when original is present"
 		}
+	}
+	if msg := validateTransactionSplits(record); msg != "" {
+		return msg
+	}
+	return ""
+}
+
+func validateTransactionSplits(record TransactionRecord) string {
+	if len(record.Splits) == 0 {
+		return ""
+	}
+	if len(record.Splits) < 2 {
+		return fmt.Sprintf("transaction splits requires at least 2 rows, got %d", len(record.Splits))
+	}
+	var sum int64
+	for i, row := range record.Splits {
+		if strings.TrimSpace(row.Category) == "" {
+			return fmt.Sprintf("transaction splits[%d].category is required", i)
+		}
+		if row.Amount == 0 {
+			return fmt.Sprintf("transaction splits[%d].amount must not be zero", i)
+		}
+		sum += row.Amount
+	}
+	if sum != record.Amount {
+		return fmt.Sprintf("transaction splits sum to %d, expected %d", sum, record.Amount)
 	}
 	return ""
 }
