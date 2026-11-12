@@ -22,6 +22,8 @@ var (
 	searchStatus = []domain.TxStatus{domain.StatusPending, domain.StatusBooked, domain.StatusReconciled}
 	// searchPayees[i] is the name of payee i+1; both stores get the same two payees.
 	searchPayees = []string{"Esselunga", "Bar Zürich"}
+	// searchTags[i] is the name of tag i+1; both stores get the same two tags.
+	searchTags = []string{"vacanze", "lavoro"}
 )
 
 // seedSearchRefs creates the rows transactions refer to; both stores assign the same IDs.
@@ -46,6 +48,11 @@ func seedSearchRefs(t *testing.T, s app.Store) {
 		}
 		for _, name := range searchPayees {
 			if _, err := r.Payees().Insert(ctx, domain.Payee{Name: name}); err != nil {
+				return err
+			}
+		}
+		for _, name := range searchTags {
+			if _, err := r.Tags().Insert(ctx, domain.Tag{Name: name}); err != nil {
 				return err
 			}
 		}
@@ -84,6 +91,16 @@ func drawTxs(t *rapid.T, eur domain.Currency) []domain.Transaction {
 	}), 0, 40).Draw(t, "txs")
 }
 
+// drawTxTags draws, for each of n transactions (by position), the subset of tags {1, 2} it
+// carries.
+func drawTxTags(t *rapid.T, n int) [][]domain.TagID {
+	out := make([][]domain.TagID, n)
+	for i := range out {
+		out[i] = subset(t, "txTag"+strconv.Itoa(i), []domain.TagID{1, 2})
+	}
+	return out
+}
+
 func joinWords(w []string) string {
 	out := ""
 	for i, s := range w {
@@ -119,6 +136,7 @@ func drawFilter(t *rapid.T, txs []domain.Transaction) domain.TxFilterSpec {
 		AccountIDs:    subset(t, "acct", []domain.AccountID{1, 2}),
 		CategoryIDs:   subset(t, "cat", []domain.CategoryID{1, 2}),
 		PayeeIDs:      subset(t, "payee", []domain.PayeeID{1, 2}),
+		TagIDs:        subset(t, "tagFilter", []domain.TagID{1, 2}),
 		Statuses:      subset(t, "status", searchStatus),
 		Kinds:         subset(t, "kind", searchKinds),
 		Sort:          rapid.SampledFrom([]domain.TxSort{"", domain.TxSortDate, domain.TxSortAmount, domain.TxSortPayee}).Draw(t, "sort"),
@@ -185,9 +203,8 @@ func fingerprints(rows []domain.Transaction) []string {
 }
 
 // TestPropertySearchMatchesOracle checks the SQL translation of TxFilter against memstore, which
-// runs TxFilter.Match and TxFilter.Less: same rows, same order, same keyset pages. Payee ids and
-// names are covered (filter and search text).
-// TODO(V13): extend with the tag filter once TxFilter has one.
+// runs TxFilter.Match and TxFilter.Less: same rows, same order, same keyset pages. Payee and tag
+// ids and names are covered (filter and search text).
 func TestPropertySearchMatchesOracle(t *testing.T) {
 	store, _ := newTestStore(t)
 	seedSearchRefs(t, store)
@@ -196,6 +213,7 @@ func TestPropertySearchMatchesOracle(t *testing.T) {
 
 	rapid.Check(t, func(rt *rapid.T) {
 		txs := drawTxs(rt, eur)
+		txTags := drawTxTags(rt, len(txs))
 		oracle := memstore.New()
 		seedSearchRefs(t, oracle)
 		for i := range txs {
@@ -212,9 +230,15 @@ func TestPropertySearchMatchesOracle(t *testing.T) {
 						return err
 					}
 				}
-				for _, tx := range txs {
-					if _, err := r.Transactions().Insert(ctx, tx); err != nil {
+				for i, tx := range txs {
+					inserted, err := r.Transactions().Insert(ctx, tx)
+					if err != nil {
 						return err
+					}
+					if len(txTags[i]) > 0 {
+						if err := r.Tags().SetTags(ctx, inserted.ID, txTags[i]); err != nil {
+							return err
+						}
 					}
 				}
 				return nil

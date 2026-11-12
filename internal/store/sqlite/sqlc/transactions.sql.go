@@ -209,6 +209,14 @@ WHERE (?1 = '' OR date >= ?1)
         OR (?19 = 1 AND (date < ?20 OR (date = ?20 AND id > ?21)))
     )
     AND (?22 = 'date' OR ?22 = 'amount' OR ?22 = 'payee')
+    AND (
+        json_array_length(?23) = 0
+        OR EXISTS (
+            SELECT 1 FROM transaction_tags AS tt
+            WHERE tt.transaction_id = transactions.id
+                AND tt.tag_id IN (SELECT value FROM json_each(?23))
+        )
+    )
 ORDER BY
     CASE WHEN ?22 = 'date' AND ?19 = 0 THEN date END ASC,
     CASE WHEN ?22 = 'date' AND ?19 = 1 THEN date END DESC,
@@ -216,8 +224,8 @@ ORDER BY
     CASE WHEN ?22 = 'amount' AND ?19 = 1 THEN amount_minor END DESC,
     id ASC
 LIMIT CASE
-    WHEN ?23 <= 0 THEN -1
-    ELSE ?23
+    WHEN ?24 <= 0 THEN -1
+    ELSE ?24
 END
 `
 
@@ -244,13 +252,15 @@ type ListTransactionsParams struct {
 	AfterDate       string
 	AfterID         int64
 	SortKey         interface{}
+	TagIdsJson      interface{}
 	LimitValue      interface{}
 }
 
 // Translation of domain.TxFilter; text_mode is 0 (none), 1 (instr on search_text) or 2 (FTS5 MATCH).
 // The abs bounds avoid abs(): it overflows on the minimum int64. sqlc does not rewrite named
 // parameters in ORDER BY, so that clause uses the numbers sqlc assigns to @desc (?19) and @sort_key
-// (?22); the payee sort has no key because payees have no names yet (ties fall to id).
+// (?22); the payee sort has no key because payees have no names yet (ties fall to id). tag_ids_json
+// is appended last so it does not shift those numbers; it OR-matches any of the given tags.
 func (q *Queries) ListTransactions(ctx context.Context, arg ListTransactionsParams) ([]Transaction, error) {
 	rows, err := q.db.QueryContext(ctx, listTransactions,
 		arg.FromDate,
@@ -275,6 +285,7 @@ func (q *Queries) ListTransactions(ctx context.Context, arg ListTransactionsPara
 		arg.AfterDate,
 		arg.AfterID,
 		arg.SortKey,
+		arg.TagIdsJson,
 		arg.LimitValue,
 	)
 	if err != nil {

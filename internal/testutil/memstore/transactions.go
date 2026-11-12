@@ -104,7 +104,7 @@ func (t transactions) searchText(tx domain.Transaction) string {
 func (t transactions) List(_ context.Context, f domain.TxFilter, after *app.TxCursor, limit int) ([]domain.Transaction, error) {
 	var out []domain.Transaction
 	for _, tx := range t.st.Txs {
-		if f.Match(tx, t.searchText(tx)) {
+		if f.Match(tx, t.searchText(tx), t.st.TxTags[tx.ID]) {
 			out = append(out, tx)
 		}
 	}

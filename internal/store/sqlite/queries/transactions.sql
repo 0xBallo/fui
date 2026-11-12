@@ -83,7 +83,8 @@ WHERE id = @id;
 -- Translation of domain.TxFilter; text_mode is 0 (none), 1 (instr on search_text) or 2 (FTS5 MATCH).
 -- The abs bounds avoid abs(): it overflows on the minimum int64. sqlc does not rewrite named
 -- parameters in ORDER BY, so that clause uses the numbers sqlc assigns to @desc (?19) and @sort_key
--- (?22); the payee sort has no key because payees have no names yet (ties fall to id).
+-- (?22); the payee sort has no key because payees have no names yet (ties fall to id). tag_ids_json
+-- is appended last so it does not shift those numbers; it OR-matches any of the given tags.
 SELECT
     *
 FROM transactions
@@ -113,6 +114,14 @@ WHERE (@from_date = '' OR date >= @from_date)
         OR (@desc = 1 AND (date < @after_date OR (date = @after_date AND id > @after_id)))
     )
     AND (@sort_key = 'date' OR @sort_key = 'amount' OR @sort_key = 'payee')
+    AND (
+        json_array_length(@tag_ids_json) = 0
+        OR EXISTS (
+            SELECT 1 FROM transaction_tags AS tt
+            WHERE tt.transaction_id = transactions.id
+                AND tt.tag_id IN (SELECT value FROM json_each(@tag_ids_json))
+        )
+    )
 ORDER BY
     CASE WHEN ?22 = 'date' AND ?19 = 0 THEN date END ASC,
     CASE WHEN ?22 = 'date' AND ?19 = 1 THEN date END DESC,

@@ -204,24 +204,37 @@ func toUpdateTransactionParams(t domain.Transaction, searchText string) gen.Upda
 // ftsMinRunes is the shortest text the trigram index can match; shorter texts use instr.
 const ftsMinRunes = 3
 
+// filterJSON holds the JSON-encoded slice filters passed to the generated query.
+type filterJSON struct {
+	accountIDs, categoryIDs, payeeIDs, tagIDs, statuses, kinds string
+}
+
+func encodeFilterJSON(f domain.TxFilter) (filterJSON, error) {
+	var j filterJSON
+	var err error
+	if j.accountIDs, err = encodeIDSlice(f.AccountIDs()); err != nil {
+		return filterJSON{}, err
+	}
+	if j.categoryIDs, err = encodeIDSlice(f.CategoryIDs()); err != nil {
+		return filterJSON{}, err
+	}
+	if j.payeeIDs, err = encodeIDSlice(f.PayeeIDs()); err != nil {
+		return filterJSON{}, err
+	}
+	if j.tagIDs, err = encodeIDSlice(f.TagIDs()); err != nil {
+		return filterJSON{}, err
+	}
+	if j.statuses, err = encodeJSON(stringsOf(f.Statuses())); err != nil {
+		return filterJSON{}, err
+	}
+	if j.kinds, err = encodeJSON(stringsOf(f.Kinds())); err != nil {
+		return filterJSON{}, err
+	}
+	return j, nil
+}
+
 func listTransactionParams(f domain.TxFilter, after *app.TxCursor, limit int) (gen.ListTransactionsParams, error) {
-	accountIDsJSON, err := encodeIDSlice(f.AccountIDs())
-	if err != nil {
-		return gen.ListTransactionsParams{}, err
-	}
-	categoryIDsJSON, err := encodeIDSlice(f.CategoryIDs())
-	if err != nil {
-		return gen.ListTransactionsParams{}, err
-	}
-	payeeIDsJSON, err := encodeIDSlice(f.PayeeIDs())
-	if err != nil {
-		return gen.ListTransactionsParams{}, err
-	}
-	statusesJSON, err := encodeJSON(stringsOf(f.Statuses()))
-	if err != nil {
-		return gen.ListTransactionsParams{}, err
-	}
-	kindsJSON, err := encodeJSON(stringsOf(f.Kinds()))
+	j, err := encodeFilterJSON(f)
 	if err != nil {
 		return gen.ListTransactionsParams{}, err
 	}
@@ -232,11 +245,12 @@ func listTransactionParams(f domain.TxFilter, after *app.TxCursor, limit int) (g
 	params := gen.ListTransactionsParams{
 		FromDate:        dateStringOrEmpty(f.From()),
 		ToDate:          dateStringOrEmpty(f.To()),
-		AccountIdsJson:  accountIDsJSON,
-		CategoryIdsJson: categoryIDsJSON,
-		PayeeIdsJson:    payeeIDsJSON,
-		StatusesJson:    statusesJSON,
-		KindsJson:       kindsJSON,
+		AccountIdsJson:  j.accountIDs,
+		CategoryIdsJson: j.categoryIDs,
+		PayeeIdsJson:    j.payeeIDs,
+		TagIdsJson:      j.tagIDs,
+		StatusesJson:    j.statuses,
+		KindsJson:       j.kinds,
 		ImportBatchID:   int64(f.ImportBatchID()),
 		Sign:            string(f.Sign()),
 		SortKey:         string(f.Sort()),
