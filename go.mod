@@ -6,6 +6,7 @@ toolchain go1.27.4
 
 require (
 	github.com/google/go-cmp v0.7.0
+	golang.org/x/text v0.44.0
 	pgregory.net/rapid v1.3.0
 )
 
@@ -65,7 +66,6 @@ require (
 	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
-	golang.org/x/text v0.44.0 // indirect
 	golang.org/x/tools v0.52.0 // indirect
 	modernc.org/libc v1.80.2 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
