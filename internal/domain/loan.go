@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"math/big"
+	"strings"
 )
 
 // LoanKind classifies a financing contract.
@@ -102,18 +103,21 @@ func (r AnnualRate) String() string {
 // Loan is a mortgage or personal loan held as a liability account. The balance
 // (remaining principal) is always negative in net-worth terms.
 type Loan struct {
-	ID           LoanID
-	Kind         LoanKind
-	Principal    Money // total disbursed amount, positive
-	DisbursedOn  Date  // date the funds were released
-	TermMonths   int   // original contractual duration in months
-	RateType     RateType
-	DebitAccount AccountID // account from which instalments are debited
+	ID                 LoanID
+	Name               string    // unique, case-insensitively; also the name of the liability account
+	LiabilityAccountID AccountID // account of kind loan whose balance is the remaining debt
+	Kind               LoanKind
+	Principal          Money // total disbursed amount, positive
+	DisbursedOn        Date  // date the funds were released
+	TermMonths         int   // original contractual duration in months
+	RateType           RateType
+	DebitAccount       AccountID // account from which instalments are debited
 }
 
-// NewLoan validates l and returns it. Principal must be positive and in a
+// NewLoan validates l and returns it with the name trimmed. Principal must be positive and in a
 // non-zero currency; TermMonths must be ≥ 1.
 func NewLoan(l Loan) (Loan, error) {
+	l.Name = strings.TrimSpace(l.Name)
 	if !l.Kind.Valid() {
 		return Loan{}, enumError("kind", string(l.Kind))
 	}
