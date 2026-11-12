@@ -23,7 +23,11 @@ func (r transactionRepo) Insert(ctx context.Context, t domain.Transaction) (doma
 	if _, err := r.repos.queries.GetAccount(ctx, int64(t.AccountID)); err != nil {
 		return domain.Transaction{}, mapNotFound(mapSQLError(err), "transaction account")
 	}
-	row, err := r.repos.queries.InsertTransaction(ctx, toInsertTransactionParams(t))
+	params, err := r.insertParams(ctx, t)
+	if err != nil {
+		return domain.Transaction{}, err
+	}
+	row, err := r.repos.queries.InsertTransaction(ctx, params)
 	if err != nil {
 		return domain.Transaction{}, mapConstraint(err)
 	}
@@ -34,7 +38,11 @@ func (r transactionRepo) Update(ctx context.Context, t domain.Transaction) error
 	if err := r.repos.writable(); err != nil {
 		return err
 	}
-	params := toUpdateTransactionParams(t)
+	insert, err := r.insertParams(ctx, t)
+	if err != nil {
+		return err
+	}
+	params := toUpdateTransactionParams(t, insert.SearchText)
 	changed, err := r.repos.queries.UpdateTransaction(ctx, params)
 	if err != nil {
 		return mapConstraint(err)
@@ -130,7 +138,20 @@ func (r transactionRepo) ByTransferGroup(ctx context.Context, id domain.Transfer
 	return mapTransactions(rows)
 }
 
-func toInsertTransactionParams(t domain.Transaction) gen.InsertTransactionParams {
+// insertParams builds the write parameters, looking up the payee whose name is part of the search text.
+func (r transactionRepo) insertParams(ctx context.Context, t domain.Transaction) (gen.InsertTransactionParams, error) {
+	var payee string
+	if t.PayeeID != 0 {
+		row, err := r.repos.queries.GetPayee(ctx, int64(t.PayeeID))
+		if err != nil {
+			return gen.InsertTransactionParams{}, mapNotFound(mapSQLError(err), "transaction payee")
+		}
+		payee = row.Name
+	}
+	return toInsertTransactionParams(t, payee), nil
+}
+
+func toInsertTransactionParams(t domain.Transaction, payeeName string) gen.InsertTransactionParams {
 	return gen.InsertTransactionParams{
 		AccountID:       int64(t.AccountID),
 		Date:            t.Date.String(),
@@ -148,18 +169,12 @@ func toInsertTransactionParams(t domain.Transaction) gen.InsertTransactionParams
 		Fingerprint:     t.Fingerprint,
 		ImportBatchID:   toNullInt64(t.ImportBatchID),
 		TransferGroupID: toNullInt64(t.TransferGroupID),
-		SearchText:      searchText(t),
+		SearchText:      textnorm.SearchText(t.Description, payeeName, t.Notes),
 	}
 }
 
-// searchText is the normalized text the FTS index and the LIKE fallback work on.
-// ponytail: payees have no table yet, so the payee name part is empty.
-func searchText(t domain.Transaction) string {
-	return textnorm.SearchText(t.Description, "", t.Notes)
-}
-
-func toUpdateTransactionParams(t domain.Transaction) gen.UpdateTransactionParams {
-	params := toInsertTransactionParams(t)
+func toUpdateTransactionParams(t domain.Transaction, searchText string) gen.UpdateTransactionParams {
+	params := toInsertTransactionParams(t, "")
 	return gen.UpdateTransactionParams{
 		ID:              int64(t.ID),
 		AccountID:       params.AccountID,
@@ -178,7 +193,7 @@ func toUpdateTransactionParams(t domain.Transaction) gen.UpdateTransactionParams
 		Fingerprint:     params.Fingerprint,
 		ImportBatchID:   params.ImportBatchID,
 		TransferGroupID: params.TransferGroupID,
-		SearchText:      params.SearchText,
+		SearchText:      searchText,
 	}
 }
 

@@ -20,6 +20,8 @@ var (
 	searchWords  = []string{"Caffè", "ÉCLAIR", "shop", "Esselunga", "pizza", " Rent ", "à", "ab", "a_b", "50%", `say "hi"`, "Zürich"}
 	searchKinds  = []domain.TxKind{domain.KindPayment, domain.KindTransfer, domain.KindFee, domain.KindRefund, domain.KindOther}
 	searchStatus = []domain.TxStatus{domain.StatusPending, domain.StatusBooked, domain.StatusReconciled}
+	// searchPayees[i] is the name of payee i+1; both stores get the same two payees.
+	searchPayees = []string{"Esselunga", "Bar Zürich"}
 )
 
 // seedSearchRefs creates the rows transactions refer to; both stores assign the same IDs.
@@ -39,6 +41,11 @@ func seedSearchRefs(t *testing.T, s app.Store) {
 				return err
 			}
 			if _, err := r.Imports().InsertBatch(ctx, app.ImportBatch{Connector: "x", Source: n, SourceSHA256: n, ImportedAt: time.Unix(0, 0).UTC()}); err != nil {
+				return err
+			}
+		}
+		for _, name := range searchPayees {
+			if _, err := r.Payees().Insert(ctx, domain.Payee{Name: name}); err != nil {
 				return err
 			}
 		}
@@ -63,7 +70,7 @@ func drawTxs(t *rapid.T, eur domain.Currency) []domain.Transaction {
 			AccountID: domain.AccountID(rapid.IntRange(1, 2).Draw(t, "account")),
 			Date:      d, Amount: m,
 			Description: joinWords(text.Draw(t, "description")), Notes: joinWords(text.Draw(t, "notes")),
-			PayeeID: domain.PayeeID(rapid.IntRange(0, 0).Draw(t, "payee")),
+			PayeeID: domain.PayeeID(rapid.IntRange(0, 2).Draw(t, "payee")),
 			Status:  rapid.SampledFrom(searchStatus).Draw(t, "status"),
 			Kind:    rapid.SampledFrom(searchKinds).Draw(t, "kind"),
 		}
@@ -153,7 +160,11 @@ func drawSearchText(t *rapid.T, txs []domain.Transaction) string {
 	var raw string
 	if rapid.IntRange(0, 3).Draw(t, "fromRow") > 0 {
 		tx := rapid.SampledFrom(txs).Draw(t, "row")
-		runes := []rune(textnorm.SearchText(tx.Description, "", tx.Notes))
+		payee := ""
+		if tx.PayeeID > 0 {
+			payee = searchPayees[tx.PayeeID-1]
+		}
+		runes := []rune(textnorm.SearchText(tx.Description, payee, tx.Notes))
 		if len(runes) == 0 {
 			return ""
 		}
@@ -174,7 +185,9 @@ func fingerprints(rows []domain.Transaction) []string {
 }
 
 // TestPropertySearchMatchesOracle checks the SQL translation of TxFilter against memstore, which
-// runs TxFilter.Match and TxFilter.Less: same rows, same order, same keyset pages.
+// runs TxFilter.Match and TxFilter.Less: same rows, same order, same keyset pages. Payee ids and
+// names are covered (filter and search text).
+// TODO(V13): extend with the tag filter once TxFilter has one.
 func TestPropertySearchMatchesOracle(t *testing.T) {
 	store, _ := newTestStore(t)
 	seedSearchRefs(t, store)

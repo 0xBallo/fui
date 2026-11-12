@@ -22,7 +22,7 @@ type Backuper interface {
 
 // ResetOptions selects what a reset keeps.
 type ResetOptions struct {
-	// KeepSettings keeps the categories (and any other settings that exist); everything else is deleted.
+	// KeepSettings keeps the categories, tags and payees (and any other settings that exist); everything else is deleted.
 	KeepSettings bool
 }
 
@@ -64,6 +64,9 @@ type Repos interface {
 	Transfers() TransferRepo
 	FXRates() FXRateRepo
 	Imports() ImportRepo
+	Tags() TagRepo
+	Payees() PayeeRepo
+	Splits() SplitRepo
 }
 
 // AccountRepo stores accounts. Names are unique case-insensitively.
@@ -161,4 +164,42 @@ type ImportRepo interface {
 	// AccountRef returns the account bound to (connector, ref), or ErrNotFound on first use.
 	AccountRef(ctx context.Context, connector, ref string) (domain.AccountID, error)
 	SetAccountRef(ctx context.Context, connector, ref string, id domain.AccountID) error
+}
+
+// TagRepo stores tags, unique case-insensitively, and their association to transactions.
+type TagRepo interface {
+	Insert(ctx context.Context, t domain.Tag) (domain.Tag, error)
+	Update(ctx context.Context, t domain.Tag) error
+	// Delete removes the tag and detaches it from every transaction.
+	Delete(ctx context.Context, id domain.TagID) error
+	Get(ctx context.Context, id domain.TagID) (domain.Tag, error)
+	// List returns every tag ordered by ID.
+	List(ctx context.Context) ([]domain.Tag, error)
+	// TagsOf returns the tags of a transaction ordered by ID.
+	TagsOf(ctx context.Context, tx domain.TransactionID) ([]domain.Tag, error)
+	// SetTags replaces the tags of a transaction; duplicates in ids are ignored.
+	SetTags(ctx context.Context, tx domain.TransactionID, ids []domain.TagID) error
+}
+
+// PayeeRepo stores payees with their aliases. Names and aliases are unique case-insensitively
+// across all payees; transactions refer to a payee through Transaction.PayeeID, and that payee's
+// name is part of the transaction search text.
+type PayeeRepo interface {
+	Insert(ctx context.Context, p domain.Payee) (domain.Payee, error)
+	// Update replaces the name and the aliases and refreshes the search text of the payee's transactions.
+	Update(ctx context.Context, p domain.Payee) error
+	// Delete fails with ErrInUse while transactions reference the payee.
+	Delete(ctx context.Context, id domain.PayeeID) error
+	Get(ctx context.Context, id domain.PayeeID) (domain.Payee, error)
+	// List returns every payee ordered by ID.
+	List(ctx context.Context) ([]domain.Payee, error)
+}
+
+// SplitRepo stores the category rows a transaction is split into.
+type SplitRepo interface {
+	// SplitsOf returns the rows in insertion order; none for a transaction that is not split.
+	SplitsOf(ctx context.Context, tx domain.TransactionID) ([]domain.Split, error)
+	// ReplaceSplits stores rows after checking them with domain.ValidateSplits against the
+	// transaction amount; no rows removes the split. Rows refer to existing categories.
+	ReplaceSplits(ctx context.Context, tx domain.TransactionID, rows []domain.Split) error
 }

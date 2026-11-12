@@ -24,6 +24,9 @@ func RunContract(t *testing.T, newStore func(t *testing.T) app.Store) {
 		"transfers":    contractTransfers,
 		"fx rates":     contractFXRates,
 		"imports":      contractImports,
+		"tags":         contractTags,
+		"payees":       contractPayees,
+		"splits":       contractSplits,
 		"unit of work": contractUnitOfWork,
 	} {
 		t.Run(name, func(t *testing.T) {

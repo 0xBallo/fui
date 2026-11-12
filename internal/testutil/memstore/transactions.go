@@ -30,6 +30,9 @@ func (t transactions) Insert(_ context.Context, tx domain.Transaction) (domain.T
 	if _, ok := t.st.Accounts[tx.AccountID]; !ok {
 		return domain.Transaction{}, notFound("account", tx.AccountID)
 	}
+	if err := t.checkPayee(tx); err != nil {
+		return domain.Transaction{}, err
+	}
 	tx.ID = 0
 	if err := t.checkExternalID(tx); err != nil {
 		return domain.Transaction{}, err
@@ -46,6 +49,9 @@ func (t transactions) Update(_ context.Context, tx domain.Transaction) error {
 	if _, ok := t.st.Txs[tx.ID]; !ok {
 		return notFound("transaction", tx.ID)
 	}
+	if err := t.checkPayee(tx); err != nil {
+		return err
+	}
 	if err := t.checkExternalID(tx); err != nil {
 		return err
 	}
@@ -61,6 +67,8 @@ func (t transactions) Delete(_ context.Context, id domain.TransactionID) error {
 		return notFound("transaction", id)
 	}
 	delete(t.st.Txs, id)
+	delete(t.st.TxTags, id) // ON DELETE CASCADE in the SQLite store
+	delete(t.st.Splits, id)
 	return nil
 }
 
@@ -72,16 +80,26 @@ func (t transactions) Get(_ context.Context, id domain.TransactionID) (domain.Tr
 	return tx, nil
 }
 
-// searchText mirrors what the SQLite store indexes; payees have no table yet, so no payee name.
-func searchText(tx domain.Transaction) string {
-	return textnorm.SearchText(tx.Description, "", tx.Notes)
+func (t transactions) checkPayee(tx domain.Transaction) error {
+	if tx.PayeeID == 0 {
+		return nil
+	}
+	if _, ok := t.st.Payees[tx.PayeeID]; !ok {
+		return notFound("payee", tx.PayeeID)
+	}
+	return nil
+}
+
+// searchText mirrors what the SQLite store indexes: description, payee name and notes.
+func (t transactions) searchText(tx domain.Transaction) string {
+	return textnorm.SearchText(tx.Description, t.st.Payees[tx.PayeeID].Name, tx.Notes)
 }
 
 // List is the oracle of the SQL translation: filter with TxFilter.Match, order with TxFilter.Less.
 func (t transactions) List(_ context.Context, f domain.TxFilter, after *app.TxCursor, limit int) ([]domain.Transaction, error) {
 	var out []domain.Transaction
 	for _, tx := range t.st.Txs {
-		if f.Match(tx, searchText(tx)) {
+		if f.Match(tx, t.searchText(tx)) {
 			out = append(out, tx)
 		}
 	}

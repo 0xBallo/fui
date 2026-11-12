@@ -34,6 +34,10 @@ type state struct {
 	FX         map[fxKey]domain.FXRate
 	Batches    map[domain.ImportBatchID]app.ImportBatch
 	Refs       map[refKey]domain.AccountID
+	Tags       map[domain.TagID]domain.Tag
+	TxTags     map[domain.TransactionID][]domain.TagID
+	Payees     map[domain.PayeeID]domain.Payee
+	Splits     map[domain.TransactionID][]domain.Split
 	LastID     map[string]int64
 }
 
@@ -46,6 +50,10 @@ func newState() *state {
 		FX:         map[fxKey]domain.FXRate{},
 		Batches:    map[domain.ImportBatchID]app.ImportBatch{},
 		Refs:       map[refKey]domain.AccountID{},
+		Tags:       map[domain.TagID]domain.Tag{},
+		TxTags:     map[domain.TransactionID][]domain.TagID{},
+		Payees:     map[domain.PayeeID]domain.Payee{},
+		Splits:     map[domain.TransactionID][]domain.Split{},
 		LastID:     map[string]int64{},
 	}
 }
@@ -55,6 +63,7 @@ func (s *state) clone() *state {
 		Accounts: maps.Clone(s.Accounts), Txs: maps.Clone(s.Txs), Categories: maps.Clone(s.Categories),
 		Groups: maps.Clone(s.Groups), FX: maps.Clone(s.FX), Batches: maps.Clone(s.Batches),
 		Refs: maps.Clone(s.Refs), LastID: maps.Clone(s.LastID),
+		Tags: maps.Clone(s.Tags), TxTags: maps.Clone(s.TxTags), Payees: maps.Clone(s.Payees), Splits: maps.Clone(s.Splits),
 	}
 }
 
@@ -118,6 +127,9 @@ func (r *repos) Categories() app.CategoryRepo      { return categories{r} }
 func (r *repos) Transfers() app.TransferRepo       { return transfers{r} }
 func (r *repos) FXRates() app.FXRateRepo           { return fxRates{r} }
 func (r *repos) Imports() app.ImportRepo           { return imports{r} }
+func (r *repos) Tags() app.TagRepo                 { return tags{r} }
+func (r *repos) Payees() app.PayeeRepo             { return payees{r} }
+func (r *repos) Splits() app.SplitRepo             { return splits{r} }
 
 func (r *repos) writable() error {
 	if r.readOnly {
@@ -240,6 +252,11 @@ func (c categories) Delete(ctx context.Context, id domain.CategoryID) error {
 	}
 	if n, _ := c.Usage(ctx, id); n > 0 {
 		return fmt.Errorf("category %d has %d transactions: %w", id, n, app.ErrInUse)
+	}
+	for _, rows := range c.st.Splits {
+		if slices.ContainsFunc(rows, func(r domain.Split) bool { return r.Category == id }) {
+			return fmt.Errorf("category %d is used by split rows: %w", id, app.ErrInUse)
+		}
 	}
 	delete(c.st.Categories, id)
 	return nil

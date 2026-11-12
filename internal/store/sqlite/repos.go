@@ -31,6 +31,9 @@ func (r *repos) Categories() app.CategoryRepo      { return categoryRepo{repos: 
 func (r *repos) Transfers() app.TransferRepo       { return transferRepo{repos: r} }
 func (r *repos) FXRates() app.FXRateRepo           { return fxRateRepo{repos: r} }
 func (r *repos) Imports() app.ImportRepo           { return importRepo{repos: r} }
+func (r *repos) Tags() app.TagRepo                 { return tagRepo{repos: r} }
+func (r *repos) Payees() app.PayeeRepo             { return payeeRepo{repos: r} }
+func (r *repos) Splits() app.SplitRepo             { return splitRepo{repos: r} }
 
 func (r *repos) writable() error {
 	if r.readOnly {
