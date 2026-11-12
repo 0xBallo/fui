@@ -1,0 +1,8 @@
+[?25l[?2004h[38;2;192;192;192m1 Dashboard[0m  [1;4;38;2;255;0;255;4m2[0m[38;2;255;0;255;4m [0m[1;4;38;2;255;0;255;4mTransactions[0m  [38;2;192;192;192m3 Accounts[0m  [2;38;2;192;192;192m4 Budget[0m  [2;38;2;192;192;192m5 Reports[0m  [2;38;2;192;192;192m6 Import[0m  [2;38;2;192;192;192m7 Settin[0m
+[K
+[1;38;2;255;0;255mTransactions[0m[K
+[K
+[1;38;2;255;255;255mDate       Account          Description              Category       Status      [0m
+[1;48;2;128;128;128m06/10/2026 Checking         Supermarket              Groceries      booked      [0m
+[K
+[38;2;192;192;192m? help · q quit[0m[K
