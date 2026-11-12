@@ -94,6 +94,34 @@ func (e env) category(t tb, name, kind string) domain.Category {
 	return c
 }
 
+func (e env) tag(t tb, name string) domain.Tag {
+	t.Helper()
+	ctx := context.Background()
+	p, err := e.svc.PlanAddTag(ctx, app.AddTagRequest{Name: name})
+	if err != nil {
+		t.Fatalf("PlanAddTag(%s): %v", name, err)
+	}
+	tg, err := e.svc.ApplyAddTag(ctx, p)
+	if err != nil {
+		t.Fatalf("ApplyAddTag(%s): %v", name, err)
+	}
+	return tg
+}
+
+func (e env) payee(t tb, name string, aliases ...string) domain.Payee {
+	t.Helper()
+	ctx := context.Background()
+	p, err := e.svc.PlanAddPayee(ctx, app.AddPayeeRequest{Name: name, Aliases: aliases})
+	if err != nil {
+		t.Fatalf("PlanAddPayee(%s): %v", name, err)
+	}
+	py, err := e.svc.ApplyAddPayee(ctx, p)
+	if err != nil {
+		t.Fatalf("ApplyAddPayee(%s): %v", name, err)
+	}
+	return py
+}
+
 func (e env) tx(t tb, req app.AddTxRequest) domain.Transaction {
 	t.Helper()
 	ctx := context.Background()

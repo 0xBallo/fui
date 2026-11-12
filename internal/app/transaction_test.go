@@ -178,9 +178,14 @@ func TestListTxFilters(t *testing.T) {
 	ctx := t.Context()
 	e.account(t, "A", "checking", "EUR", "0")
 	e.category(t, "Food", "expense")
-	e.tx(t, app.AddTxRequest{Account: "A", Amount: "-10", Description: "Jan payment", Date: "2026-01-10", Category: "Food", Kind: "payment"})
+	e.tag(t, "vacanze")
+	e.tag(t, "lavoro")
+	tx1 := e.tx(t, app.AddTxRequest{Account: "A", Amount: "-10", Description: "Jan payment", Date: "2026-01-10", Category: "Food", Kind: "payment"})
 	e.tx(t, app.AddTxRequest{Account: "A", Amount: "-20", Description: "Feb fee", Date: "2026-02-10", Category: "Food", Kind: "fee"})
 	e.tx(t, app.AddTxRequest{Account: "A", Amount: "5", Description: "Jan refund, no category", Date: "2026-01-15", Kind: "refund"})
+	tagP, err := e.svc.PlanTagTransaction(ctx, app.TagTransactionRequest{ID: tx1.ID, Add: []string{"vacanze"}})
+	wantNoErr(t, err)
+	wantNoErr(t, e.svc.ApplyTagTransaction(ctx, tagP))
 
 	count := func(req app.ListTxRequest) int {
 		t.Helper()
@@ -199,6 +204,8 @@ func TestListTxFilters(t *testing.T) {
 		{"kind", app.ListTxRequest{Kinds: []string{"fee"}}, 1},
 		{"sign income", app.ListTxRequest{Sign: domain.TxSignIncome}, 1},
 		{"sign expense", app.ListTxRequest{Sign: domain.TxSignExpense}, 2},
+		{"tag", app.ListTxRequest{Tags: []string{"vacanze"}}, 1},
+		{"tag OR", app.ListTxRequest{Tags: []string{"vacanze", "lavoro"}}, 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -211,6 +218,7 @@ func TestListTxFilters(t *testing.T) {
 		"payee not supported yet": {Payees: []string{"Esselunga"}},
 		"bad kind":                {Kinds: []string{"x"}},
 		"month and year":          {Month: "2026-01", Year: 2026},
+		"unknown tag":             {Tags: []string{"zzz"}},
 	} {
 		if _, err := e.svc.ListTx(ctx, req); err == nil {
 			t.Errorf("%s: want an error", name)
@@ -219,6 +227,12 @@ func TestListTxFilters(t *testing.T) {
 	var de *domain.Error
 	if _, err := e.svc.ListTx(ctx, app.ListTxRequest{Payees: []string{"x"}}); !errors.As(err, &de) || de.Code != domain.CodeNotFound {
 		t.Errorf("payee filter error = %v, want not_found", err)
+	}
+
+	f, err := e.svc.ResolveTxFilter(ctx, app.ListTxRequest{Tags: []string{"vacanze"}})
+	wantNoErr(t, err)
+	if len(f.TagIDs()) != 1 {
+		t.Errorf("ResolveTxFilter tags = %+v, want 1 tag id", f.TagIDs())
 	}
 
 	// Sort without Desc is ascending; the default (no Sort) is newest first.

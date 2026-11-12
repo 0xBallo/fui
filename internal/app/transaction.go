@@ -112,7 +112,8 @@ func (s *Service) ApplyAddTx(ctx context.Context, p AddTxPlan) (domain.Transacti
 // (every account when none is given), which must then share one currency. The period is given
 // either as From/To, or as the convenience Month ("YYYY-MM") or Year, mutually exclusive (an
 // invalid_filter error otherwise, same as domain.TxFilterSpec). Payees is a placeholder: the
-// payees archive does not exist yet, so any name given here fails with not_found.
+// payees archive does not exist yet, so any name given here fails with not_found. Tags OR among
+// themselves and AND with every other field, same as domain.TxFilter.
 type ListTxRequest struct {
 	From, To      string
 	Month         string
@@ -121,6 +122,7 @@ type ListTxRequest struct {
 	Categories    []string
 	Uncategorized bool
 	Payees        []string
+	Tags          []string
 	Statuses      []string
 	Kinds         []string
 	Batch         int64 // import batch id, 0 means unset
@@ -151,7 +153,11 @@ func (s *Service) ResolveTxFilter(ctx context.Context, req ListTxRequest) (domai
 		if err != nil {
 			return err
 		}
-		spec, err := s.txFilterSpec(req, accts, cats)
+		tags, err := s.loadTagsIfNeeded(ctx, r, req.Tags)
+		if err != nil {
+			return err
+		}
+		spec, err := s.txFilterSpec(req, accts, cats, tags)
 		if err != nil {
 			return err
 		}
@@ -173,7 +179,11 @@ func (s *Service) ListTx(ctx context.Context, req ListTxRequest) (TxPage, error)
 		if err != nil {
 			return err
 		}
-		spec, err := s.txFilterSpec(req, accts, cats)
+		tags, err := s.loadTagsIfNeeded(ctx, r, req.Tags)
+		if err != nil {
+			return err
+		}
+		spec, err := s.txFilterSpec(req, accts, cats, tags)
 		if err != nil {
 			return err
 		}
@@ -202,7 +212,20 @@ func (s *Service) ListTx(ctx context.Context, req ListTxRequest) (TxPage, error)
 	return page, err
 }
 
-func (s *Service) txFilterSpec(req ListTxRequest, accts []domain.Account, cats []domain.Category) (domain.TxFilterSpec, error) {
+// loadTagsIfNeeded lists the tags only when the request filters by tag name, to avoid the extra
+// query otherwise.
+func (s *Service) loadTagsIfNeeded(ctx context.Context, r Repos, names []string) ([]domain.Tag, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+	tags, err := r.Tags().List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list tags: %w", err)
+	}
+	return tags, nil
+}
+
+func (s *Service) txFilterSpec(req ListTxRequest, accts []domain.Account, cats []domain.Category, tags []domain.Tag) (domain.TxFilterSpec, error) {
 	if len(req.Payees) > 0 {
 		return domain.TxFilterSpec{}, newError(domain.ErrNotFound,
 			map[string]any{"field": "payee"}, "payee filter: no payees archive yet")
@@ -240,24 +263,39 @@ func (s *Service) txFilterSpec(req ListTxRequest, accts []domain.Account, cats [
 		}
 		spec.CategoryIDs = append(spec.CategoryIDs, c.ID)
 	}
+	for _, ref := range req.Tags {
+		tg, err := pickTag(tags, ref)
+		if err != nil {
+			return domain.TxFilterSpec{}, err
+		}
+		spec.TagIDs = append(spec.TagIDs, tg.ID)
+	}
+	if err := s.applyStatusAndKind(req, &spec); err != nil {
+		return domain.TxFilterSpec{}, err
+	}
+	if spec.MinAbs, spec.MaxAbs, err = s.amountRange(req, selected); err != nil {
+		return domain.TxFilterSpec{}, err
+	}
+	return spec, nil
+}
+
+// applyStatusAndKind parses req's status and kind filters into spec.
+func (s *Service) applyStatusAndKind(req ListTxRequest, spec *domain.TxFilterSpec) error {
 	for _, st := range req.Statuses {
 		v, err := domain.ParseTxStatus(st)
 		if err != nil {
-			return domain.TxFilterSpec{}, fmt.Errorf("status: %w", err)
+			return fmt.Errorf("status: %w", err)
 		}
 		spec.Statuses = append(spec.Statuses, v)
 	}
 	for _, k := range req.Kinds {
 		v, err := domain.ParseTxKind(k)
 		if err != nil {
-			return domain.TxFilterSpec{}, fmt.Errorf("kind: %w", err)
+			return fmt.Errorf("kind: %w", err)
 		}
 		spec.Kinds = append(spec.Kinds, v)
 	}
-	if spec.MinAbs, spec.MaxAbs, err = s.amountRange(req, selected); err != nil {
-		return domain.TxFilterSpec{}, err
-	}
-	return spec, nil
+	return nil
 }
 
 // optionalMonth parses "YYYY-MM" into a Date on the first of that month, the convenience form

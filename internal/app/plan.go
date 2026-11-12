@@ -19,6 +19,9 @@ const (
 	EntityCategory    = "category"
 	EntityTransfer    = "transfer"
 	EntityFXRate      = "fx_rate"
+	EntityTag         = "tag"
+	EntityPayee       = "payee"
+	EntitySplit       = "split"
 )
 
 // Change is one planned modification, ready to render for --dry-run.

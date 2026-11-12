@@ -108,6 +108,32 @@ func pickCategory(cats []domain.Category, ref string) (domain.Category, error) {
 	return cats[i], nil
 }
 
+// pickTag resolves a user-typed tag reference among tags.
+func pickTag(tags []domain.Tag, ref string) (domain.Tag, error) {
+	names := make([]string, len(tags))
+	for i, tg := range tags {
+		names[i] = tg.Name
+	}
+	i, err := domain.Resolve(ref, names)
+	if err != nil {
+		return domain.Tag{}, fmt.Errorf("tag: %w", err)
+	}
+	return tags[i], nil
+}
+
+// pickPayee resolves a user-typed payee reference among payees.
+func pickPayee(payees []domain.Payee, ref string) (domain.Payee, error) {
+	names := make([]string, len(payees))
+	for i, p := range payees {
+		names[i] = p.Name
+	}
+	i, err := domain.Resolve(ref, names)
+	if err != nil {
+		return domain.Payee{}, fmt.Errorf("payee: %w", err)
+	}
+	return payees[i], nil
+}
+
 // activeAccounts returns the accounts that are not archived.
 func activeAccounts(all []domain.Account) []domain.Account {
 	out := make([]domain.Account, 0, len(all))
