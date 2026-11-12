@@ -171,6 +171,69 @@ func TestListTx(t *testing.T) {
 	}
 }
 
+// TestListTxFilters covers the T17 additions to ListTxRequest: Month, Year, Uncategorized,
+// Kinds, Sign and the Payees not-yet-supported error.
+func TestListTxFilters(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+	e.account(t, "A", "checking", "EUR", "0")
+	e.category(t, "Food", "expense")
+	e.tx(t, app.AddTxRequest{Account: "A", Amount: "-10", Description: "Jan payment", Date: "2026-01-10", Category: "Food", Kind: "payment"})
+	e.tx(t, app.AddTxRequest{Account: "A", Amount: "-20", Description: "Feb fee", Date: "2026-02-10", Category: "Food", Kind: "fee"})
+	e.tx(t, app.AddTxRequest{Account: "A", Amount: "5", Description: "Jan refund, no category", Date: "2026-01-15", Kind: "refund"})
+
+	count := func(req app.ListTxRequest) int {
+		t.Helper()
+		page, err := e.svc.ListTx(ctx, req)
+		wantNoErr(t, err)
+		return len(page.Items)
+	}
+	tests := []struct {
+		name string
+		req  app.ListTxRequest
+		want int
+	}{
+		{"month", app.ListTxRequest{Month: "2026-01"}, 2},
+		{"year", app.ListTxRequest{Year: 2026}, 3},
+		{"uncategorized", app.ListTxRequest{Uncategorized: true}, 1},
+		{"kind", app.ListTxRequest{Kinds: []string{"fee"}}, 1},
+		{"sign income", app.ListTxRequest{Sign: domain.TxSignIncome}, 1},
+		{"sign expense", app.ListTxRequest{Sign: domain.TxSignExpense}, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := count(tt.req); got != tt.want {
+				t.Errorf("%d rows, want %d", got, tt.want)
+			}
+		})
+	}
+	for name, req := range map[string]app.ListTxRequest{
+		"payee not supported yet": {Payees: []string{"Esselunga"}},
+		"bad kind":                {Kinds: []string{"x"}},
+		"month and year":          {Month: "2026-01", Year: 2026},
+	} {
+		if _, err := e.svc.ListTx(ctx, req); err == nil {
+			t.Errorf("%s: want an error", name)
+		}
+	}
+	var de *domain.Error
+	if _, err := e.svc.ListTx(ctx, app.ListTxRequest{Payees: []string{"x"}}); !errors.As(err, &de) || de.Code != domain.CodeNotFound {
+		t.Errorf("payee filter error = %v, want not_found", err)
+	}
+
+	// Sort without Desc is ascending; the default (no Sort) is newest first.
+	page, err := e.svc.ListTx(ctx, app.ListTxRequest{Sort: domain.TxSortAmount})
+	wantNoErr(t, err)
+	if len(page.Items) != 3 || page.Items[0].Transaction.Amount.Minor() > page.Items[1].Transaction.Amount.Minor() {
+		t.Errorf("sort amount ascending: %+v", page.Items)
+	}
+	page, err = e.svc.ListTx(ctx, app.ListTxRequest{})
+	wantNoErr(t, err)
+	if len(page.Items) != 3 || page.Items[0].Transaction.Date.String() != "2026-02-10" {
+		t.Errorf("default newest first: %+v", page.Items)
+	}
+}
+
 func TestShowEditRemoveTx(t *testing.T) {
 	e := newEnv(t)
 	ctx := t.Context()

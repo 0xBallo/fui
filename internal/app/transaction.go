@@ -109,17 +109,29 @@ func (s *Service) ApplyAddTx(ctx context.Context, p AddTxPlan) (domain.Transacti
 
 // ListTxRequest filters a transaction listing; every field is optional. Dates accept the same
 // formats as input dates. The amount range is parsed in the currency of the filtered accounts
-// (every account when none is given), which must then share one currency.
+// (every account when none is given), which must then share one currency. The period is given
+// either as From/To, or as the convenience Month ("YYYY-MM") or Year, mutually exclusive (an
+// invalid_filter error otherwise, same as domain.TxFilterSpec). Payees is a placeholder: the
+// payees archive does not exist yet, so any name given here fails with not_found.
 type ListTxRequest struct {
-	From, To   string
-	Accounts   []string
-	Categories []string
-	Statuses   []string
-	Text       string
-	MinAmount  string
-	MaxAmount  string
-	After      *TxCursor // Next of the previous page
-	Limit      int       // page size, DefaultTxLimit when 0
+	From, To      string
+	Month         string
+	Year          int
+	Accounts      []string
+	Categories    []string
+	Uncategorized bool
+	Payees        []string
+	Statuses      []string
+	Kinds         []string
+	Batch         int64 // import batch id, 0 means unset
+	Text          string
+	MinAmount     string
+	MaxAmount     string
+	Sign          domain.TxSign
+	Sort          domain.TxSort
+	Desc          bool
+	After         *TxCursor // Next of the previous page
+	Limit         int       // page size, DefaultTxLimit when 0
 }
 
 // TxPage is one page of a listing, most recent first. Next is nil on the last page.
@@ -165,7 +177,9 @@ func (s *Service) ListTx(ctx context.Context, req ListTxRequest) (TxPage, error)
 		if err != nil {
 			return err
 		}
-		spec.Desc = true // newest first
+		if req.Sort == "" {
+			spec.Desc = true // default order: newest first, unless an explicit sort key overrides it
+		}
 		f, err := domain.NewTxFilter(spec)
 		if err != nil {
 			return err
@@ -189,12 +203,22 @@ func (s *Service) ListTx(ctx context.Context, req ListTxRequest) (TxPage, error)
 }
 
 func (s *Service) txFilterSpec(req ListTxRequest, accts []domain.Account, cats []domain.Category) (domain.TxFilterSpec, error) {
-	spec := domain.TxFilterSpec{Text: textnorm.Normalize(req.Text)}
+	if len(req.Payees) > 0 {
+		return domain.TxFilterSpec{}, newError(domain.ErrNotFound,
+			map[string]any{"field": "payee"}, "payee filter: no payees archive yet")
+	}
+	spec := domain.TxFilterSpec{
+		Text: textnorm.Normalize(req.Text), Year: req.Year, Uncategorized: req.Uncategorized,
+		ImportBatchID: domain.ImportBatchID(req.Batch), Sign: req.Sign, Sort: req.Sort, Desc: req.Desc,
+	}
 	var err error
 	if spec.From, err = s.optionalDate(req.From); err != nil {
 		return domain.TxFilterSpec{}, err
 	}
 	if spec.To, err = s.optionalDate(req.To); err != nil {
+		return domain.TxFilterSpec{}, err
+	}
+	if spec.Month, err = s.optionalMonth(req.Month); err != nil {
 		return domain.TxFilterSpec{}, err
 	}
 	selected := accts
@@ -223,10 +247,30 @@ func (s *Service) txFilterSpec(req ListTxRequest, accts []domain.Account, cats [
 		}
 		spec.Statuses = append(spec.Statuses, v)
 	}
+	for _, k := range req.Kinds {
+		v, err := domain.ParseTxKind(k)
+		if err != nil {
+			return domain.TxFilterSpec{}, fmt.Errorf("kind: %w", err)
+		}
+		spec.Kinds = append(spec.Kinds, v)
+	}
 	if spec.MinAbs, spec.MaxAbs, err = s.amountRange(req, selected); err != nil {
 		return domain.TxFilterSpec{}, err
 	}
 	return spec, nil
+}
+
+// optionalMonth parses "YYYY-MM" into a Date on the first of that month, the convenience form
+// domain.TxFilterSpec.Month takes; it returns the zero Date when in is empty.
+func (s *Service) optionalMonth(in string) (domain.Date, error) {
+	if in == "" {
+		return domain.Date{}, nil
+	}
+	d, err := domain.ParseDate(in + "-01")
+	if err != nil {
+		return domain.Date{}, fmt.Errorf("month: %w", err)
+	}
+	return d, nil
 }
 
 func (s *Service) optionalDate(in string) (domain.Date, error) {
