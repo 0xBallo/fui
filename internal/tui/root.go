@@ -96,7 +96,7 @@ var _ tea.Model = (*Root)(nil)
 
 // New builds Root over uc, the MVP screens, and cfg. Locale defaults to en-US and Theme to
 // "auto" when unset; "auto" and "high-contrast" detect the terminal's background with
-// theme.OSCDetector (OSC 11, falling back to COLORFGBG, then assuming a dark background).
+// theme.LipglossDetector (OSC 11, falling back to COLORFGBG, then assuming a dark background).
 func New(uc UseCases, cfg Config) *Root {
 	if cfg.Locale == "" {
 		cfg.Locale = domain.LocaleENUS
@@ -114,7 +114,7 @@ func (r *Root) rebuild() {
 	r.loc = cfg.Locale
 	r.th = theme.Resolve(theme.Config{
 		Theme: cfg.Theme, ThemeLight: cfg.ThemeLight, ThemeDark: cfg.ThemeDark,
-	}, theme.OSCDetector{})
+	}, theme.LipglossDetector{})
 	r.tabs = [len(tabNames)]screens.Screen{}
 	r.tabs[screens.TabDashboard] = dashboard.New(r.uc, r.loc, r.th, cfg.MonthStartDay)
 	r.tabs[screens.TabTransactions] = transactions.New(r.uc, r.loc, r.th)
