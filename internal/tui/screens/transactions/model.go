@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -454,5 +455,37 @@ func (m *Model) viewList() string {
 	if chips := m.chipsView(); chips != "" {
 		header += "\n" + chips
 	}
-	return header + "\n\n" + m.table.View()
+	return header + "\n\n" + m.table.View() + "\n" + m.summaryLine()
+}
+
+// summaryLine reports the row count and, per currency, the sum of the loaded transactions. When
+// more pages remain (m.next != nil) the sum only covers what is currently loaded into the window,
+// not every matching row.
+func (m *Model) summaryLine() string {
+	var order []string
+	sums := make(map[string]domain.Money, 2)
+	for _, v := range m.items {
+		code := v.Transaction.Amount.Currency().Code()
+		if sum, ok := sums[code]; ok {
+			if added, err := sum.Add(v.Transaction.Amount); err == nil {
+				sums[code] = added
+			}
+			continue
+		}
+		sums[code] = v.Transaction.Amount
+		order = append(order, code)
+	}
+	parts := []string{fmt.Sprintf("%d %s", len(m.items), pluralize(len(m.items), "transaction", "transactions"))}
+	for _, code := range order {
+		parts = append(parts, fmt.Sprintf("%s %s", domain.FormatAmount(sums[code], m.loc), code))
+	}
+	return m.th.Muted.Render(strings.Join(parts, "   "))
+}
+
+// pluralize returns singular when n == 1, plural otherwise.
+func pluralize(n int, singular, plural string) string {
+	if n == 1 {
+		return singular
+	}
+	return plural
 }

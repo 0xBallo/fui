@@ -205,6 +205,9 @@ func TestTransactionsSearchEscClears(t *testing.T) {
 	if !strings.Contains(view, "Groceries run") || !strings.Contains(view, "Coffee") {
 		t.Fatalf("expected esc to clear the search and show every transaction again, got:\n%s", view)
 	}
+	if strings.Contains(view, "Search: Coffee") {
+		t.Fatalf("expected no leftover search chip after clearing, got:\n%s", view)
+	}
 }
 
 func TestTransactionsSearchDebounceNarrowsList(t *testing.T) {
@@ -425,6 +428,21 @@ func TestTransactionsFilterChipsRemoveOne(t *testing.T) {
 	}
 	if !strings.Contains(view, "Coffee") {
 		t.Fatalf("expected Coffee back in view after removing the category filter, got:\n%s", view)
+	}
+}
+
+func TestTransactionsFooterSummary(t *testing.T) {
+	fx, scr := newFixture(t)
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-12.50", Description: "Coffee", Date: "2026-06-01"})
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-30", Description: "Groceries run", Date: "2026-06-02"})
+	scr = run(t, scr, scr.Init())
+
+	view := scr.View()
+	if !strings.Contains(view, "2 transactions") {
+		t.Fatalf("expected a row count in the footer, got:\n%s", view)
+	}
+	if !strings.Contains(view, "-42.50 EUR") {
+		t.Fatalf("expected the per-currency sum in the footer, got:\n%s", view)
 	}
 }
 

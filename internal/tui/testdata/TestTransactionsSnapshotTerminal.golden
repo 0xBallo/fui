@@ -4,5 +4,6 @@
 [K
 [1;38;2;255;255;255mDate       Account          Description              Category       Status      [0m
 [1;48;2;128;128;128m06/10/2026 Checking         Supermarket              Groceries      booked      [0m
+[38;2;192;192;192m1 transaction   -42.50 EUR[0m[K
 [K
 [38;2;192;192;192m? help · q quit[0m[K
