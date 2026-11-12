@@ -18,11 +18,17 @@ stdout '"category_name":"Housing","total":3000'
 stdout '"category_name":"Groceries","total":1500'
 stdout '"total":4500\}$'
 
-# And as RFC 4180 CSV, for a spreadsheet.
+# And as RFC 4180 CSV, for a spreadsheet: --csv is a machine format (dot decimal, ISO dates),
+# independent of the active locale, unlike the human table above.
 exec fui report run categories --month 2026-01 --csv
 stdout 'CATEGORY,TOTAL'
-stdout 'Housing,"30,00"'
+stdout 'Housing,30\.00'
+stdout 'Groceries,15\.00'
+stdout 'TOTAL,45\.00'
 
 # Cash flow for the same month: all three transactions are outflow, no inflow yet.
 exec fui report run cashflow --month 2026-01 --json
 stdout '"inflow":0,"outflow":4500,"net":-4500'
+exec fui report run cashflow --month 2026-01 --csv
+stdout 'MONTH,INFLOW,OUTFLOW,NET'
+stdout '2026-01-01,0\.00,45\.00,-45\.00'
