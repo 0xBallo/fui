@@ -1,0 +1,40 @@
+Import
+
+Connector: csv/fui/revolut...
+╭─────╮
+│> csv│
+│  fui│
+╰─────╯
+File: statement.csv
+CSV profile: mybank (import.profiles.<name>, csv only)
+Account ref/name: optional (csv connector)
+Since: optional, YYYY-MM-DD
+
+enter next/plan · tab/shift+tab move between fieldsImport preview
+connector=fui source=statement.fui.jsonl
+new=1 duplicate=0 doubtful=0 errors=0 included=1
+
+ Line Date       Description                            Amount Class      Inc 
+    3 06/01/2026 Pizza                                  -10.00 + new      [x] 
+line 3
+
+space/i include/exclude · enter confirm · esc new import
+
+
+
+
+
+
+
+
+
+╭────────────────────────────────────────────────────────────────────╮
+│                                                                    │
+│  Confirm import                                                    │
+│  Apply 1 transaction(s)?                                           │
+│  create import batch from "statement.fui.jsonl"                    │
+│  create 1 transactions (1 new, 0 duplicate, 0 doubtful, 0 errors)  │
+│                                                                    │
+│  [y] Yes   [n] No                                                  │
+│                                                                    │
+╰────────────────────────────────────────────────────────────────────╯
