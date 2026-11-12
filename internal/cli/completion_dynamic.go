@@ -41,10 +41,21 @@ func completionRegistrations(deps *Deps) []completionRegistration {
 	completeCategory := completeCategoryNames(deps)
 	completeTag := completeTagNames(deps)
 	completePayee := completePayeeNames(deps)
+	completeLoan := completeLoanNames(deps)
 
 	registrations := txAndAccountCompletions(completeAccount, completeCategory, completeTag, completePayee)
 	registrations = append(registrations, reportAndRuleCompletions(completeAccount, completeCategory, completeTag, completePayee)...)
+	registrations = append(registrations, loanCompletions(completeLoan)...)
 	return registrations
+}
+
+func loanCompletions(completeLoan cobra.CompletionFunc) []completionRegistration {
+	return []completionRegistration{
+		{path: []string{"loan", "show"}, args: completeSingleArg(0, completeLoan)},
+		{path: []string{"loan", "schedule"}, args: completeSingleArg(0, completeLoan)},
+		{path: []string{"loan", "event"}, args: completeSingleArg(0, completeLoan)},
+		{path: []string{"loan", "run"}, flags: map[string]cobra.CompletionFunc{"loan": completeLoan}},
+	}
 }
 
 func txAndAccountCompletions(
@@ -205,6 +216,27 @@ func completePayeeNames(deps *Deps) cobra.CompletionFunc {
 		names := make([]string, 0, len(rows))
 		for _, row := range rows {
 			names = append(names, row.Name)
+		}
+		return filterByPrefix(names, toComplete), cobra.ShellCompDirectiveNoFileComp
+	}
+}
+
+func completeLoanNames(deps *Deps) cobra.CompletionFunc {
+	return func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if deps == nil || deps.Loans == nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		enabled, err := enabledModulesFromDeps(deps)
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		rows, err := deps.Loans.List(context.Background(), enabled)
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		names := make([]string, 0, len(rows))
+		for _, row := range rows {
+			names = append(names, row.Loan.Name)
 		}
 		return filterByPrefix(names, toComplete), cobra.ShellCompDirectiveNoFileComp
 	}
