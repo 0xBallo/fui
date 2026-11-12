@@ -156,14 +156,39 @@ func linkContractInstallment(
 		if err := r.Loans().LinkInstallment(ctx, loanID, schedule.ValidFrom, schedule.Installments[0].Due, tx.ID); err != nil {
 			t.Errorf("LinkInstallment: %v", err)
 		}
-		if err := r.Loans().UnlinkInstallment(ctx, loanID, schedule.ValidFrom, schedule.Installments[0].Due); err != nil {
-			t.Errorf("UnlinkInstallment: %v", err)
-		}
+		checkInstallmentLookups(t, r, loanID, schedule, tx.ID)
 		if err := r.Loans().LinkInstallment(ctx, loanID, schedule.ValidFrom, schedule.Installments[0].Due, 999); !errors.Is(err, domain.ErrNotFound) {
 			t.Errorf("LinkInstallment missing tx err = %v, want not_found", err)
 		}
 		return nil
 	})
+}
+
+// checkInstallmentLookups checks both link getters while the first installment is linked to
+// txID, then again after it is unlinked.
+func checkInstallmentLookups(t *testing.T, r app.Repos, loanID domain.LoanID, schedule domain.Schedule, txID domain.TransactionID) {
+	t.Helper()
+	ctx := context.Background()
+	due := schedule.Installments[0].Due
+	if got, err := r.Loans().TransactionOfInstallment(ctx, loanID, schedule.ValidFrom, due); err != nil || got != txID {
+		t.Errorf("TransactionOfInstallment = %d, %v; want %d", got, err, txID)
+	}
+	ref, err := r.Loans().InstallmentOfTransaction(ctx, txID)
+	if want := (app.InstallmentRef{LoanID: loanID, ScheduleFrom: schedule.ValidFrom, Due: due}); err != nil || ref != want {
+		t.Errorf("InstallmentOfTransaction = %+v, %v; want %+v", ref, err, want)
+	}
+	if err := r.Loans().UnlinkInstallment(ctx, loanID, schedule.ValidFrom, due); err != nil {
+		t.Errorf("UnlinkInstallment: %v", err)
+	}
+	if _, err := r.Loans().TransactionOfInstallment(ctx, loanID, schedule.ValidFrom, due); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("TransactionOfInstallment unlinked err = %v, want not_found", err)
+	}
+	if _, err := r.Loans().TransactionOfInstallment(ctx, loanID, schedule.ValidFrom, mustDate(t, "2030-01-01")); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("TransactionOfInstallment missing installment err = %v, want not_found", err)
+	}
+	if _, err := r.Loans().InstallmentOfTransaction(ctx, txID); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("InstallmentOfTransaction unlinked err = %v, want not_found", err)
+	}
 }
 
 func contractLoanEvents(t *testing.T, f *fixture, loanID domain.LoanID) {

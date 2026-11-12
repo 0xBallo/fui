@@ -284,6 +284,40 @@ func (r loanRepo) UnlinkInstallment(ctx context.Context, loanID domain.LoanID, s
 	return nil
 }
 
+func (r loanRepo) TransactionOfInstallment(
+	ctx context.Context, loanID domain.LoanID, scheduleFrom, due domain.Date,
+) (domain.TransactionID, error) {
+	if scheduleFrom.IsZero() || due.IsZero() {
+		return 0, fmt.Errorf("transaction of loan installment: %w", domain.ErrMissingField)
+	}
+	id, err := r.repos.queries.GetInstallmentTransaction(ctx, gen.GetInstallmentTransactionParams{
+		LoanID: int64(loanID), ScheduleFrom: scheduleFrom.String(), DueDate: due.String(),
+	})
+	if err != nil {
+		return 0, mapNotFound(mapSQLError(err), "loan installment")
+	}
+	if !id.Valid {
+		return 0, fmt.Errorf("loan installment %d %s/%s has no transaction: %w", loanID, scheduleFrom, due, domain.ErrNotFound)
+	}
+	return domain.TransactionID(id.Int64), nil
+}
+
+func (r loanRepo) InstallmentOfTransaction(ctx context.Context, txID domain.TransactionID) (app.InstallmentRef, error) {
+	row, err := r.repos.queries.GetInstallmentByTransaction(ctx, sql.NullInt64{Int64: int64(txID), Valid: true})
+	if err != nil {
+		return app.InstallmentRef{}, mapNotFound(mapSQLError(err), "installment of transaction")
+	}
+	from, err := domain.ParseDate(row.ValidFrom)
+	if err != nil {
+		return app.InstallmentRef{}, fmt.Errorf("parse schedule valid_from %q: %w", row.ValidFrom, err)
+	}
+	due, err := domain.ParseDate(row.DueDate)
+	if err != nil {
+		return app.InstallmentRef{}, fmt.Errorf("parse installment due_date %q: %w", row.DueDate, err)
+	}
+	return app.InstallmentRef{LoanID: domain.LoanID(row.LoanID), ScheduleFrom: from, Due: due}, nil
+}
+
 func toLoan(row gen.Loan) (domain.Loan, error) {
 	kind, err := domain.ParseLoanKind(row.Kind)
 	if err != nil {

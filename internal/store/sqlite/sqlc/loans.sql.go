@@ -23,6 +23,50 @@ func (q *Queries) DeleteLoan(ctx context.Context, id int64) (int64, error) {
 	return result.RowsAffected()
 }
 
+const getInstallmentByTransaction = `-- name: GetInstallmentByTransaction :one
+SELECT s.loan_id, s.valid_from, i.due_date
+FROM loan_installments AS i
+JOIN loan_schedules AS s ON s.id = i.schedule_id
+WHERE i.transaction_id = ?1
+ORDER BY s.valid_from DESC, i.id DESC
+LIMIT 1
+`
+
+type GetInstallmentByTransactionRow struct {
+	LoanID    int64
+	ValidFrom string
+	DueDate   string
+}
+
+func (q *Queries) GetInstallmentByTransaction(ctx context.Context, transactionID sql.NullInt64) (GetInstallmentByTransactionRow, error) {
+	row := q.db.QueryRowContext(ctx, getInstallmentByTransaction, transactionID)
+	var i GetInstallmentByTransactionRow
+	err := row.Scan(&i.LoanID, &i.ValidFrom, &i.DueDate)
+	return i, err
+}
+
+const getInstallmentTransaction = `-- name: GetInstallmentTransaction :one
+SELECT i.transaction_id
+FROM loan_installments AS i
+JOIN loan_schedules AS s ON s.id = i.schedule_id
+WHERE s.loan_id = ?1
+  AND s.valid_from = ?2
+  AND i.due_date = ?3
+`
+
+type GetInstallmentTransactionParams struct {
+	LoanID       int64
+	ScheduleFrom string
+	DueDate      string
+}
+
+func (q *Queries) GetInstallmentTransaction(ctx context.Context, arg GetInstallmentTransactionParams) (sql.NullInt64, error) {
+	row := q.db.QueryRowContext(ctx, getInstallmentTransaction, arg.LoanID, arg.ScheduleFrom, arg.DueDate)
+	var transaction_id sql.NullInt64
+	err := row.Scan(&transaction_id)
+	return transaction_id, err
+}
+
 const getLoan = `-- name: GetLoan :one
 SELECT id, kind, principal_minor, currency, disbursed_on, term_months, rate_type, debit_account_id, created_at, updated_at, name, liability_account_id
 FROM loans

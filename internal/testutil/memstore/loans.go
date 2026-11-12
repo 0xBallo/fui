@@ -283,6 +283,37 @@ func (l loans) UnlinkInstallment(_ context.Context, loanID domain.LoanID, schedu
 	return nil
 }
 
+func (l loans) TransactionOfInstallment(
+	_ context.Context, loanID domain.LoanID, scheduleFrom, due domain.Date,
+) (domain.TransactionID, error) {
+	key := loanInstallmentKey{loanID: loanID, scheduleFrom: scheduleFrom, due: due}
+	if err := l.ensureInstallmentKey(key); err != nil {
+		return 0, err
+	}
+	id, ok := l.st.InstallmentLinks[key]
+	if !ok {
+		return 0, notFound("loan installment transaction", fmt.Sprintf("%d/%s/%s", loanID, scheduleFrom, due))
+	}
+	return id, nil
+}
+
+func (l loans) InstallmentOfTransaction(_ context.Context, txID domain.TransactionID) (app.InstallmentRef, error) {
+	var (
+		best  loanInstallmentKey
+		found bool
+	)
+	for key, id := range l.st.InstallmentLinks {
+		// Same tie-break as the SQL: newest schedule version first.
+		if id == txID && (!found || key.scheduleFrom.After(best.scheduleFrom)) {
+			best, found = key, true
+		}
+	}
+	if !found {
+		return app.InstallmentRef{}, notFound("installment of transaction", txID)
+	}
+	return app.InstallmentRef{LoanID: best.loanID, ScheduleFrom: best.scheduleFrom, Due: best.due}, nil
+}
+
 func (l loans) ensureInstallmentKey(key loanInstallmentKey) error {
 	if key.scheduleFrom.IsZero() || key.due.IsZero() {
 		return fmt.Errorf("loan installment key: %w", domain.ErrMissingField)

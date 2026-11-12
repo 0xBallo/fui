@@ -222,6 +222,13 @@ type SplitRepo interface {
 	ReplaceSplits(ctx context.Context, tx domain.TransactionID, rows []domain.Split) error
 }
 
+// InstallmentRef identifies one installment: the schedule version it belongs to and its due date.
+type InstallmentRef struct {
+	LoanID       domain.LoanID
+	ScheduleFrom domain.Date // ValidFrom of the schedule version
+	Due          domain.Date
+}
+
 // LoanRepo stores financing contracts and their schedule versions.
 type LoanRepo interface {
 	Insert(ctx context.Context, loan domain.Loan) (domain.Loan, error)
@@ -239,6 +246,12 @@ type LoanRepo interface {
 	ListEvents(ctx context.Context, loanID domain.LoanID) ([]domain.LoanEvent, error)
 	LinkInstallment(ctx context.Context, loanID domain.LoanID, scheduleFrom, due domain.Date, txID domain.TransactionID) error
 	UnlinkInstallment(ctx context.Context, loanID domain.LoanID, scheduleFrom, due domain.Date) error
+	// TransactionOfInstallment returns the transaction linked to the installment; ErrNotFound when
+	// the installment does not exist or has no transaction.
+	TransactionOfInstallment(ctx context.Context, loanID domain.LoanID, scheduleFrom, due domain.Date) (domain.TransactionID, error)
+	// InstallmentOfTransaction returns the installment the transaction is linked to; ErrNotFound
+	// when it pays none.
+	InstallmentOfTransaction(ctx context.Context, txID domain.TransactionID) (InstallmentRef, error)
 }
 
 // BudgetRepo stores budgets (caps and envelopes), their monthly amount overrides, and the

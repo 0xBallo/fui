@@ -155,3 +155,19 @@ WHERE schedule_id = (
       AND valid_from = @schedule_from
 )
   AND due_date = @due_date;
+
+-- name: GetInstallmentTransaction :one
+SELECT i.transaction_id
+FROM loan_installments AS i
+JOIN loan_schedules AS s ON s.id = i.schedule_id
+WHERE s.loan_id = @loan_id
+  AND s.valid_from = @schedule_from
+  AND i.due_date = @due_date;
+
+-- name: GetInstallmentByTransaction :one
+SELECT s.loan_id, s.valid_from, i.due_date
+FROM loan_installments AS i
+JOIN loan_schedules AS s ON s.id = i.schedule_id
+WHERE i.transaction_id = @transaction_id
+ORDER BY s.valid_from DESC, i.id DESC
+LIMIT 1;
