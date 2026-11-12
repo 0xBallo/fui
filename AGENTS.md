@@ -49,9 +49,14 @@ FUI is a local-first personal-finance CLI + TUI in Go. Specs (Italian) are the s
 2. Stay inside the paths owned by your task (listed in your task file). `go.mod`/`go.sum` may be updated for new
    dependencies (only the ones allowed by the technical spec). If you need a change elsewhere, do not make it:
    write it under "Requests" in your report.
-3. Commit atomically with **Conventional Commits**: `<type>(<scope>): <imperative lowercase summary ≤72 chars>`,
-   scopes: `domain, app, cli, tui, store, import, connector/revolut, connector/widiba, proto, config, skill`
-   (plus `build`, `ci`, `docs` as types). Each commit builds and passes tests.
+3. Git flow (see "Flusso Git" in the technical spec): `main` = PROD, `develop` = PREVIEW. Feature branches start
+   from `develop`, hotfix branches from `main`; both are squash-merged through a PR with all CI checks green. Never
+   commit directly on `develop` or `main`. Several commits per topic are fine (no atomicity required); the
+   `pre-commit` hook (`make hooks` once per clone) runs fmt, build, vet, lint and tests, so every commit is green.
+   Messages use **Conventional Commits**: `<type>(<scope>): <imperative lowercase summary ≤72 chars>`, scopes:
+   `domain, app, cli, tui, store, import, connector/revolut, connector/widiba, proto, config, skill` (plus `build`,
+   `ci`, `docs` as types); the PR title uses the same format, as it becomes the squash commit. Releases: `release/vX.Y.Z` from `develop`
+   updates `CHANGELOG.md`, merges into `main`, gets the tag.
    **Never** add `Co-Authored-By`, or mention AI/Claude/Copilot/Gemini/agents in commit messages. Do not push.
 4. Before declaring done, run and make green (on your packages):
    `gofumpt -l . ; go build ./... ; go vet ./... ; go test -race ./<your-pkgs>/... ; golangci-lint run ./<your-pkgs>/...`
@@ -62,5 +67,5 @@ FUI is a local-first personal-finance CLI + TUI in Go. Specs (Italian) are the s
    - Open issues / known gaps
    - Requests to other tasks
    Then reply with the single line `TASK DONE` (or `TASK BLOCKED: <reason>`).
-6. If the coordinator sends review findings later, fix them with new atomic commits, update `.task-report.md`,
+6. If the coordinator sends review findings later, fix them with new commits, update `.task-report.md`,
    and reply `TASK DONE` again.
