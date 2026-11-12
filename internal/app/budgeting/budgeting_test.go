@@ -287,16 +287,25 @@ func TestEnvelopeInvariantsProperty(t *testing.T) {
 		set(t, s, budgeting.SetRequest{Name: "Food", Categories: []string{"Food"}, Amount: "0"})
 		set(t, s, budgeting.SetRequest{Name: "Home", Categories: []string{"Home"}, Amount: "0"})
 		names := []string{"", "Food", "Home"}
-		var wantFood int64
+		// A card is not liquidity: its balance must stay out of "Da assegnare".
+		if err := e.store.WithTx(ctx, func(r app.Repos) error {
+			_, err := r.Accounts().Insert(ctx, domain.Account{
+				Name: "Card", Kind: domain.AccountCreditCard, Currency: eur,
+				OpeningBalance: money(-7700), OpenedOn: day("2026-01-01"),
+			})
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		var wantFood, spent int64
 		for range rapid.IntRange(0, 8).Draw(t, "n") {
 			month := rapid.IntRange(1, 3).Draw(t, "month")
 			date := time.Date(2026, time.Month(month), rapid.IntRange(1, 28).Draw(t, "day"), 0, 0, 0, 0, time.UTC).Format("2006-01-02")
 			minor := rapid.Int64Range(1, 50000).Draw(t, "minor")
 			if rapid.Bool().Draw(t, "spend") {
 				e.spend(t, date, minor, e.food, domain.StatusBooked)
-				if month <= 3 {
-					wantFood -= minor
-				}
+				wantFood -= minor
+				spent += minor
 				continue
 			}
 			from, to := rapid.SampledFrom(names).Draw(t, "from"), rapid.SampledFrom(names).Draw(t, "to")
@@ -327,6 +336,9 @@ func TestEnvelopeInvariantsProperty(t *testing.T) {
 		}
 		if sum+st.ToAssign.ToAssign.Minor() != st.ToAssign.Liquidity.Minor() {
 			t.Fatalf("envelopes %d + to assign %d != liquidity %d", sum, st.ToAssign.ToAssign.Minor(), st.ToAssign.Liquidity.Minor())
+		}
+		if want := 100000 - spent; st.ToAssign.Liquidity.Minor() != want {
+			t.Fatalf("liquidity = %d, want %d (checking only)", st.ToAssign.Liquidity.Minor(), want)
 		}
 		if food != wantFood {
 			t.Fatalf("Food balance = %d, want %d", food, wantFood)
@@ -384,5 +396,80 @@ func TestNoBaseCurrency(t *testing.T) {
 	s := budgeting.New(e.store, fixedClock{}, budgeting.Config{Modules: must(module.Validate([]module.ID{module.Core, module.Budget}))})
 	if _, err := s.Status(context.Background(), ""); err == nil {
 		t.Fatal("want error without base currency")
+	}
+}
+
+// spyStore records the transactions read through TransactionRepo.List.
+type spyStore struct {
+	app.Store
+	read *[]domain.Transaction
+}
+
+type spyRepos struct {
+	app.Repos
+	read *[]domain.Transaction
+}
+
+type spyTxs struct {
+	app.TransactionRepo
+	read *[]domain.Transaction
+}
+
+func (s spyStore) Read(ctx context.Context, fn func(app.Repos) error) error {
+	return s.Store.Read(ctx, func(r app.Repos) error { return fn(spyRepos{r, s.read}) })
+}
+
+func (r spyRepos) Transactions() app.TransactionRepo { return spyTxs{r.Repos.Transactions(), r.read} }
+
+func (t spyTxs) List(ctx context.Context, f domain.TxFilter, after *app.TxCursor, limit int) ([]domain.Transaction, error) {
+	out, err := t.TransactionRepo.List(ctx, f, after, limit)
+	*t.read = append(*t.read, out...)
+	return out, err
+}
+
+func TestStatusReadsOnlyWhatItNeeds(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	var read []domain.Transaction
+	mk := func(mode domain.BudgetMode) *budgeting.Service {
+		return budgeting.New(spyStore{e.store, &read}, fixedClock{}, budgeting.Config{
+			BaseCurrency: eur, Mode: mode, Modules: must(module.Validate([]module.ID{module.Core, module.Budget})), Location: time.UTC,
+		})
+	}
+	s := mk(domain.BudgetCap)
+	set(t, s, budgeting.SetRequest{Name: "Food", Categories: []string{"Food"}, Amount: "100"})
+	old := e.spend(t, "2026-01-10", 100, e.food, domain.StatusBooked)
+	oldHome := e.spend(t, "2026-01-11", 100, e.home, domain.StatusBooked)
+	future := e.spend(t, "2026-04-10", 100, e.food, domain.StatusBooked)
+	inMonth := e.spend(t, "2026-03-10", 100, e.food, domain.StatusBooked)
+
+	ids := func() map[domain.TransactionID]bool {
+		m := map[domain.TransactionID]bool{}
+		for _, x := range read {
+			m[x.ID] = true
+		}
+		read = nil
+		return m
+	}
+	if _, err := s.Status(ctx, "2026-03"); err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(); len(got) != 1 || !got[inMonth.ID] {
+		t.Errorf("cap without carry read %v, want only the month's transaction", got)
+	}
+
+	// With carry the history of the budgeted category is needed, still not other categories or later months.
+	yes := true
+	set(t, s, budgeting.SetRequest{Name: "Food", Carry: &yes})
+	if _, err := s.Status(ctx, "2026-03"); err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(); got[future.ID] || got[oldHome.ID] || !got[old.ID] || !got[inMonth.ID] {
+		t.Errorf("carry cap read %v", got)
+	}
+
+	// The month read is whole in any case: it feeds the uncovered total.
+	if st, err := s.Status(ctx, "2026-03"); err != nil || st.Uncovered.Minor() != 0 {
+		t.Errorf("uncovered = %v, %v", st.Uncovered, err)
 	}
 }

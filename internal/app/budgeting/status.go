@@ -50,7 +50,7 @@ func (s *Service) Status(ctx context.Context, monthIn string) (Status, error) {
 		if err != nil {
 			return fmt.Errorf("list budgets: %w", err)
 		}
-		rows, err := s.rows(ctx, r)
+		rows, err := s.rows(ctx, r, st.Period, budgets)
 		if err != nil {
 			return err
 		}
@@ -60,7 +60,12 @@ func (s *Service) Status(ctx context.Context, monthIn string) (Status, error) {
 		if s.cfg.Mode == domain.BudgetCap {
 			return s.caps(&st, budgets, rows)
 		}
-		moves, err := r.Budgets().Moves(ctx, epoch, p.To())
+		// Moves has no unbounded form: 1900 predates any real archive.
+		from, err := domain.NewDate(1900, 1, 1)
+		if err != nil {
+			return err
+		}
+		moves, err := r.Budgets().Moves(ctx, from, p.To())
 		if err != nil {
 			return fmt.Errorf("list moves: %w", err)
 		}
@@ -71,14 +76,6 @@ func (s *Service) Status(ctx context.Context, monthIn string) (Status, error) {
 	})
 	return st, err
 }
-
-var epoch = func() domain.Date {
-	d, err := domain.NewDate(1900, 1, 1)
-	if err != nil {
-		panic(err)
-	}
-	return d
-}()
 
 // periodsTo returns the consecutive budget months from the earliest row (or p) up to p.
 func (s *Service) periodsTo(p domain.Period, rows []domain.BudgetRow, moves []domain.BudgetMove) ([]domain.Period, error) {
@@ -199,43 +196,93 @@ func (s *Service) toBase(ctx context.Context, r app.Repos, m domain.Money, date 
 	return domain.Convert(m, fx.Rate, s.cfg.BaseCurrency)
 }
 
-// rows feeds the engine: every transaction as base-currency rows, one per split when split.
-func (s *Service) rows(ctx context.Context, r app.Repos) ([]domain.BudgetRow, error) {
-	f, err := domain.NewTxFilter(domain.TxFilterSpec{})
+// rows feeds the engine with base-currency rows (one per split when split). The period itself
+// is read whole (uncovered spending needs it); earlier history is read only when something
+// carries over (envelopes, or a cap with Carry), and then only the budgeted categories and tags.
+func (s *Service) rows(ctx context.Context, r app.Repos, p domain.Period, budgets []domain.Budget) ([]domain.BudgetRow, error) {
+	cur, err := domain.NewTxFilter(domain.TxFilterSpec{From: p.From(), To: p.To()})
 	if err != nil {
 		return nil, err
 	}
-	txs, err := r.Transactions().List(ctx, f, nil, 0)
+	txs, err := r.Transactions().List(ctx, cur, nil, 0)
 	if err != nil {
 		return nil, fmt.Errorf("list transactions: %w", err)
 	}
-	var out []domain.BudgetRow
-	for _, t := range txs {
-		tags, err := r.Tags().TagsOf(ctx, t.ID)
+	if s.cfg.Mode == domain.BudgetEnvelope || slices.ContainsFunc(budgets, func(b domain.Budget) bool { return b.Carry }) {
+		before, err := p.From().AddDays(-1)
 		if err != nil {
-			return nil, fmt.Errorf("tags of transaction %d: %w", t.ID, err)
+			return nil, err
 		}
-		ids := make([]domain.TagID, len(tags))
-		for i, tg := range tags {
-			ids[i] = tg.ID
+		var cats []domain.CategoryID
+		var tags []domain.TagID
+		for _, b := range budgets {
+			for _, t := range b.Targets {
+				if t.CategoryID != 0 {
+					cats = append(cats, t.CategoryID)
+				} else {
+					tags = append(tags, t.TagID)
+				}
+			}
 		}
-		splits, err := r.Splits().SplitsOf(ctx, t.ID)
-		if err != nil {
-			return nil, fmt.Errorf("splits of transaction %d: %w", t.ID, err)
-		}
-		parts := []domain.Split{{Category: t.CategoryID, Amount: t.Amount}}
-		if len(splits) > 0 {
-			parts = splits
-		}
-		for _, sp := range parts {
-			amt, err := s.toBase(ctx, r, sp.Amount, t.Date)
+		// The filter ANDs categories with tags, so each kind is its own query.
+		for _, spec := range []domain.TxFilterSpec{{CategoryIDs: cats}, {TagIDs: tags}} {
+			if len(cats)+len(tags) == 0 || len(spec.CategoryIDs)+len(spec.TagIDs) == 0 {
+				continue
+			}
+			spec.To = before
+			f, err := domain.NewTxFilter(spec)
 			if err != nil {
 				return nil, err
 			}
-			out = append(out, domain.BudgetRow{
-				Date: t.Date, Amount: amt, Kind: t.Kind, Status: t.Status, CategoryID: sp.Category, TagIDs: slices.Clone(ids),
-			})
+			hist, err := r.Transactions().List(ctx, f, nil, 0)
+			if err != nil {
+				return nil, fmt.Errorf("list transactions: %w", err)
+			}
+			txs = append(txs, hist...)
 		}
+	}
+	seen := map[domain.TransactionID]bool{}
+	var out []domain.BudgetRow
+	for _, t := range txs {
+		if seen[t.ID] {
+			continue
+		}
+		seen[t.ID] = true
+		rows, err := s.txRows(ctx, r, t)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rows...)
+	}
+	return out, nil
+}
+
+func (s *Service) txRows(ctx context.Context, r app.Repos, t domain.Transaction) ([]domain.BudgetRow, error) {
+	tags, err := r.Tags().TagsOf(ctx, t.ID)
+	if err != nil {
+		return nil, fmt.Errorf("tags of transaction %d: %w", t.ID, err)
+	}
+	ids := make([]domain.TagID, len(tags))
+	for i, tg := range tags {
+		ids[i] = tg.ID
+	}
+	splits, err := r.Splits().SplitsOf(ctx, t.ID)
+	if err != nil {
+		return nil, fmt.Errorf("splits of transaction %d: %w", t.ID, err)
+	}
+	parts := []domain.Split{{Category: t.CategoryID, Amount: t.Amount}}
+	if len(splits) > 0 {
+		parts = splits
+	}
+	out := make([]domain.BudgetRow, 0, len(parts))
+	for _, sp := range parts {
+		amt, err := s.toBase(ctx, r, sp.Amount, t.Date)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, domain.BudgetRow{
+			Date: t.Date, Amount: amt, Kind: t.Kind, Status: t.Status, CategoryID: sp.Category, TagIDs: slices.Clone(ids),
+		})
 	}
 	return out, nil
 }
