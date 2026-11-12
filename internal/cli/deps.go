@@ -9,6 +9,7 @@ import (
 	"io"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/budgeting"
 	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/app/rules"
@@ -29,6 +30,9 @@ type Deps struct {
 	Reporting Reporting
 	// Rules runs the categorization-rule CRUD/test/apply use cases.
 	Rules *rules.Service
+	// Budgeting runs the budget module's use cases; nil in builds that have not wired it yet
+	// (requireBudgeting fails cleanly instead of panicking).
+	Budgeting *budgeting.Service
 	// Config is the resolved configuration; AgentMode reflects FUI_AGENT, Locale and Currency
 	// drive parsing and formatting.
 	Config *config.Config
@@ -73,4 +77,12 @@ func requireImporting(d *Deps) (*importing.Service, error) {
 		return nil, fmt.Errorf("fui: no connector registry configured")
 	}
 	return d.Importing, nil
+}
+
+// requireBudgeting returns d.Budgeting, or a data error when this build has none configured.
+func requireBudgeting(d *Deps) (*budgeting.Service, error) {
+	if d.Budgeting == nil {
+		return nil, fmt.Errorf("fui: no budgeting service configured")
+	}
+	return d.Budgeting, nil
 }
