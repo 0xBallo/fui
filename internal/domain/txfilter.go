@@ -273,7 +273,7 @@ func (f TxFilter) matchesBatch(id ImportBatchID) bool {
 
 func (f TxFilter) matchesSign(amount Money) bool {
 	switch f.sign {
-	case TxSignAny:
+	case TxSignAny, "": // the zero value means any sign
 		return true
 	case TxSignIncome:
 		return amount.Sign() > 0
@@ -310,7 +310,7 @@ func (f TxFilter) matchesText(searchText string) bool {
 func (f TxFilter) Less(a, b Transaction, payeeA, payeeB string) bool {
 	cmp := 0
 	switch f.sort {
-	case TxSortDate:
+	case TxSortDate, "": // the zero value sorts by date
 		cmp = a.Date.Cmp(b.Date)
 	case TxSortAmount:
 		cmp = cmpInt64(a.Amount.Minor(), b.Amount.Minor())

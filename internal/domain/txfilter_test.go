@@ -257,4 +257,19 @@ func TestTxFilterLess(t *testing.T) {
 	}
 }
 
+func TestZeroTxFilterMatchesEverythingByDateID(t *testing.T) {
+	var f TxFilter
+	a := Transaction{ID: 2, Date: date(t, 2026, 1, 1), Amount: money(t, -100, "EUR")}
+	b := Transaction{ID: 1, Date: date(t, 2026, 1, 1), Amount: money(t, 50, "EUR")}
+	c := Transaction{ID: 3, Date: date(t, 2025, 1, 1), Amount: money(t, 0, "EUR")}
+	for _, tx := range []Transaction{a, b, c} {
+		if !f.Match(tx, "anything") {
+			t.Fatalf("zero filter must match %+v", tx)
+		}
+	}
+	if !f.Less(c, b, "", "") || !f.Less(b, a, "", "") || f.Less(a, b, "", "") {
+		t.Fatal("zero filter must sort by (date, id) ascending")
+	}
+}
+
 func int64ptr(v int64) *int64 { return &v }

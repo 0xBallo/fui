@@ -110,7 +110,7 @@ func TestPropertyFUIExportRoundTrips(t *testing.T) {
 		a := newEnv(nil)
 		a.importAll(t, src)
 		var buf bytes.Buffer
-		n := must(a.svc.Export(context.Background(), importing.ExportRequest{Format: importing.FormatFUI, Filter: must(domain.NewTxFilter(domain.TxFilterSpec{}))}, &buf))
+		n := must(a.svc.Export(context.Background(), importing.ExportRequest{Format: importing.FormatFUI, Filter: domain.TxFilter{}}, &buf))
 
 		b := newEnv(nil)
 		file := fuiSource(t, buf.Bytes())
