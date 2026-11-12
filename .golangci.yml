@@ -34,6 +34,8 @@ linters:
           msg: inject a clock (internal/clock) instead of calling time.Now
         - pattern: ^float(32|64)$
           msg: no floating point in money code; use domain.Money / domain.Rate
+        - pattern: lipgloss\.Color\(
+          msg: build colors from internal/tui/theme's semantic tokens, not literal lipgloss.Color calls
     depguard:
       rules:
         domain:
@@ -74,6 +76,11 @@ linters:
               desc: FUI is local-first, no network
             - pkg: net/rpc
               desc: FUI is local-first, no network
+        no-palette-outside-theme:
+          files: ["**/internal/tui/**", "!**/internal/tui/theme/**", "!$test"]
+          deny:
+            - pkg: github.com/catppuccin/go
+              desc: catppuccin palette access is confined to internal/tui/theme's semantic tokens
   exclusions:
     rules:
       - path: _test\.go
@@ -81,6 +88,9 @@ linters:
       - path: internal/clock/
         linters: [forbidigo]
         text: time\.Now
+      - path: internal/tui/theme/
+        linters: [forbidigo]
+        text: lipgloss\.Color
       - path: (internal/domain/simulate/|internal/cli/|internal/tui/|cmd/|pkg/|tools/|internal/connector/)
         linters: [forbidigo]
         text: float
