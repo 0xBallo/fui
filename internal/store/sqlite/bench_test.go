@@ -6,12 +6,25 @@ import (
 	"math/rand"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
 )
 
 const syntheticTxCount = 50_000
+
+// searchTxCount and searchTarget are the spec's search goal: filter + text over 100 000
+// transactions in under 200 ms. BenchmarkSearch100k is not part of `make test`.
+const (
+	searchTxCount = 100_000
+	searchTarget  = 200 * time.Millisecond
+)
+
+var benchDescriptions = []string{
+	"Esselunga spesa", "Caffè bar Roma", "Netflix abbonamento", "Affitto ottobre", "Trenitalia biglietto",
+	"Amazon ordine", "Farmacia", "Stipendio", "bench", "Ristorante da Mario",
+}
 
 func BenchmarkAccountListBalances50k(b *testing.B) {
 	store, accountIDs, at := seedSyntheticStore(b, syntheticTxCount)
@@ -109,7 +122,7 @@ func seedSyntheticStore(tb testing.TB, total int) (*Store, []domain.AccountID, d
 				AccountID:   accountID,
 				Date:        date,
 				Amount:      amount,
-				Description: "bench",
+				Description: benchDescriptions[i%len(benchDescriptions)],
 				Status:      domain.StatusBooked,
 				Kind:        domain.KindPayment,
 			})
@@ -126,4 +139,38 @@ func seedSyntheticStore(tb testing.TB, total int) (*Store, []domain.AccountID, d
 	}
 
 	return store, accountIDs, end
+}
+
+func BenchmarkSearch100k(b *testing.B) {
+	store, accountIDs, _ := seedSyntheticStore(b, searchTxCount)
+	f, err := domain.NewTxFilter(domain.TxFilterSpec{
+		AccountIDs: accountIDs[:2], From: mustBenchDate(b, "2025-01-01"), To: mustBenchDate(b, "2025-12-31"),
+		Sign: domain.TxSignExpense, Text: "esselun", Desc: true, Limit: 100,
+	})
+	if err != nil {
+		b.Fatalf("NewTxFilter: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := store.Read(context.Background(), func(r app.Repos) error {
+			_, err := r.Transactions().List(context.Background(), f, nil, 0)
+			return err
+		}); err != nil {
+			b.Fatalf("Read: %v", err)
+		}
+	}
+	b.StopTimer()
+	if per := time.Duration(b.Elapsed().Nanoseconds() / int64(b.N)); per > searchTarget {
+		b.Logf("search took %v per query, above the %v target", per, searchTarget)
+	}
+}
+
+func mustBenchDate(tb testing.TB, s string) domain.Date {
+	tb.Helper()
+	d, err := domain.ParseDate(s)
+	if err != nil {
+		tb.Fatalf("ParseDate(%q): %v", s, err)
+	}
+	return d
 }
