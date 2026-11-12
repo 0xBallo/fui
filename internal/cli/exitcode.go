@@ -29,6 +29,7 @@ var userInputCodes = map[domain.Code]bool{
 	domain.CodeNotFound:            true,
 	domain.CodeCurrencyMismatch:    true,
 	domain.CodeReconciled:          true,
+	domain.CodeInvalidFilter:       true,
 	domain.CodeInvalidAmount:       true,
 	domain.CodeInvalidDate:         true,
 	domain.CodeMissingField:        true,

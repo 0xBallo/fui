@@ -20,6 +20,7 @@ var wantExit = map[domain.Code]int{
 	domain.CodeNotFound:            cli.ExitUserError,
 	domain.CodeCurrencyMismatch:    cli.ExitUserError,
 	domain.CodeReconciled:          cli.ExitUserError,
+	domain.CodeInvalidFilter:       cli.ExitUserError,
 	domain.CodeOverflow:            cli.ExitDataError,
 	domain.CodeInvalidAmount:       cli.ExitUserError,
 	domain.CodeInvalidDate:         cli.ExitUserError,
