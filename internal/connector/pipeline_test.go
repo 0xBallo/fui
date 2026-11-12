@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,26 @@ import (
 	"github.com/0xballo/fui/internal/testutil/memstore"
 	"github.com/0xballo/fui/pkg/fuiproto"
 )
+
+// perfTimingUnreliable reports whether the test binary was built with the race detector, or is
+// running with coverage instrumentation. The non-functional 10 000-row timing budget is verified
+// by BenchmarkImportTenThousandRows instead of this test in either case, because instrumentation
+// inflates wall-clock time well past the budget on CI runners regardless of real performance.
+func perfTimingUnreliable() bool {
+	if testing.CoverMode() != "" {
+		return true
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return false
+	}
+	for _, setting := range info.Settings {
+		if setting.Key == "-race" && setting.Value == "true" {
+			return true
+		}
+	}
+	return false
+}
 
 type fixedClock struct{}
 
@@ -132,6 +153,9 @@ func TestImportTenThousandRowsUnderFiveSeconds(t *testing.T) {
 	res, took := importBigCSV(t, writeBigCSV(t, 10_000))
 	if res.Transactions != 10_000 {
 		t.Fatalf("imported %d rows", res.Transactions)
+	}
+	if perfTimingUnreliable() {
+		t.Skip("timing budget skipped under the race detector or coverage instrumentation; see BenchmarkImportTenThousandRows")
 	}
 	if took > 5*time.Second {
 		t.Fatalf("plan+apply of 10 000 rows took %s, want under 5s", took)
