@@ -42,6 +42,81 @@ func TestNewRecurrenceRule(t *testing.T) {
 	}
 }
 
+func TestNewRecurrenceRejectsZeroNextDateWithoutEnd(t *testing.T) {
+	rule, err := NewRecurrenceRule(1, RecurrenceMonths, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = NewRecurrence(Recurrence{
+		AccountID: 1,
+		Amount:    money(t, -1_000, "EUR"),
+		Rule:      rule,
+		Start:     date(t, 2026, 1, 1),
+	})
+	if !errors.Is(err, ErrMissingField) {
+		t.Fatalf("zero next_date without end err = %v, want ErrMissingField", err)
+	}
+}
+
+func TestNewRecurrenceAcceptsZeroNextDateWhenExhausted(t *testing.T) {
+	rule, err := NewRecurrenceRule(1, RecurrenceMonths, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRecurrence(Recurrence{
+		AccountID: 1,
+		Amount:    money(t, -1_000, "EUR"),
+		Rule:      rule,
+		Start:     date(t, 2026, 1, 1),
+		End:       date(t, 2026, 3, 1),
+	})
+	if err != nil {
+		t.Fatalf("NewRecurrence with zero next_date and end set: %v", err)
+	}
+	if !r.Exhausted() {
+		t.Fatal("Exhausted() = false, want true")
+	}
+}
+
+func TestRecurrenceExhausted(t *testing.T) {
+	rule, err := NewRecurrenceRule(1, RecurrenceMonths, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRecurrence(Recurrence{
+		AccountID: 1,
+		Amount:    money(t, -1_000, "EUR"),
+		Rule:      rule,
+		Start:     date(t, 2026, 1, 1),
+		NextDate:  date(t, 2026, 1, 1),
+		End:       date(t, 2026, 1, 1),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Exhausted() {
+		t.Fatal("Exhausted() = true before advancing past end, want false")
+	}
+	r, err = Advance(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.NextDate.IsZero() {
+		t.Fatalf("NextDate = %v after advancing past end, want zero", r.NextDate)
+	}
+	if !r.Exhausted() {
+		t.Fatal("Exhausted() = false after advancing past end, want true")
+	}
+	// Persisting the exhausted state back through NewRecurrence must round-trip.
+	roundTripped, err := NewRecurrence(r)
+	if err != nil {
+		t.Fatalf("NewRecurrence round-trip of exhausted recurrence: %v", err)
+	}
+	if !roundTripped.Exhausted() {
+		t.Fatal("round-tripped recurrence lost its exhausted state")
+	}
+}
+
 func TestAdvanceMonthEndClamp(t *testing.T) {
 	tests := []struct {
 		name  string

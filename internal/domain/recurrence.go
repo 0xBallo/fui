@@ -90,7 +90,9 @@ type Recurrence struct {
 	NextDate    Date
 }
 
-// NewRecurrence validates and builds a recurrence.
+// NewRecurrence validates and builds a recurrence. A zero NextDate is
+// accepted only when End is set: it represents an exhausted recurrence
+// whose last occurrence has already passed End (see Advance and Exhausted).
 func NewRecurrence(r Recurrence) (Recurrence, error) {
 	if r.AccountID == 0 {
 		return Recurrence{}, missingField("account_id")
@@ -101,29 +103,35 @@ func NewRecurrence(r Recurrence) (Recurrence, error) {
 	if r.Start.IsZero() {
 		return Recurrence{}, missingField("start")
 	}
-	if r.NextDate.IsZero() {
+	if r.NextDate.IsZero() && r.End.IsZero() {
 		return Recurrence{}, missingField("next_date")
 	}
 	if _, err := NewRecurrenceRule(r.Rule.Every, r.Rule.Unit, r.Rule.DayOfMonth); err != nil {
 		return Recurrence{}, err
 	}
 	r.Description = strings.TrimSpace(r.Description)
-	if r.NextDate.Before(r.Start) {
-		return Recurrence{}, invalidValue("next_date", r.NextDate.String())
+	if !r.End.IsZero() && r.End.Before(r.Start) {
+		return Recurrence{}, invalidValue("end", r.End.String())
 	}
-	if !r.End.IsZero() {
-		if r.End.Before(r.Start) {
-			return Recurrence{}, invalidValue("end", r.End.String())
+	if !r.NextDate.IsZero() {
+		if r.NextDate.Before(r.Start) {
+			return Recurrence{}, invalidValue("next_date", r.NextDate.String())
 		}
-		if r.NextDate.After(r.End) {
+		if !r.End.IsZero() && r.NextDate.After(r.End) {
 			return Recurrence{}, invalidValue("next_date", r.NextDate.String())
 		}
 	}
 	return r, nil
 }
 
+// Exhausted reports whether r has no further occurrence to schedule: it has
+// an End date and has been advanced past it, leaving NextDate zero.
+func (r Recurrence) Exhausted() bool {
+	return !r.End.IsZero() && r.NextDate.IsZero()
+}
+
 // Advance moves r.NextDate to the next occurrence. If the recurrence is
-// exhausted by End, NextDate becomes the zero Date.
+// exhausted by End, NextDate becomes the zero Date (see Exhausted).
 func Advance(r Recurrence) (Recurrence, error) {
 	next, ok, err := nextRecurrenceDate(r, r.NextDate)
 	if err != nil {
