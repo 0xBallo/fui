@@ -14,6 +14,9 @@ import (
 // restore, config) are simply absent.
 var outputSchemas = map[string]string{
 	"fui init":            "init_result",
+	"fui module list":     "module_state[]",
+	"fui module enable":   "module_set",
+	"fui module disable":  "module_set",
 	"fui add":             "transaction",
 	"fui tx list":         "transaction[]",
 	"fui tx show":         "transaction",
