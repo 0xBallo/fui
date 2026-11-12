@@ -305,3 +305,28 @@ func TestListDeterministicTieBreaking(t *testing.T) {
 		t.Errorf("unexpected tie-break order (-want +got):\n%s", diff)
 	}
 }
+
+func TestRotateNeverDeletesResetBackups(t *testing.T) {
+	dir := t.TempDir()
+	names := []string{
+		"fui-20261111-100000-reset.db",
+		"fui-20261111-110000-manual.db",
+		"fui-20261111-120000-manual.db",
+		"fui-20261111-130000-manual.db",
+	}
+	for _, n := range names {
+		if err := os.WriteFile(filepath.Join(dir, n), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	deleted, err := backup.Rotate(dir, 2)
+	if err != nil {
+		t.Fatalf("Rotate: %v", err)
+	}
+	if diff := cmp.Diff([]string{filepath.Join(dir, names[1])}, deleted); diff != "" {
+		t.Fatalf("deleted mismatch (-want +got):\n%s", diff)
+	}
+	if _, err := os.Stat(filepath.Join(dir, names[0])); err != nil {
+		t.Fatalf("reset backup was removed: %v", err)
+	}
+}

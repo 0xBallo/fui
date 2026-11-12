@@ -30,17 +30,19 @@ const (
 	ReasonBulk Reason = "bulk"
 	// ReasonRestore indicates an automatic backup of current data before restoring another archive.
 	ReasonRestore Reason = "restore"
+	// ReasonReset indicates an automatic backup before the archive is reset. Rotate never deletes it.
+	ReasonReset Reason = "reset"
 )
 
 // TimeFormat defines the layout YYYYMMDD-HHMMSS used in backup file names.
 const TimeFormat = "20060102-150405"
 
-var backupRegex = regexp.MustCompile(`^fui-(\d{8}-\d{6})-(manual|import|migrate|bulk|restore)(?:-(\d+))?\.db$`)
+var backupRegex = regexp.MustCompile(`^fui-(\d{8}-\d{6})-(manual|import|migrate|bulk|restore|reset)(?:-(\d+))?\.db$`)
 
 // IsValidReason reports whether r is one of the recognized backup reasons.
 func IsValidReason(r Reason) bool {
 	switch r {
-	case ReasonManual, ReasonImport, ReasonMigrate, ReasonBulk, ReasonRestore:
+	case ReasonManual, ReasonImport, ReasonMigrate, ReasonBulk, ReasonRestore, ReasonReset:
 		return true
 	default:
 		return false
@@ -199,15 +201,22 @@ func fileNameWithCounter(t time.Time, reason Reason, counter int) string {
 }
 
 // Rotate removes the oldest backup files in dir matching the naming pattern,
-// retaining at most the newest keep backups. It returns the paths of deleted files.
+// retaining at most the newest keep backups (reset backups are exempt). It returns the paths of deleted files.
 func Rotate(dir string, keep int) ([]string, error) {
 	if keep < 0 {
 		return nil, fmt.Errorf("rotate backups: keep must be non-negative, got %d", keep)
 	}
 
-	files, err := List(dir)
+	all, err := List(dir)
 	if err != nil {
 		return nil, fmt.Errorf("list backups for rotation: %w", err)
+	}
+	// Reset backups stay until the user deletes them, so they neither count toward keep nor get removed.
+	files := all[:0:0]
+	for _, f := range all {
+		if f.Reason != ReasonReset {
+			files = append(files, f)
+		}
 	}
 
 	if len(files) <= keep {
