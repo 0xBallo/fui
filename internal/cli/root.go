@@ -41,7 +41,27 @@ func NewRoot(deps *Deps) *cobra.Command {
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return newUsageError(err) })
 	registerPersistentFlags(root)
 	root.PersistentPreRunE = moduleGate(deps)
-	addTopLevelModuleCommands(root, []topLevelModuleCommand{
+	addTopLevelModuleCommands(root, topLevelCommands(deps))
+	if err := configureDynamicCompletions(root, deps); err != nil {
+		root.PersistentPreRunE = func(*cobra.Command, []string) error { return err }
+	}
+	if err := configureModuleCommands(root, deps); err != nil {
+		root.PersistentPreRunE = func(*cobra.Command, []string) error { return err }
+	}
+	return root
+}
+
+// newTxCmdWithTags is the tx group plus the tag and split subcommands, which V32 registers here
+// because tx.go belongs to the MVP command set.
+func newTxCmdWithTags(deps *Deps) *cobra.Command {
+	cmd := newTxCmd(deps)
+	cmd.AddCommand(newTxTagCmd(deps), newTxUntagCmd(deps), newTxSplitCmd(deps), newTxUnsplitCmd(deps))
+	return cmd
+}
+
+// topLevelCommands lists every top-level command with the module that owns it.
+func topLevelCommands(deps *Deps) []topLevelModuleCommand {
+	return []topLevelModuleCommand{
 		{command: newInitCmd(deps), module: module.Core},
 		{command: newModuleCmd(deps), module: module.Core},
 		{command: newAddCmd(deps), module: module.Core},
@@ -70,22 +90,7 @@ func NewRoot(deps *Deps) *cobra.Command {
 		{command: newBudgetCmd(deps), module: module.Budget},
 		{command: newRecurringCmd(deps), module: module.Recurring},
 		{command: newLoanCmd(deps), module: module.Loans},
-	})
-	if err := configureDynamicCompletions(root, deps); err != nil {
-		root.PersistentPreRunE = func(*cobra.Command, []string) error { return err }
 	}
-	if err := configureModuleCommands(root, deps); err != nil {
-		root.PersistentPreRunE = func(*cobra.Command, []string) error { return err }
-	}
-	return root
-}
-
-// newTxCmdWithTags is the tx group plus the tag and split subcommands, which V32 registers here
-// because tx.go belongs to the MVP command set.
-func newTxCmdWithTags(deps *Deps) *cobra.Command {
-	cmd := newTxCmd(deps)
-	cmd.AddCommand(newTxTagCmd(deps), newTxUntagCmd(deps), newTxSplitCmd(deps), newTxUnsplitCmd(deps))
-	return cmd
 }
 
 func addTopLevelModuleCommands(root *cobra.Command, entries []topLevelModuleCommand) {

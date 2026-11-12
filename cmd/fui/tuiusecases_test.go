@@ -85,7 +85,7 @@ func TestTUIConfigWiresV02Screens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tc := tuiConfig(&cfg, &cli.Deps{}, nil, clock.NewFixed(time.Now()), eur)
+	tc := tuiConfig(&cfg, &cli.Deps{}, nil, clock.NewFixed(time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)), eur)
 	if tc.Budget == nil || tc.Report == nil || tc.Importer == nil || tc.Settings == nil ||
 		tc.ModuleConfig == nil || tc.ThemeConfig == nil {
 		t.Fatalf("tuiConfig left a v0.2 port unset: %+v", tc)
