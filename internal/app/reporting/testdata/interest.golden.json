@@ -1,0 +1,17 @@
+{
+  "period": "2026-01-01..2026-12-31",
+  "rows": [
+    {
+      "loan": "Mortgage",
+      "year": 2026,
+      "interest": {
+        "minor": 6713,
+        "currency": "EUR"
+      },
+      "fees": {
+        "minor": 0,
+        "currency": "EUR"
+      }
+    }
+  ]
+}

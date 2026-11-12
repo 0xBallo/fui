@@ -1,0 +1,26 @@
+{
+  "period": "2026-01-01..2026-03-31",
+  "points": [
+    {
+      "date": "2026-01-31",
+      "amount": {
+        "minor": 94000,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-02-28",
+      "amount": {
+        "minor": 91000,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-03-31",
+      "amount": {
+        "minor": 289000,
+        "currency": "EUR"
+      }
+    }
+  ]
+}

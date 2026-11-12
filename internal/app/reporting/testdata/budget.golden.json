@@ -1,0 +1,26 @@
+{
+  "period": "2026-03-01..2026-03-31",
+  "mode": "cap",
+  "lines": [
+    {
+      "budget": "Food",
+      "budgeted": {
+        "minor": 2000,
+        "currency": "EUR"
+      },
+      "spent": {
+        "minor": 2000,
+        "currency": "EUR"
+      },
+      "remaining": {
+        "minor": 0,
+        "currency": "EUR"
+      },
+      "state": "over"
+    }
+  ],
+  "uncovered": {
+    "minor": 0,
+    "currency": "EUR"
+  }
+}

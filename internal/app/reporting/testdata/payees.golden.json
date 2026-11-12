@@ -1,0 +1,25 @@
+{
+  "period": "2026-01-01..2026-03-31",
+  "total": {
+    "minor": 8000,
+    "currency": "EUR"
+  },
+  "rows": [
+    {
+      "payee": "Grocer",
+      "total": {
+        "minor": 7500,
+        "currency": "EUR"
+      },
+      "count": 3
+    },
+    {
+      "payee": "Cafe",
+      "total": {
+        "minor": 500,
+        "currency": "EUR"
+      },
+      "count": 1
+    }
+  ]
+}

@@ -1,0 +1,251 @@
+{
+  "start": "2026-03-15",
+  "days": 30,
+  "accounts": [
+    {
+      "account": "Main",
+      "currency": "EUR",
+      "series": [
+        {
+          "date": "2026-04-14",
+          "amount": {
+            "minor": 215931,
+            "currency": "EUR"
+          }
+        }
+      ]
+    },
+    {
+      "account": "Savings",
+      "currency": "EUR",
+      "series": [
+        {
+          "date": "2026-04-14",
+          "amount": {
+            "minor": 50000,
+            "currency": "EUR"
+          }
+        }
+      ]
+    }
+  ],
+  "total": [
+    {
+      "date": "2026-03-15",
+      "amount": {
+        "minor": 339000,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-03-16",
+      "amount": {
+        "minor": 338904,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-03-17",
+      "amount": {
+        "minor": 338808,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-03-18",
+      "amount": {
+        "minor": 338712,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-03-19",
+      "amount": {
+        "minor": 338616,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-03-20",
+      "amount": {
+        "minor": 278520,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-03-21",
+      "amount": {
+        "minor": 278424,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-03-22",
+      "amount": {
+        "minor": 278328,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-03-23",
+      "amount": {
+        "minor": 278232,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-03-24",
+      "amount": {
+        "minor": 278136,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-03-25",
+      "amount": {
+        "minor": 278040,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-03-26",
+      "amount": {
+        "minor": 277944,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-03-27",
+      "amount": {
+        "minor": 277848,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-03-28",
+      "amount": {
+        "minor": 277752,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-03-29",
+      "amount": {
+        "minor": 277656,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-03-30",
+      "amount": {
+        "minor": 277560,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-03-31",
+      "amount": {
+        "minor": 277440,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-04-01",
+      "amount": {
+        "minor": 267231,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-04-02",
+      "amount": {
+        "minor": 267131,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-04-03",
+      "amount": {
+        "minor": 267031,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-04-04",
+      "amount": {
+        "minor": 266931,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-04-05",
+      "amount": {
+        "minor": 266831,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-04-06",
+      "amount": {
+        "minor": 266731,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-04-07",
+      "amount": {
+        "minor": 266631,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-04-08",
+      "amount": {
+        "minor": 266531,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-04-09",
+      "amount": {
+        "minor": 266431,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-04-10",
+      "amount": {
+        "minor": 266331,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-04-11",
+      "amount": {
+        "minor": 266231,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-04-12",
+      "amount": {
+        "minor": 266131,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-04-13",
+      "amount": {
+        "minor": 266031,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-04-14",
+      "amount": {
+        "minor": 265931,
+        "currency": "EUR"
+      }
+    }
+  ]
+}
