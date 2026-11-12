@@ -60,6 +60,40 @@ func TestTransfer(t *testing.T) {
 	}
 }
 
+// TestTransferPositionalAmount covers the functional spec's example "fui transfer 500 --from
+// Fineco --to Risparmio": the amount is accepted as the first positional argument, like fui add.
+func TestTransferPositionalAmount(t *testing.T) {
+	h := newHarness(t)
+	h.account("Fineco", "checking", "EUR", "1000")
+	h.account("Risparmio", "savings", "EUR", "0")
+
+	out, _ := h.mustRun("transfer", "500", "--from", "Fineco", "--to", "Risparmio", "--json")
+	if !strings.Contains(out, `"amount":-50000`) || !strings.Contains(out, `"amount":50000`) {
+		t.Errorf("transfer output = %q, want -50000 and 50000", out)
+	}
+}
+
+// TestTransferPositionalAndFlagAmountMustMatch covers the "error if both differ" rule: a
+// positional amount and --amount may both be given only if they agree.
+func TestTransferPositionalAndFlagAmountMustMatch(t *testing.T) {
+	h := newHarness(t)
+	h.account("Checking", "checking", "EUR", "1000")
+	h.account("Savings", "savings", "EUR", "0")
+
+	out, _ := h.mustRun("transfer", "200", "--from", "Checking", "--to", "Savings", "--amount", "200", "--json")
+	if !strings.Contains(out, `"amount":-20000`) {
+		t.Errorf("transfer output = %q, want -20000 when positional and --amount agree", out)
+	}
+
+	_, stderr, code := h.run("transfer", "200", "--from", "Checking", "--to", "Savings", "--amount", "300", "--json")
+	if code != 1 {
+		t.Errorf("transfer with conflicting amounts = exit %d, want 1", code)
+	}
+	if !strings.Contains(stderr, "200") || !strings.Contains(stderr, "300") {
+		t.Errorf("stderr = %q, want it to mention both conflicting amounts", stderr)
+	}
+}
+
 // TestAccountShowEdit covers account show and edit.
 func TestAccountShowEdit(t *testing.T) {
 	h := newHarness(t)
