@@ -52,7 +52,7 @@ modules.
 | `fui reconcile ACCOUNT --balance AMOUNT --date DATE` | Compare with a statement balance; closes only at zero difference |
 | `fui budget set / list / status / assign / move / copy` | Budgets (module `budget`) |
 | `fui recurring add / list / run / skip / confirm` | Recurring transactions (module `recurring`) |
-| `fui forecast [--horizon DAYS]` | Cash-flow forecast (module `recurring`, needs `analytics`) |
+| `fui forecast [--horizon DAYS]` | Cash-flow forecast (module `recurring`) |
 | `fui loan add / show / schedule / event / run / confirm` | Loans and mortgages (module `loans`) |
 | `fui report KIND` / `fui report save / list / run / rm` | Analytics and saved reports |
 | `fui backup` / `fui restore PATH --yes` | Back up or restore the archive |

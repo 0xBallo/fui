@@ -233,3 +233,43 @@ func TestSettingsApplyTheme(t *testing.T) {
 		t.Fatalf("expected the table to mark the new current theme, got:\n%s", scr.View())
 	}
 }
+
+func TestSettingsThemePreviewDoesNotPersistAndEscRestores(t *testing.T) {
+	cfg, scr := newFixture(t)
+	scr = run(t, scr, scr.Init())
+	scr, _ = sendKey(scr, tea.KeyTab)
+
+	scr, cmd := sendKey(scr, tea.KeyDown)
+	if msg, ok := cmd().(settings.ThemePreviewMsg); !ok || msg.Theme != "latte" {
+		t.Fatalf("cursor move should preview latte, got %#v", cmd())
+	}
+	if got, _ := cfg.Get("theme"); got == "latte" {
+		t.Fatal("a preview must not persist the theme")
+	}
+
+	scr, cmd = sendKey(scr, tea.KeyEsc)
+	if msg, ok := cmd().(settings.ThemePreviewMsg); !ok || msg.Theme != "auto" {
+		t.Fatalf("esc should restore the saved theme, got %#v", cmd())
+	}
+	if _, cmd = sendKey(scr, tea.KeyEsc); cmd != nil {
+		t.Fatal("esc with nothing previewed should be a no-op")
+	}
+
+	// Leaving Appearance with an unsaved preview also restores the saved theme.
+	scr, _ = sendKey(scr, tea.KeyDown)
+	_, cmd = sendKey(scr, tea.KeyTab)
+	if msg, ok := cmd().(settings.ThemePreviewMsg); !ok || msg.Theme != "auto" {
+		t.Fatalf("tab should restore the saved theme, got %#v", cmd())
+	}
+}
+
+func TestSettingsSetThemeKeepsSection(t *testing.T) {
+	_, scr := newFixture(t)
+	scr = run(t, scr, scr.Init())
+	scr, _ = sendKey(scr, tea.KeyTab)
+	scr, _ = sendKey(scr, tea.KeyDown)
+	scr.(*settings.Model).SetTheme(theme.Default())
+	if !strings.Contains(scr.View(), "Preview: latte") {
+		t.Fatalf("SetTheme must keep section and cursor:\n%s", scr.View())
+	}
+}

@@ -137,6 +137,19 @@ func (r *Root) rebuild() {
 	}
 }
 
+// retheme applies a theme to the running TUI. The settings screen is kept (re-themed in place), as
+// it is the one emitting the preview and must not lose its cursor.
+func (r *Root) retheme(name string) {
+	r.cfg.Theme = name
+	prev, _ := r.tabs[screens.TabSettings].(*settings.Model)
+	r.rebuild()
+	if prev != nil {
+		prev.SetTheme(r.th)
+		r.tabs[screens.TabSettings] = prev
+		prev.SetSize(r.width, max(1, r.height-reservedRows))
+	}
+}
+
 func (r *Root) resize() {
 	h := max(1, r.height-reservedRows)
 	for _, scr := range r.tabs {
@@ -169,10 +182,12 @@ func (r *Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		r.cfg.Modules = msg.Enabled
 		r.rebuild()
 		return r, r.tabs[r.active].Init()
+	case settings.ThemePreviewMsg:
+		r.retheme(msg.Theme)
+		return r, nil
 	case settings.ThemeChangedMsg:
-		r.cfg.Theme = msg.Theme
-		r.rebuild()
-		return r, r.tabs[r.active].Init()
+		r.retheme(msg.Theme)
+		return r, nil
 	case screens.ErrorMsg:
 		r.err, r.status = msg.Err, ""
 		return r, nil

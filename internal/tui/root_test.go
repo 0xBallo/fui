@@ -227,14 +227,17 @@ func TestSevenFixedKeysRoute(t *testing.T) {
 	}
 }
 
-func TestThemeChangedRebuildsAndKeepsScreen(t *testing.T) {
+func TestThemeMessagesKeepSettingsScreen(t *testing.T) {
 	m := newRoutedRoot(t, routedConfig())
 	m, _ = sendRunes(m, "7")
-	m, cmd := m.Update(settings.ThemeChangedMsg{Theme: "mocha"})
-	if cmd == nil {
-		t.Fatal("theme change should reload the active screen")
-	}
-	if m.(*tui.Root).ActiveKeyMap() == nil {
-		t.Fatal("settings tab should survive a theme change")
+	for _, msg := range []tea.Msg{settings.ThemePreviewMsg{Theme: "mocha"}, settings.ThemeChangedMsg{Theme: "latte"}} {
+		var cmd tea.Cmd
+		m, cmd = m.Update(msg)
+		if cmd != nil {
+			t.Fatalf("%T must not reload the screen (it would reset the cursor)", msg)
+		}
+		if m.(*tui.Root).ActiveKeyMap() == nil || strings.Contains(m.View(), "not available") {
+			t.Fatalf("settings tab should survive %T", msg)
+		}
 	}
 }

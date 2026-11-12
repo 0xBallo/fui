@@ -3,6 +3,7 @@ package settings
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -76,21 +77,54 @@ type ThemeChangedMsg struct {
 	Theme string
 }
 
+// ThemePreviewMsg asks the root to show a theme without persisting it: the cursor moved over it, or
+// Esc restored the saved one.
+type ThemePreviewMsg struct {
+	Theme string
+}
+
 // New builds the settings screen over uc, moduleCfg (reads and persists modules.enabled), and
 // themeCfg (reads and persists theme), rendering its own chrome with th.
 func New(uc UseCases, moduleCfg ModuleConfig, themeCfg ThemeConfig, th theme.Theme) *Model {
 	m := &Model{uc: uc, moduleCfg: moduleCfg, themeCfg: themeCfg, th: th, km: DefaultKeyMap()}
-	m.moduleTbl = components.NewTable([]components.Column{
+	m.moduleTbl = components.NewTable(moduleColumns(), th)
+	m.themeTbl = components.NewTable(themeColumns(), th)
+	m.confirm = components.NewConfirmDialog(th)
+	return m
+}
+
+func moduleColumns() []components.Column {
+	return []components.Column{
 		{Title: "Module", Width: 14, Align: lipgloss.Left},
 		{Title: "Enabled", Width: 8, Align: lipgloss.Left},
 		{Title: "Depends on", Width: 28, Align: lipgloss.Left},
-	}, th)
-	m.themeTbl = components.NewTable([]components.Column{
+	}
+}
+
+func themeColumns() []components.Column {
+	return []components.Column{
 		{Title: "Theme", Width: 16, Align: lipgloss.Left},
 		{Title: "", Width: 10, Align: lipgloss.Left},
-	}, th)
-	m.confirm = components.NewConfirmDialog(th)
-	return m
+	}
+}
+
+// SetTheme re-themes the screen in place, keeping its section, cursors and rows, so a live theme
+// preview does not reset what the user is looking at.
+func (m *Model) SetTheme(th theme.Theme) {
+	m.th = th
+	mc, tc := m.moduleTbl.Cursor(), m.themeTbl.Cursor()
+	m.moduleTbl = components.NewTable(moduleColumns(), th)
+	m.themeTbl = components.NewTable(themeColumns(), th)
+	m.moduleTbl.SetRows(m.moduleRows())
+	m.themeTbl.SetRows(m.themeRows())
+	m.moduleTbl.SetCursor(mc)
+	m.themeTbl.SetCursor(tc)
+	if m.height > 0 {
+		m.SetSize(m.width, m.height)
+	}
+	if m.mode != modeConfirm {
+		m.confirm = components.NewConfirmDialog(th)
+	}
 }
 
 // Init loads the enabled modules and the active theme.
@@ -189,6 +223,9 @@ func (m *Model) applyLoaded(msg loadedMsg) {
 	m.moduleTbl.SetRows(m.moduleRows())
 	m.currentTheme = msg.theme
 	m.themeTbl.SetRows(m.themeRows())
+	if i := slices.Index(themeNames, msg.theme); i >= 0 {
+		m.themeTbl.SetCursor(i)
+	}
 	m.mode = modeList
 }
 
@@ -209,15 +246,43 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	}
 	switch {
 	case key.Matches(msg, m.km.Section):
+		restore := m.restoreTheme()
 		m.section = (m.section + 1) % section(len(sectionNames))
+		return m, restore
 	case key.Matches(msg, m.km.Up):
 		m.activeTable().MoveUp(1)
+		return m, m.previewTheme()
 	case key.Matches(msg, m.km.Down):
 		m.activeTable().MoveDown(1)
+		return m, m.previewTheme()
+	case key.Matches(msg, m.km.Cancel):
+		return m, m.restoreTheme()
 	case key.Matches(msg, m.km.Toggle):
 		return m.handleToggle()
 	}
 	return m, nil
+}
+
+// previewTheme shows the theme under the cursor when the Appearance section is active.
+func (m *Model) previewTheme() tea.Cmd {
+	if m.section != sectionAppearance {
+		return nil
+	}
+	name := m.hoveredTheme()
+	return func() tea.Msg { return ThemePreviewMsg{Theme: name} }
+}
+
+// restoreTheme drops an unsaved preview: the cursor returns to the saved theme and the root shows
+// it again. It is a no-op when nothing is being previewed.
+func (m *Model) restoreTheme() tea.Cmd {
+	if m.section != sectionAppearance || m.hoveredTheme() == m.currentTheme {
+		return nil
+	}
+	if i := slices.Index(themeNames, m.currentTheme); i >= 0 {
+		m.themeTbl.SetCursor(i)
+	}
+	saved := m.currentTheme
+	return func() tea.Msg { return ThemePreviewMsg{Theme: saved} }
 }
 
 func (m *Model) handleConfirmKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
