@@ -22,14 +22,20 @@ func confirmationRequired(reason string) error {
 // after an interactive confirmation; agent mode (FUI_AGENT=1) always requires --yes. apply is
 // called only once the plan is accepted, and renders its own result.
 func writeChange(cmd *cobra.Command, deps *Deps, rt runtimeFlags, plan app.Plan, apply func() error) error {
+	return writeChangePreview(cmd, deps, rt, plan, func() error { return render.WritePlan(deps.Stdout, rt.format, plan) }, apply)
+}
+
+// writeChangePreview is writeChange with a caller-chosen preview renderer, for a command (like
+// `import`) whose dry-run and confirmation output is richer than the generic Plan.Changes list.
+func writeChangePreview(cmd *cobra.Command, deps *Deps, rt runtimeFlags, plan app.Plan, preview, apply func() error) error {
 	if rt.dryRun {
-		return render.WritePlan(deps.Stdout, rt.format, plan)
+		return preview()
 	}
 	if rt.agent && !rt.yes {
 		return confirmationRequired("FUI_AGENT=1 requires --yes to write")
 	}
 	if plan.Bulk && !rt.yes {
-		ok, err := confirmBulk(cmd, deps, rt, plan)
+		ok, err := confirmBulk(cmd, deps, rt, preview)
 		if err != nil {
 			return err
 		}
@@ -45,11 +51,11 @@ func writeChange(cmd *cobra.Command, deps *Deps, rt runtimeFlags, plan app.Plan,
 
 // confirmBulk shows the plan and asks for confirmation; it fails with confirmation_required
 // instead of asking when there is no terminal or --no-input was given.
-func confirmBulk(_ *cobra.Command, deps *Deps, rt runtimeFlags, plan app.Plan) (bool, error) {
+func confirmBulk(_ *cobra.Command, deps *Deps, rt runtimeFlags, preview func() error) (bool, error) {
 	if !deps.IsTerminal || rt.noInput {
 		return false, confirmationRequired("a bulk change needs --yes without a terminal or with --no-input")
 	}
-	if err := render.WritePlan(deps.Stdout, rt.format, plan); err != nil {
+	if err := preview(); err != nil {
 		return false, err
 	}
 	var ok bool
