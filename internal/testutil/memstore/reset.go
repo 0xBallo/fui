@@ -11,8 +11,7 @@ import (
 var _ app.Resetter = (*Store)(nil)
 
 // Reset implements app.Resetter: it replaces the content with an empty archive holding the
-// default categories, or with KeepSettings the current categories, tags and payees. There is no backup file.
-// default categories, or with KeepSettings the current categories, tags, payees and rules.
+// default categories, or with KeepSettings the current categories, tags, payees, rules and saved reports.
 // There is no backup file.
 func (s *Store) Reset(ctx context.Context, opts app.ResetOptions) error {
 	if err := ctx.Err(); err != nil {
@@ -27,6 +26,8 @@ func (s *Store) Reset(ctx context.Context, opts app.ResetOptions) error {
 		fresh.LastID["categories"] = s.st.LastID["categories"]
 		fresh.Tags, fresh.Payees = s.st.Tags, s.st.Payees
 		fresh.LastID["tags"], fresh.LastID["payees"] = s.st.LastID["tags"], s.st.LastID["payees"]
+		fresh.SavedReports = s.st.SavedReports
+		fresh.LastID["saved_reports"] = s.st.LastID["saved_reports"]
 	} else {
 		for _, c := range domain.DefaultCategories() {
 			c.ID = domain.CategoryID(fresh.nextID("categories"))

@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -93,6 +94,8 @@ func seed(t tb, s *Store, accounts, salt int) {
 	exec(`INSERT INTO transaction_splits (transaction_id, category_id, amount_minor) SELECT t.id, c.id, -500 FROM transactions t, categories c LIMIT 1`)
 	exec(`INSERT INTO rules (name, priority, enabled, conditions, actions)
 		VALUES (?, 10, 1, '{}', '{"category_id":1}')`, fmt.Sprintf("Rule%d", salt))
+	exec(`INSERT INTO saved_reports (name, kind, params)
+		VALUES (?, 'cashflow', '{"period":{"kind":"last_months","value":3}}')`, fmt.Sprintf("Report%d", salt))
 	if accounts > 0 {
 		exec(`INSERT INTO recurrences (
 			account_id, category_id, description, amount_minor, currency, every, unit, day_of_month, start_date, next_date
@@ -121,6 +124,8 @@ func seed(t tb, s *Store, accounts, salt int) {
 				(SELECT id FROM transactions ORDER BY id LIMIT 1))`)
 		exec(`INSERT INTO loan_events (loan_id, kind, event_date, new_rate_basis_points)
 			VALUES ((SELECT id FROM loans ORDER BY id DESC LIMIT 1), 'rate_change', '2026-02-15', 320)`)
+		exec(`INSERT INTO reconciliations (account_id, date, statement_balance_minor, currency, closed_at)
+			VALUES (1, '2026-01-31', 100000, 'EUR', '2026-02-01T00:00:00Z')`)
 	}
 }
 
@@ -136,10 +141,20 @@ func settingsDump(t tb, s *Store) []string {
 			out = append(out, "tag:"+tag.Name)
 		}
 		payees, err := r.Payees().List(context.Background())
+		if err != nil {
+			return err
+		}
 		for _, p := range payees {
 			out = append(out, "payee:"+p.Name+"="+strings.Join(p.Aliases, "|"))
 		}
-		return err
+		reports, err := r.SavedReports().List(context.Background())
+		if err != nil {
+			return err
+		}
+		for _, rep := range reports {
+			out = append(out, "saved_report:"+rep.Name+"="+rep.Kind+"="+rep.ParamsJSON)
+		}
+		return nil
 	})
 	if err != nil {
 		t.Fatalf("list settings: %v", err)
@@ -152,6 +167,7 @@ func assertEmptyExceptCategories(t tb, s *Store) {
 	for _, table := range []string{
 		"accounts", "transactions", "transfer_groups", "import_batches", "fx_rates",
 		"connector_account_refs", "transaction_tags", "transaction_splits", "rules",
+		"reconciliations",
 		"loans", "loan_schedules", "loan_installments", "loan_events",
 		"recurrences",
 	} {
@@ -177,7 +193,7 @@ func TestResetFull(t *testing.T) {
 	}
 
 	assertEmptyExceptCategories(t, s)
-	for _, table := range []string{"tags", "payees", "payee_aliases"} {
+	for _, table := range []string{"tags", "payees", "payee_aliases", "saved_reports"} {
 		if n := count(t, s, table); n != 0 {
 			t.Errorf("table %s has %d rows after full reset, want 0", table, n)
 		}
@@ -226,6 +242,15 @@ func TestResetCrashSafety(t *testing.T) {
 	}
 }
 
+func TestReopenAfterReturnsOriginalCauseWhenReopenSucceeds(t *testing.T) {
+	s, _ := newTestStore(t)
+	cause := errors.New("cause")
+	err := s.reopenAfter(cause)
+	if !errors.Is(err, cause) {
+		t.Fatalf("reopenAfter error = %v, want cause", err)
+	}
+}
+
 // TestResetKeepSettingsProperty: whatever categories and data exist, --keep-settings keeps the
 // categories exactly and empties every other table.
 func TestResetKeepSettingsProperty(t *testing.T) {
@@ -256,6 +281,7 @@ func TestResetKeepSettingsProperty(t *testing.T) {
 
 		for _, table := range []string{
 			"accounts", "transactions", "transfer_groups", "import_batches", "fx_rates", "connector_account_refs",
+			"reconciliations",
 			"loans", "loan_schedules", "loan_installments", "loan_events",
 			"recurrences",
 		} {

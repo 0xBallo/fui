@@ -24,7 +24,13 @@ type fxKey struct {
 	date domain.Date
 }
 
-type refKey struct{ connector, ref string }
+type (
+	refKey            struct{ connector, ref string }
+	reconciliationKey struct {
+		accountID domain.AccountID
+		date      domain.Date
+	}
+)
 
 type state struct {
 	Accounts         map[domain.AccountID]domain.Account
@@ -46,6 +52,8 @@ type state struct {
 	Budgets          map[domain.BudgetID]domain.Budget
 	Moves            []domain.BudgetMove
 	Recurs           map[app.RecurrenceID]app.Recurrence
+	SavedReports     map[app.SavedReportID]app.SavedReport
+	Reconciliations  map[reconciliationKey]app.Reconciliation
 	LastID           map[string]int64
 }
 
@@ -69,6 +77,8 @@ func newState() *state {
 		InstallmentLinks: map[loanInstallmentKey]domain.TransactionID{},
 		Budgets:          map[domain.BudgetID]domain.Budget{},
 		Recurs:           map[app.RecurrenceID]app.Recurrence{},
+		SavedReports:     map[app.SavedReportID]app.SavedReport{},
+		Reconciliations:  map[reconciliationKey]app.Reconciliation{},
 		LastID:           map[string]int64{},
 	}
 }
@@ -95,6 +105,8 @@ func (s *state) clone() *state {
 		Budgets:          maps.Clone(s.Budgets),
 		Moves:            slices.Clone(s.Moves),
 		Recurs:           maps.Clone(s.Recurs),
+		SavedReports:     maps.Clone(s.SavedReports),
+		Reconciliations:  maps.Clone(s.Reconciliations),
 	}
 }
 
@@ -165,6 +177,10 @@ func (r *repos) Splits() app.SplitRepo             { return splits{r} }
 func (r *repos) Loans() app.LoanRepo               { return loans{r} }
 func (r *repos) Budgets() app.BudgetRepo           { return budgets{r} }
 func (r *repos) Recurrences() app.RecurrenceRepo   { return recurrences{r} }
+func (r *repos) SavedReports() app.SavedReportRepo { return savedReports{r} }
+func (r *repos) Reconciliations() app.ReconciliationRepo {
+	return reconciliations{r}
+}
 
 func (r *repos) writable() error {
 	if r.readOnly {

@@ -71,6 +71,8 @@ type Repos interface {
 	Loans() LoanRepo
 	Budgets() BudgetRepo
 	Recurrences() RecurrenceRepo
+	SavedReports() SavedReportRepo
+	Reconciliations() ReconciliationRepo
 }
 
 // AccountRepo stores accounts. Names are unique case-insensitively.
@@ -291,4 +293,47 @@ type RecurrenceRepo interface {
 	Due(ctx context.Context, until domain.Date) ([]Recurrence, error)
 	// PendingOf returns pending transactions linked to recurrence id ordered by due_date/date then ID.
 	PendingOf(ctx context.Context, id RecurrenceID) ([]domain.Transaction, error)
+}
+
+// SavedReportID identifies a saved report row.
+type SavedReportID int64
+
+// SavedReport is one saved report definition.
+type SavedReport struct {
+	ID         SavedReportID
+	Name       string
+	Kind       string
+	ParamsJSON string
+}
+
+// SavedReportRepo stores saved report definitions. Names are unique case-insensitively.
+type SavedReportRepo interface {
+	Insert(ctx context.Context, r SavedReport) (SavedReport, error)
+	Update(ctx context.Context, r SavedReport) error
+	Delete(ctx context.Context, id SavedReportID) error
+	Get(ctx context.Context, id SavedReportID) (SavedReport, error)
+	GetByName(ctx context.Context, name string) (SavedReport, error)
+	// List returns every saved report ordered by name (case-insensitive), then ID.
+	List(ctx context.Context) ([]SavedReport, error)
+}
+
+// ReconciliationID identifies a reconciliation row.
+type ReconciliationID int64
+
+// Reconciliation is one reconciliation checkpoint for an account and statement date.
+type Reconciliation struct {
+	ID               ReconciliationID
+	AccountID        domain.AccountID
+	Date             domain.Date
+	StatementBalance domain.Money
+	ClosedAt         time.Time // zero means open
+}
+
+// ReconciliationRepo stores reconciliation checkpoints.
+type ReconciliationRepo interface {
+	Open(ctx context.Context, r Reconciliation) (Reconciliation, error)
+	Close(ctx context.Context, accountID domain.AccountID, date domain.Date, closedAt time.Time) error
+	Get(ctx context.Context, accountID domain.AccountID, date domain.Date) (Reconciliation, error)
+	// LastClosed returns the most recent closed reconciliation of account.
+	LastClosed(ctx context.Context, accountID domain.AccountID) (Reconciliation, error)
 }

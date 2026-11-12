@@ -159,6 +159,17 @@ type PayeeAlias struct {
 	Alias   string
 }
 
+type Reconciliation struct {
+	ID                    int64
+	AccountID             int64
+	Date                  string
+	StatementBalanceMinor int64
+	Currency              string
+	ClosedAt              sql.NullString
+	CreatedAt             string
+	UpdatedAt             string
+}
+
 type Recurrence struct {
 	ID          int64
 	AccountID   int64
@@ -185,6 +196,15 @@ type Rule struct {
 	Actions    string
 	CreatedAt  string
 	UpdatedAt  string
+}
+
+type SavedReport struct {
+	ID        int64
+	Name      string
+	Kind      string
+	Params    string
+	CreatedAt string
+	UpdatedAt string
 }
 
 type Tag struct {

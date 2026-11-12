@@ -100,36 +100,74 @@ func (s *Store) populateFresh(ctx context.Context, tempPath string, opts app.Res
 		cats = domain.DefaultCategories()
 	}
 	return fresh.WithTx(ctx, func(r app.Repos) error {
-		for _, c := range cats {
-			if _, err := r.Categories().Insert(ctx, domain.Category{Name: c.Name, Kind: c.Kind}); err != nil {
-				return fmt.Errorf("reset: create category %q: %w", c.Name, err)
-			}
+		if err := insertCategories(ctx, r.Categories(), cats); err != nil {
+			return err
 		}
-		for _, tag := range kept.tags {
-			if _, err := r.Tags().Insert(ctx, domain.Tag{Name: tag.Name}); err != nil {
-				return fmt.Errorf("reset: create tag %q: %w", tag.Name, err)
-			}
+		if err := insertTags(ctx, r.Tags(), kept.tags); err != nil {
+			return err
 		}
-		for _, p := range kept.payees {
-			if _, err := r.Payees().Insert(ctx, domain.Payee{Name: p.Name, Aliases: p.Aliases}); err != nil {
-				return fmt.Errorf("reset: create payee %q: %w", p.Name, err)
-			}
+		if err := insertPayees(ctx, r.Payees(), kept.payees); err != nil {
+			return err
 		}
-		for _, rule := range kept.rules {
-			if _, err := r.Rules().Insert(ctx, rule); err != nil {
-				return fmt.Errorf("reset: create rule %q: %w", rule.Name, err)
-			}
+		if err := insertRules(ctx, r.Rules(), kept.rules); err != nil {
+			return err
 		}
-		return nil
+		return insertSavedReports(ctx, r.SavedReports(), kept.savedReports)
 	})
+}
+
+func insertCategories(ctx context.Context, repo app.CategoryRepo, cats []domain.Category) error {
+	for _, c := range cats {
+		if _, err := repo.Insert(ctx, domain.Category{Name: c.Name, Kind: c.Kind}); err != nil {
+			return fmt.Errorf("reset: create category %q: %w", c.Name, err)
+		}
+	}
+	return nil
+}
+
+func insertTags(ctx context.Context, repo app.TagRepo, tags []domain.Tag) error {
+	for _, tag := range tags {
+		if _, err := repo.Insert(ctx, domain.Tag{Name: tag.Name}); err != nil {
+			return fmt.Errorf("reset: create tag %q: %w", tag.Name, err)
+		}
+	}
+	return nil
+}
+
+func insertPayees(ctx context.Context, repo app.PayeeRepo, payees []domain.Payee) error {
+	for _, p := range payees {
+		if _, err := repo.Insert(ctx, domain.Payee{Name: p.Name, Aliases: p.Aliases}); err != nil {
+			return fmt.Errorf("reset: create payee %q: %w", p.Name, err)
+		}
+	}
+	return nil
+}
+
+func insertRules(ctx context.Context, repo app.RuleRepo, rules []domain.Rule) error {
+	for _, rule := range rules {
+		if _, err := repo.Insert(ctx, rule); err != nil {
+			return fmt.Errorf("reset: create rule %q: %w", rule.Name, err)
+		}
+	}
+	return nil
+}
+
+func insertSavedReports(ctx context.Context, repo app.SavedReportRepo, reports []app.SavedReport) error {
+	for _, report := range reports {
+		if _, err := repo.Insert(ctx, report); err != nil {
+			return fmt.Errorf("reset: create saved report %q: %w", report.Name, err)
+		}
+	}
+	return nil
 }
 
 // keptSettings is what a --keep-settings reset carries over.
 type keptSettings struct {
-	categories []domain.Category
-	tags       []domain.Tag
-	payees     []domain.Payee
-	rules      []domain.Rule
+	categories   []domain.Category
+	tags         []domain.Tag
+	payees       []domain.Payee
+	rules        []domain.Rule
+	savedReports []app.SavedReport
 }
 
 // readSettings lists the settings without taking s.mu (Reset already holds it).
@@ -151,6 +189,9 @@ func (s *Store) readSettings(ctx context.Context, out *keptSettings) error {
 	}
 	if out.rules, err = r.Rules().List(ctx); err != nil {
 		return fmt.Errorf("reset: list rules: %w", err)
+	}
+	if out.savedReports, err = r.SavedReports().List(ctx); err != nil {
+		return fmt.Errorf("reset: list saved reports: %w", err)
 	}
 	return nil
 }
