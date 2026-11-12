@@ -14,7 +14,7 @@ import (
 func TestTableNavigationAndRender(t *testing.T) {
 	tbl := components.NewTable([]components.Column{{Title: "A", Width: 3}}, theme.Default())
 	tbl.SetColumns([]components.Column{{Title: "Name", Width: 6, Align: lipgloss.Right}, {Title: "N", Width: 2}})
-	tbl.SetWidth(40)
+	tbl.SetWidth(15) // exactly the columns plus borders, so fitWidth leaves "Name" at 6 and truncates
 	tbl.SetHeight(5) // two visible rows plus the three lines of table chrome
 	tbl.SetShowSelect(true)
 	if got := tbl.View(); !strings.Contains(got, "(no data)") {
@@ -87,5 +87,22 @@ func TestConfirmDialogKeys(t *testing.T) {
 	d.Show("T", "P")
 	if c, x := d.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("z")}); c || x || !d.Visible() {
 		t.Fatal("unrelated key must keep dialog open")
+	}
+}
+
+// TestTableFitsWidth checks that the widest column absorbs the difference between the columns'
+// widths and the table width, so the bordered table spans the screen exactly, but never shrinks
+// below a readable minimum.
+func TestTableFitsWidth(t *testing.T) {
+	cols := []components.Column{{Title: "Date", Width: 10}, {Title: "Description", Width: 24}, {Title: "Amount", Width: 14}}
+	for _, width := range []int{80, 60, 40} {
+		tbl := components.NewTable(cols, theme.Default())
+		tbl.SetRows([]components.Row{{ID: "1", Cells: []string{"2026-01-01", "Rent", "-850.00"}}})
+		tbl.SetWidth(width)
+		got := lipgloss.Width(tbl.View())
+		want := max(width, 10+8+14+4) // the description column stops at 8 cells
+		if got != want {
+			t.Errorf("width %d: table is %d wide, want %d", width, got, want)
+		}
 	}
 }

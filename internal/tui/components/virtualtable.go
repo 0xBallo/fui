@@ -203,6 +203,7 @@ func (t *Table) View() string {
 		cols = append(cols, Column{Title: "[ ]", Width: 3, Align: lipgloss.Left})
 	}
 	cols = append(cols, t.columns...)
+	fitWidth(cols, t.width)
 
 	headers := make([]string, len(cols))
 	for i, col := range cols {
@@ -234,6 +235,25 @@ func (t *Table) View() string {
 		out += "\n" + t.theme.Muted.Render("  (no data)")
 	}
 	return out
+}
+
+// minFlexWidth is the narrowest fitWidth shrinks the flexible column to.
+const minFlexWidth = 8
+
+// fitWidth grows or shrinks the widest column so the bordered table spans exactly width (one
+// border per column plus the closing one); width 0 means unknown and leaves cols untouched.
+func fitWidth(cols []Column, width int) {
+	if width <= 0 || len(cols) == 0 {
+		return
+	}
+	total, widest := len(cols)+1, 0
+	for i, c := range cols {
+		total += c.Width
+		if c.Width > cols[widest].Width {
+			widest = i
+		}
+	}
+	cols[widest].Width = max(minFlexWidth, cols[widest].Width+width-total)
 }
 
 // cells returns row's cell texts for cols, truncated to each column's width.

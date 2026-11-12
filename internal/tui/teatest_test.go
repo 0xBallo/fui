@@ -66,7 +66,7 @@ func TestDashboardSnapshot(t *testing.T) {
 }
 
 func TestTransactionsSnapshot(t *testing.T) {
-	snapshot(t, "2", "Supermarket")
+	snapshot(t, "2", "booked")
 }
 
 func TestAccountsSnapshot(t *testing.T) {
