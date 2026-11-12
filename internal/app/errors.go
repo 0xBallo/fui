@@ -18,6 +18,8 @@ const (
 	CodeAlreadyExists domain.Code = "already_exists"
 	// CodeInUse means an entity cannot be removed because other data still references it.
 	CodeInUse domain.Code = "in_use"
+	// CodeModuleDisabled means a command requires a disabled module.
+	CodeModuleDisabled domain.Code = "module_disabled"
 )
 
 // Codes returns every app-level error code, for the CLI's exhaustive exit-code mapping test.
@@ -31,6 +33,7 @@ var (
 	ErrRateMissing          = &domain.Error{Code: CodeRateMissing, Message: "exchange rate missing"}
 	ErrAlreadyExists        = &domain.Error{Code: CodeAlreadyExists, Message: "already exists"}
 	ErrInUse                = &domain.Error{Code: CodeInUse, Message: "in use"}
+	ErrModuleDisabled       = &domain.Error{Code: CodeModuleDisabled, Message: "module disabled"}
 )
 
 // newError builds an error with the code of sentinel, a formatted message and structured details.
