@@ -117,6 +117,7 @@ func toTransaction(row gen.Transaction) (domain.Transaction, error) {
 		TransferGroupID: domain.TransferGroupID(
 			nullInt64OrZero(row.TransferGroupID),
 		),
+		RecurrenceID: domain.RecurrenceID(nullInt64OrZero(row.RecurrenceID)),
 	}
 
 	if row.OperationDate.Valid {
@@ -129,6 +130,12 @@ func toTransaction(row gen.Transaction) (domain.Transaction, error) {
 		tx.ValueDate, err = domain.ParseDate(row.ValueDate.String)
 		if err != nil {
 			return domain.Transaction{}, fmt.Errorf("parse value_date %q: %w", row.ValueDate.String, err)
+		}
+	}
+	if row.DueDate.Valid {
+		tx.DueDate, err = domain.ParseDate(row.DueDate.String)
+		if err != nil {
+			return domain.Transaction{}, fmt.Errorf("parse due_date %q: %w", row.DueDate.String, err)
 		}
 	}
 	return tx, nil

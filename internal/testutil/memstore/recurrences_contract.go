@@ -106,9 +106,32 @@ func assertRecurrenceLists(ctx context.Context, t *testing.T, f *fixture, due, l
 		if err != nil || len(dueRows) != 1 || dueRows[0].ID != due.ID {
 			t.Errorf("Due = %+v, %v; want only first", dueRows, err)
 		}
+		first, err := r.Transactions().Insert(ctx, domain.Transaction{
+			AccountID: due.AccountID, Date: mustDate(t, "2026-02-14"), DueDate: mustDate(t, "2026-02-16"),
+			RecurrenceID: domain.RecurrenceID(due.ID), Amount: mustMoney(t, -900),
+			Status: domain.StatusPending, Kind: domain.KindPayment, Description: "pending A",
+		})
+		if err != nil {
+			return err
+		}
+		second, err := r.Transactions().Insert(ctx, domain.Transaction{
+			AccountID: due.AccountID, Date: mustDate(t, "2026-02-10"), DueDate: mustDate(t, "2026-02-15"),
+			RecurrenceID: domain.RecurrenceID(due.ID), Amount: mustMoney(t, -900),
+			Status: domain.StatusPending, Kind: domain.KindPayment, Description: "pending B",
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := r.Transactions().Insert(ctx, domain.Transaction{
+			AccountID: due.AccountID, Date: mustDate(t, "2026-02-09"), DueDate: mustDate(t, "2026-02-13"),
+			RecurrenceID: domain.RecurrenceID(due.ID), Amount: mustMoney(t, -900),
+			Status: domain.StatusBooked, Kind: domain.KindPayment, Description: "booked",
+		}); err != nil {
+			return err
+		}
 		pending, err := r.Recurrences().PendingOf(ctx, due.ID)
-		if err != nil || len(pending) != 0 {
-			t.Errorf("PendingOf = %+v, %v; want empty", pending, err)
+		if err != nil || len(pending) != 2 || pending[0].ID != second.ID || pending[1].ID != first.ID {
+			t.Errorf("PendingOf = %+v, %v; want [%d %d]", pending, err, second.ID, first.ID)
 		}
 		return nil
 	})

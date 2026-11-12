@@ -125,7 +125,23 @@ func (r recurrences) PendingOf(_ context.Context, id app.RecurrenceID) ([]domain
 	if _, ok := r.st.Recurs[id]; !ok {
 		return nil, notFound("recurrence", id)
 	}
-	return []domain.Transaction{}, nil
+	out := make([]domain.Transaction, 0, len(r.st.Txs))
+	for _, tx := range r.st.Txs {
+		if tx.RecurrenceID == domain.RecurrenceID(id) && tx.Status == domain.StatusPending {
+			out = append(out, tx)
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.Transaction) int {
+		return cmp.Or(recurrenceDueDate(a).Cmp(recurrenceDueDate(b)), cmp.Compare(a.ID, b.ID))
+	})
+	return out, nil
 }
 
 var _ app.RecurrenceRepo = recurrences{}
+
+func recurrenceDueDate(tx domain.Transaction) domain.Date {
+	if !tx.DueDate.IsZero() {
+		return tx.DueDate
+	}
+	return tx.Date
+}

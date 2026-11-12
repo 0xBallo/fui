@@ -78,7 +78,9 @@ INSERT INTO transactions (
     fingerprint,
     import_batch_id,
     transfer_group_id,
-    search_text
+    search_text,
+    recurrence_id,
+    due_date
 )
 VALUES (
     ?1,
@@ -97,7 +99,9 @@ VALUES (
     ?14,
     ?15,
     ?16,
-    ?17
+    ?17,
+    ?18,
+    ?19
 )
 RETURNING
     id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date
@@ -121,6 +125,8 @@ type InsertTransactionParams struct {
 	ImportBatchID   sql.NullInt64
 	TransferGroupID sql.NullInt64
 	SearchText      string
+	RecurrenceID    sql.NullInt64
+	DueDate         sql.NullString
 }
 
 func (q *Queries) InsertTransaction(ctx context.Context, arg InsertTransactionParams) (Transaction, error) {
@@ -142,6 +148,8 @@ func (q *Queries) InsertTransaction(ctx context.Context, arg InsertTransactionPa
 		arg.ImportBatchID,
 		arg.TransferGroupID,
 		arg.SearchText,
+		arg.RecurrenceID,
+		arg.DueDate,
 	)
 	var i Transaction
 	err := row.Scan(
@@ -651,8 +659,10 @@ SET
     import_batch_id = ?15,
     transfer_group_id = ?16,
     search_text = ?17,
+    recurrence_id = ?18,
+    due_date = ?19,
     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-WHERE id = ?18
+WHERE id = ?20
 `
 
 type UpdateTransactionParams struct {
@@ -673,6 +683,8 @@ type UpdateTransactionParams struct {
 	ImportBatchID   sql.NullInt64
 	TransferGroupID sql.NullInt64
 	SearchText      string
+	RecurrenceID    sql.NullInt64
+	DueDate         sql.NullString
 	ID              int64
 }
 
@@ -695,6 +707,8 @@ func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionPa
 		arg.ImportBatchID,
 		arg.TransferGroupID,
 		arg.SearchText,
+		arg.RecurrenceID,
+		arg.DueDate,
 		arg.ID,
 	)
 	if err != nil {

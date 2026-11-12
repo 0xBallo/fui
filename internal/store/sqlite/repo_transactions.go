@@ -169,6 +169,8 @@ func toInsertTransactionParams(t domain.Transaction, payeeName string) gen.Inser
 		Fingerprint:     t.Fingerprint,
 		ImportBatchID:   toNullInt64(t.ImportBatchID),
 		TransferGroupID: toNullInt64(t.TransferGroupID),
+		RecurrenceID:    toNullInt64(t.RecurrenceID),
+		DueDate:         toNullDate(t.DueDate),
 		SearchText:      textnorm.SearchText(t.Description, payeeName, t.Notes),
 	}
 }
@@ -193,6 +195,8 @@ func toUpdateTransactionParams(t domain.Transaction, searchText string) gen.Upda
 		Fingerprint:     params.Fingerprint,
 		ImportBatchID:   params.ImportBatchID,
 		TransferGroupID: params.TransferGroupID,
+		RecurrenceID:    params.RecurrenceID,
+		DueDate:         params.DueDate,
 		SearchText:      searchText,
 	}
 }

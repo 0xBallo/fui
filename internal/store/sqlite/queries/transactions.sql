@@ -16,7 +16,9 @@ INSERT INTO transactions (
     fingerprint,
     import_batch_id,
     transfer_group_id,
-    search_text
+    search_text,
+    recurrence_id,
+    due_date
 )
 VALUES (
     @account_id,
@@ -35,7 +37,9 @@ VALUES (
     @fingerprint,
     @import_batch_id,
     @transfer_group_id,
-    @search_text
+    @search_text,
+    @recurrence_id,
+    @due_date
 )
 RETURNING
     *;
@@ -60,6 +64,8 @@ SET
     import_batch_id = @import_batch_id,
     transfer_group_id = @transfer_group_id,
     search_text = @search_text,
+    recurrence_id = @recurrence_id,
+    due_date = @due_date,
     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = @id;
 

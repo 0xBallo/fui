@@ -53,10 +53,13 @@ func (k TxKind) Valid() bool {
 // ParseTxKind parses a transaction kind (case-insensitive).
 func ParseTxKind(s string) (TxKind, error) { return parseEnum("kind", s, TxKind.Valid) }
 
+// RecurrenceID identifies a recurrence template.
+type RecurrenceID int64
+
 // Transaction is a single movement on an account. Amount is signed (negative
 // = outflow). Optional references (PayeeID, CategoryID, ImportBatchID,
-// TransferGroupID) and optional dates (OperationDate, ValueDate) are zero
-// when absent.
+// TransferGroupID, RecurrenceID) and optional dates (OperationDate, ValueDate,
+// DueDate) are zero when absent.
 type Transaction struct {
 	ID              TransactionID
 	AccountID       AccountID
@@ -74,6 +77,8 @@ type Transaction struct {
 	Fingerprint     string // dedup hash, see the domain services
 	ImportBatchID   ImportBatchID
 	TransferGroupID TransferGroupID
+	RecurrenceID    RecurrenceID
+	DueDate         Date
 }
 
 // NewTransaction validates t and returns it with text fields trimmed.
