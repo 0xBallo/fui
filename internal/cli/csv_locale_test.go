@@ -65,34 +65,31 @@ func TestCSVIsLocaleIndependent(t *testing.T) {
 		}
 	})
 
-	t.Run("report run categories", func(t *testing.T) {
+	t.Run("report networth", func(t *testing.T) {
 		h := newHarness(t)
 		h.useItalianLocale()
 		seedSpendingHistory(h)
 
-		csv, _ := h.mustRun("report", "run", "categories", "--month", "2026-11", "--csv")
-		if !strings.Contains(csv, "Groceries,80.00") {
-			t.Errorf("report run categories --csv under it-IT = %q, want machine-format total 80.00", csv)
+		csv, _ := h.mustRun("report", "networth", "--period", "2026-11", "--csv")
+		if !strings.Contains(csv, "2026-11-30") {
+			t.Errorf("report networth --csv under it-IT = %q, want ISO date 2026-11-30", csv)
 		}
-		if strings.Contains(csv, "80,00") {
-			t.Errorf("report run categories --csv under it-IT = %q, leaked locale-formatted total", csv)
+		if strings.Contains(csv, "30/11/2026") {
+			t.Errorf("report networth --csv under it-IT = %q, leaked locale-formatted date", csv)
 		}
 	})
 
-	t.Run("report run cashflow", func(t *testing.T) {
+	t.Run("forecast", func(t *testing.T) {
 		h := newHarness(t)
 		h.useItalianLocale()
 		seedSpendingHistory(h)
 
-		csv, _ := h.mustRun("report", "run", "cashflow", "--month", "2026-11", "--csv")
-		if !strings.Contains(csv, "2026-11-01") {
-			t.Errorf("report run cashflow --csv under it-IT = %q, want ISO month date 2026-11-01", csv)
+		csv, _ := h.mustRun("forecast", "--horizon", "3", "--csv")
+		if !strings.Contains(csv, "DATE,TOTAL") {
+			t.Errorf("forecast --csv under it-IT = %q, want csv header", csv)
 		}
-		if !strings.Contains(csv, "2000.00") {
-			t.Errorf("report run cashflow --csv under it-IT = %q, want machine-format inflow 2000.00", csv)
-		}
-		if strings.Contains(csv, "01/11/2026") || strings.Contains(csv, "2.000,00") {
-			t.Errorf("report run cashflow --csv under it-IT = %q, leaked locale-formatted date/amount", csv)
+		if strings.Contains(csv, "1.000,00") || strings.Contains(csv, "950,00") {
+			t.Errorf("forecast --csv under it-IT = %q, leaked locale-formatted amounts", csv)
 		}
 	})
 

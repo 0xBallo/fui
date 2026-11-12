@@ -62,8 +62,8 @@ func TestRunEndToEnd(t *testing.T) {
 		t.Fatalf("account list = %+v, want one Checking account with balance -1250", accounts)
 	}
 
-	if code, stdout, stderr := runFUI(t, "report", "run", "categories", "--json"); code != 0 {
-		t.Fatalf("report run categories: code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	if code, stdout, stderr := runFUI(t, "report", "networth", "--period", "2026-01", "--json"); code != 0 {
+		t.Fatalf("report networth: code=%d stderr=%s stdout=%s", code, stderr, stdout)
 	}
 }
 

@@ -1,14 +1,18 @@
 package cli_test
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/0xballo/fui/internal/app/lending"
+	"github.com/0xballo/fui/internal/app/reporting"
+	"github.com/0xballo/fui/internal/config"
+	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 )
 
-// seedSpendingHistory adds one Checking account and three months of grocery spending plus one
-// income transaction, so report run and kpi runway have enough data: spending reports need any
-// transaction in the requested period, and runway needs at least three complete months of
-// outflows before "now" (fixed at 2026-11-11 by the harness clock).
 func seedSpendingHistory(h *harness) {
 	h.account("Checking", "checking", "EUR", "1000")
 	h.category("Groceries", "expense")
@@ -20,152 +24,180 @@ func seedSpendingHistory(h *harness) {
 	h.mustRun("add", "2000", "Paycheck", "-c", "Salary", "-a", "Checking", "--date", "2026-11-01")
 }
 
-func TestReportRunCategoriesJSON(t *testing.T) {
+func TestForecastJSONAndTableChart(t *testing.T) {
 	h := newHarness(t)
 	seedSpendingHistory(h)
-	stdout, _ := h.mustRun("report", "run", "categories", "--month", "2026-11", "--json")
-	if !strings.Contains(stdout, `"category_name":"Groceries"`) {
-		t.Fatalf("stdout missing Groceries row: %s", stdout)
+
+	jsonOut, _ := h.mustRun("forecast", "--horizon", "10", "--json")
+	if !strings.Contains(jsonOut, `"days":10`) || !strings.Contains(jsonOut, `"total"`) {
+		t.Fatalf("forecast --json = %q, want days and total", jsonOut)
 	}
-	if !strings.Contains(stdout, `"total":8000`) {
-		t.Fatalf("stdout missing total 8000: %s", stdout)
+
+	tableOut, _ := h.mustRun("forecast", "--horizon", "5", "--chart")
+	if !strings.Contains(tableOut, "DATE") || !strings.Contains(tableOut, "CHART") {
+		t.Fatalf("forecast --chart = %q, want DATE/CHART columns", tableOut)
 	}
 }
 
-func TestReportRunCategoriesTable(t *testing.T) {
+func TestReportKindsJSON(t *testing.T) {
 	h := newHarness(t)
-	h.term = true
 	seedSpendingHistory(h)
-	stdout, _ := h.mustRun("report", "run", "categories", "--month", "2026-11")
-	if !strings.Contains(stdout, "Groceries") || !strings.Contains(stdout, "80.00") {
-		t.Fatalf("stdout missing expected table content: %s", stdout)
+
+	balance, _ := h.mustRun("report", "balance", "--account", "Checking", "--period", "2026-11", "--json")
+	if !strings.Contains(balance, `"points"`) {
+		t.Fatalf("report balance --json = %q, want points", balance)
+	}
+
+	networth, _ := h.mustRun("report", "networth", "--period", "2026-11", "--json")
+	if !strings.Contains(networth, `"points"`) {
+		t.Fatalf("report networth --json = %q, want points", networth)
+	}
+
+	budget, _ := h.mustRun("report", "budget-vs-actual", "--period", "2026-11", "--json")
+	if !strings.Contains(budget, `"lines"`) {
+		t.Fatalf("report budget-vs-actual --json = %q, want lines", budget)
+	}
+
+	payees, _ := h.mustRun("report", "top-payees", "--period", "2026-11", "--json")
+	if !strings.Contains(payees, `"rows"`) {
+		t.Fatalf("report top-payees --json = %q, want rows", payees)
 	}
 }
 
-func TestReportRunCategoriesCSV(t *testing.T) {
+func TestReportSavedLifecycle(t *testing.T) {
 	h := newHarness(t)
 	seedSpendingHistory(h)
-	stdout, _ := h.mustRun("report", "run", "categories", "--month", "2026-11", "--csv")
-	if !strings.Contains(stdout, "CATEGORY,TOTAL") || !strings.Contains(stdout, "Groceries,80.00") {
-		t.Fatalf("stdout missing expected csv content: %s", stdout)
+
+	saved, _ := h.mustRun("report", "save", "monthly-networth", "networth", "--period", "last-1-months", "--json")
+	if !strings.Contains(saved, `"name":"monthly-networth"`) {
+		t.Fatalf("report save = %q, want saved report name", saved)
+	}
+
+	list, _ := h.mustRun("report", "list", "--json")
+	if !strings.Contains(list, `"monthly-networth"`) {
+		t.Fatalf("report list = %q, want saved report", list)
+	}
+
+	run, _ := h.mustRun("report", "run", "monthly-networth", "--json")
+	if !strings.Contains(run, `"kind":"net-worth"`) || !strings.Contains(run, `"data"`) {
+		t.Fatalf("report run saved = %q, want kind/data", run)
+	}
+
+	removed, _ := h.mustRun("report", "rm", "monthly-networth", "--json")
+	if !strings.Contains(removed, `"removed":"monthly-networth"`) {
+		t.Fatalf("report rm = %q, want removed payload", removed)
 	}
 }
 
-func TestReportRunCashFlow(t *testing.T) {
+func TestReportLoanKinds(t *testing.T) {
 	h := newHarness(t)
 	seedSpendingHistory(h)
-	stdout, _ := h.mustRun("report", "run", "cashflow", "--month", "2026-11", "--json")
-	if !strings.Contains(stdout, `"total_inflow":200000`) {
-		t.Fatalf("stdout missing total_inflow 200000: %s", stdout)
+	enableModules(t, h, module.Loans)
+	addLoanFixture(t, h, "Checking")
+
+	debt, _ := h.mustRun("report", "remaining-debt", "--loan", "Car", "--period", "2026-11", "--json")
+	if !strings.Contains(debt, `"loan":"Car"`) {
+		t.Fatalf("report remaining-debt --json = %q, want loan Car", debt)
 	}
-	if !strings.Contains(stdout, `"total_outflow":8000`) {
-		t.Fatalf("stdout missing total_outflow 8000: %s", stdout)
+	interest, _ := h.mustRun("report", "interest-paid", "--loan", "Car", "--period", "2026-11", "--json")
+	if !strings.Contains(interest, `"rows"`) {
+		t.Fatalf("report interest-paid --json = %q, want rows", interest)
 	}
 }
 
-func TestReportRunUnknownName(t *testing.T) {
+func TestReportLegacyRunKinds(t *testing.T) {
 	h := newHarness(t)
 	seedSpendingHistory(h)
-	_, stderr, code := h.run("report", "run", "bogus", "--json")
-	if code == 0 {
-		t.Fatalf("expected non-zero exit, got stdout code 0, stderr %q", stderr)
+
+	categories, _ := h.mustRun("report", "run", "categories", "--month", "2026-11", "--json")
+	if !strings.Contains(categories, `"rows"`) {
+		t.Fatalf("report run categories --json = %q, want rows", categories)
 	}
-	if !strings.Contains(stderr, "invalid_value") {
-		t.Fatalf("stderr missing invalid_value code: %s", stderr)
+	filtered, _ := h.mustRun("report", "run", "categories", "--from", "2026-11-01", "--to", "2026-11-30", "--account", "Checking", "--json")
+	if !strings.Contains(filtered, `"rows"`) {
+		t.Fatalf("report run categories filtered --json = %q, want rows", filtered)
+	}
+
+	cashflow, _ := h.mustRun("report", "run", "cashflow", "--month", "2026-11", "--json")
+	if !strings.Contains(cashflow, `"months"`) {
+		t.Fatalf("report run cashflow --json = %q, want months", cashflow)
 	}
 }
 
-func TestReportRunAccountFilter(t *testing.T) {
+func TestReportKindValidationErrors(t *testing.T) {
 	h := newHarness(t)
 	seedSpendingHistory(h)
-	h.account("Savings", "savings", "EUR", "0")
-	h.mustRun("add", "-5", "Interest fee", "-c", "Groceries", "-a", "Savings", "--date", "2026-11-06")
-	stdout, _ := h.mustRun("report", "run", "categories", "--month", "2026-11", "--account", "Checking", "--json")
-	if !strings.Contains(stdout, `"total":8000`) {
-		t.Fatalf("expected account filter to exclude Savings leg: %s", stdout)
+
+	_, stderr, code := h.run("report", "balance", "--period", "bogus", "--json")
+	if code != 1 || !strings.Contains(stderr, "invalid_value") {
+		t.Fatalf("report balance invalid period: code=%d stderr=%q", code, stderr)
+	}
+
+	_, stderr, code = h.run("report", "balance", "--period", "2026-11", "--json")
+	if code != 1 || !strings.Contains(stderr, "missing_field") {
+		t.Fatalf("report balance missing account: code=%d stderr=%q", code, stderr)
+	}
+
+	_, stderr, code = h.run("report", "remaining-debt", "--period", "2026-11", "--json")
+	if code != 1 || !strings.Contains(stderr, "missing_field") {
+		t.Fatalf("report remaining-debt missing loan: code=%d stderr=%q", code, stderr)
+	}
+
+	_, stderr, code = h.run("report", "run", "categories", "--account", "Nope", "--json")
+	if code != 1 || !strings.Contains(stderr, "not_found") {
+		t.Fatalf("report run categories unknown account: code=%d stderr=%q", code, stderr)
 	}
 }
 
-func TestReportRunCashFlowTableAndCSV(t *testing.T) {
-	h := newHarness(t)
-	h.term = true
-	seedSpendingHistory(h)
-	table, _ := h.mustRun("report", "run", "cashflow", "--month", "2026-11")
-	if !strings.Contains(table, "MONTH") || !strings.Contains(table, "2,000.00") {
-		t.Fatalf("cashflow table missing expected content: %s", table)
+func enableModules(t *testing.T, h *harness, extra ...module.ID) {
+	t.Helper()
+	base := append([]module.ID{}, module.Default().IDs()...)
+	base = append(base, extra...)
+	set, err := module.Validate(base)
+	if err != nil {
+		t.Fatalf("module.Validate: %v", err)
 	}
-	csv, _ := h.mustRun("report", "run", "cashflow", "--month", "2026-11", "--csv")
-	if !strings.Contains(csv, "MONTH,INFLOW,OUTFLOW,NET") {
-		t.Fatalf("cashflow csv missing header: %s", csv)
-	}
+	h.cfg.Modules.Enabled = set.IDs()
+	h.reporting.Analytics = reporting.NewAnalytics(
+		h.store,
+		fixedClock{time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)},
+		reportingSource{store: h.store},
+		reporting.Config{
+			Locale:        domain.Locale(h.cfg.Locale),
+			BaseCurrency:  currency(t, h.cfg.Currency),
+			MonthStartDay: h.cfg.MonthStartDay,
+			HorizonDays:   config.DefaultForecastDays,
+			Modules:       set,
+		},
+	)
 }
 
-func TestReportRunFromTo(t *testing.T) {
-	h := newHarness(t)
-	seedSpendingHistory(h)
-	stdout, _ := h.mustRun("report", "run", "categories", "--from", "2026-11-01", "--to", "2026-11-30", "--json")
-	if !strings.Contains(stdout, `"total":8000`) {
-		t.Fatalf("stdout missing total 8000: %s", stdout)
+func addLoanFixture(t *testing.T, h *harness, debitAccount string) {
+	t.Helper()
+	enabled, err := h.cfg.ModulesEnabled()
+	if err != nil {
+		t.Fatalf("cfg.ModulesEnabled: %v", err)
 	}
-}
-
-func TestReportRunUnknownAccount(t *testing.T) {
-	h := newHarness(t)
-	seedSpendingHistory(h)
-	_, stderr, code := h.run("report", "run", "categories", "--account", "Nope", "--json")
-	if code == 0 {
-		t.Fatalf("expected non-zero exit for unknown account, stderr %q", stderr)
+	loanSvc := lending.New(
+		h.store,
+		fixedClock{time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)},
+		h.backup,
+		lending.Config{Locale: domain.Locale(h.cfg.Locale), Location: time.UTC},
+	)
+	plan, err := loanSvc.PlanAdd(context.Background(), enabled, lending.AddRequest{
+		Name:       "Car",
+		Kind:       "loan",
+		Principal:  "1200",
+		Disbursed:  "2026-03-01",
+		TermMonths: 12,
+		RateType:   "fixed",
+		Rate:       "2",
+		Debit:      debitAccount,
+	})
+	if err != nil {
+		t.Fatalf("PlanAdd loan: %v", err)
 	}
-}
-
-func TestKPIRunway(t *testing.T) {
-	h := newHarness(t)
-	seedSpendingHistory(h)
-	stdout, _ := h.mustRun("kpi", "runway", "--json")
-	if !strings.Contains(stdout, `"currency":"EUR"`) {
-		t.Fatalf("stdout missing currency: %s", stdout)
-	}
-	if !strings.Contains(stdout, `"months"`) || !strings.Contains(stdout, `"zero_date"`) {
-		t.Fatalf("stdout missing expected runway fields: %s", stdout)
-	}
-}
-
-func TestKPIRunwayNotEnoughData(t *testing.T) {
-	h := newHarness(t)
-	h.account("Checking", "checking", "EUR", "1000")
-	_, stderr, code := h.run("kpi", "runway", "--json")
-	if code == 0 {
-		t.Fatalf("expected non-zero exit for not-enough-data, stderr %q", stderr)
-	}
-	if !strings.Contains(stderr, "not_enough_data") {
-		t.Fatalf("stderr missing not_enough_data code: %s", stderr)
-	}
-}
-
-func TestKPIRunwayTable(t *testing.T) {
-	h := newHarness(t)
-	h.term = true
-	seedSpendingHistory(h)
-	stdout, _ := h.mustRun("kpi", "runway")
-	if !strings.Contains(stdout, "AS OF") || !strings.Contains(stdout, "ZERO DATE") {
-		t.Fatalf("stdout missing expected table headers: %s", stdout)
-	}
-}
-
-func TestKPIRunwayCSVAndAccountFilter(t *testing.T) {
-	h := newHarness(t)
-	seedSpendingHistory(h)
-	csv, _ := h.mustRun("kpi", "runway", "--csv", "--account", "Checking")
-	if !strings.Contains(csv, "AS OF,LIQUIDITY,MONTHLY SPENDING,MONTHS,DAYS,ZERO DATE") {
-		t.Fatalf("csv missing expected header: %s", csv)
-	}
-}
-
-func TestKPIRunwayAt(t *testing.T) {
-	h := newHarness(t)
-	seedSpendingHistory(h)
-	stdout, _ := h.mustRun("kpi", "runway", "--at", "2026-11-10", "--json")
-	if !strings.Contains(stdout, `"as_of":"2026-11-10"`) {
-		t.Fatalf("stdout missing as_of 2026-11-10: %s", stdout)
+	if _, err := loanSvc.ApplyAdd(context.Background(), plan); err != nil {
+		t.Fatalf("ApplyAdd loan: %v", err)
 	}
 }

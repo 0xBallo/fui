@@ -3,6 +3,8 @@ package cli_test
 import (
 	"strings"
 	"testing"
+
+	"github.com/0xballo/fui/internal/module"
 )
 
 // TestKPINetWorthJSON covers the UC-04 "net worth" KPI in the single-currency case: the total
@@ -76,5 +78,17 @@ func TestKPINetWorthAt(t *testing.T) {
 	out, _ := h.mustRun("kpi", "networth", "--at", "2026-11-10", "--json")
 	if !strings.Contains(out, `"as_of":"2026-11-10"`) {
 		t.Fatalf("stdout = %q, want as_of 2026-11-10", out)
+	}
+}
+
+func TestKPINetWorthIncludesLoanDebtWhenLoansEnabled(t *testing.T) {
+	h := newHarness(t)
+	enableModules(t, h, module.Loans)
+	h.account("Checking", "checking", "EUR", "1000")
+	h.account("Car Loan", "loan", "EUR", "-300")
+
+	out, _ := h.mustRun("kpi", "networth", "--json")
+	if !strings.Contains(out, `"total":70000`) {
+		t.Fatalf("stdout = %q, want total 70000 with loan debt included", out)
 	}
 }

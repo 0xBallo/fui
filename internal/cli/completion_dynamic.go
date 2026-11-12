@@ -10,7 +10,7 @@ import (
 	"github.com/0xballo/fui/internal/app"
 )
 
-var reportNames = []string{"categories", "cashflow"}
+var reportNames = analyticsReportKinds
 
 func configureDynamicCompletions(root *cobra.Command, deps *Deps) error {
 	for _, registration := range completionRegistrations(deps) {
@@ -41,25 +41,24 @@ func completionRegistrations(deps *Deps) []completionRegistration {
 	completeCategory := completeCategoryNames(deps)
 	completeTag := completeTagNames(deps)
 	completePayee := completePayeeNames(deps)
-	completeLoan := completeLoanNames(deps)
+	completeSavedReport := completeSavedReportNames(deps)
 
-	registrations := txAndAccountCompletions(completeAccount, completeCategory, completeTag, completePayee)
-	registrations = append(registrations, reportAndRuleCompletions(completeAccount, completeCategory, completeTag, completePayee)...)
-	registrations = append(registrations, loanCompletions(completeLoan)...)
+	registrations := txAndAccountCompletions(
+		completeAccount,
+		completeCategory,
+		completeTag,
+		completePayee,
+		completeSavedReport,
+	)
+	registrations = append(
+		registrations,
+		reportAndRuleCompletions(completeAccount, completeCategory, completeTag, completePayee, completeSavedReport)...,
+	)
 	return registrations
 }
 
-func loanCompletions(completeLoan cobra.CompletionFunc) []completionRegistration {
-	return []completionRegistration{
-		{path: []string{"loan", "show"}, args: completeSingleArg(0, completeLoan)},
-		{path: []string{"loan", "schedule"}, args: completeSingleArg(0, completeLoan)},
-		{path: []string{"loan", "event"}, args: completeSingleArg(0, completeLoan)},
-		{path: []string{"loan", "run"}, flags: map[string]cobra.CompletionFunc{"loan": completeLoan}},
-	}
-}
-
 func txAndAccountCompletions(
-	completeAccount, completeCategory, completeTag, completePayee cobra.CompletionFunc,
+	completeAccount, completeCategory, completeTag, completePayee, completeSavedReport cobra.CompletionFunc,
 ) []completionRegistration {
 	return []completionRegistration{
 		{path: []string{"add"}, flags: map[string]cobra.CompletionFunc{
@@ -104,9 +103,13 @@ func txAndAccountCompletions(
 		{path: []string{"import"}, flags: map[string]cobra.CompletionFunc{
 			"account": completeAccount,
 		}},
-		{path: []string{"report", "run"}, args: completeStaticValues(reportNames), flags: map[string]cobra.CompletionFunc{
+		{path: []string{"report"}, args: completeSingleArg(0, completeStaticValues(reportNames)), flags: map[string]cobra.CompletionFunc{
 			"account": completeAccount,
 		}},
+		{path: []string{"report", "run"}, args: completeSingleArg(0, completeMergedValues(
+			completeStaticValues([]string{"categories", "cashflow"}),
+			completeSavedReport,
+		))},
 		{path: []string{"kpi", "runway"}, flags: map[string]cobra.CompletionFunc{
 			"account": completeAccount,
 		}},
@@ -114,9 +117,11 @@ func txAndAccountCompletions(
 }
 
 func reportAndRuleCompletions(
-	completeAccount, completeCategory, completeTag, completePayee cobra.CompletionFunc,
+	completeAccount, completeCategory, completeTag, completePayee, completeSavedReport cobra.CompletionFunc,
 ) []completionRegistration {
 	return []completionRegistration{
+		{path: []string{"report", "save"}, args: completeReportSaveArgs(completeSavedKinds())},
+		{path: []string{"report", "rm"}, args: completeSingleArg(0, completeSavedReport)},
 		{path: []string{"rule", "add"}, flags: map[string]cobra.CompletionFunc{
 			"account":  completeAccount,
 			"category": completeCategory,
@@ -132,6 +137,36 @@ func reportAndRuleCompletions(
 		{path: []string{"rule", "test"}, flags: map[string]cobra.CompletionFunc{
 			"account": completeAccount,
 		}},
+	}
+}
+
+func completeReportSaveArgs(kinds []string) cobra.CompletionFunc {
+	return func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) == 1 {
+			return filterByPrefix(kinds, toComplete), cobra.ShellCompDirectiveNoFileComp
+		}
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+}
+
+func completeSavedKinds() []string {
+	return reportKindLabels()
+}
+
+func completeSavedReportNames(deps *Deps) cobra.CompletionFunc {
+	return func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if deps == nil || deps.Reporting.Analytics == nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		rows, err := deps.Reporting.Analytics.List(context.Background())
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		names := make([]string, 0, len(rows))
+		for _, row := range rows {
+			names = append(names, row.Name)
+		}
+		return filterByPrefix(names, toComplete), cobra.ShellCompDirectiveNoFileComp
 	}
 }
 
@@ -221,30 +256,27 @@ func completePayeeNames(deps *Deps) cobra.CompletionFunc {
 	}
 }
 
-func completeLoanNames(deps *Deps) cobra.CompletionFunc {
-	return func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		if deps == nil || deps.Loans == nil {
-			return nil, cobra.ShellCompDirectiveNoFileComp
-		}
-		enabled, err := enabledModulesFromDeps(deps)
-		if err != nil {
-			return nil, cobra.ShellCompDirectiveNoFileComp
-		}
-		rows, err := deps.Loans.List(context.Background(), enabled)
-		if err != nil {
-			return nil, cobra.ShellCompDirectiveNoFileComp
-		}
-		names := make([]string, 0, len(rows))
-		for _, row := range rows {
-			names = append(names, row.Loan.Name)
-		}
-		return filterByPrefix(names, toComplete), cobra.ShellCompDirectiveNoFileComp
-	}
-}
-
 func completeStaticValues(values []string) cobra.CompletionFunc {
 	return func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return filterByPrefix(values, toComplete), cobra.ShellCompDirectiveNoFileComp
+	}
+}
+
+func completeMergedValues(funcs ...cobra.CompletionFunc) cobra.CompletionFunc {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		seen := make(map[string]struct{})
+		out := make([]string, 0)
+		for _, complete := range funcs {
+			values, _ := complete(cmd, args, toComplete)
+			for _, value := range values {
+				if _, ok := seen[value]; ok {
+					continue
+				}
+				seen[value] = struct{}{}
+				out = append(out, value)
+			}
+		}
+		return out, cobra.ShellCompDirectiveNoFileComp
 	}
 }
 

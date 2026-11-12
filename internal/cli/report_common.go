@@ -2,9 +2,12 @@ package cli
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/domain"
 )
 
@@ -46,6 +49,57 @@ func reportPeriod(cmd *cobra.Command, monthStartDay int) (domain.Period, error) 
 // runway.
 func reportAccountFlag(cmd *cobra.Command) {
 	cmd.Flags().StringArray("account", nil, "filter by account (repeatable)")
+}
+
+func reportKindPeriodFlag(cmd *cobra.Command) {
+	cmd.Flags().String("period", "", "period as YYYY-MM, YYYY-MM-DD..YYYY-MM-DD, or empty for current month")
+}
+
+func reportChartFlag(cmd *cobra.Command) {
+	cmd.Flags().Bool("chart", false, "render a text bar chart in table output")
+}
+
+func reportPeriodValue(cmd *cobra.Command, monthStartDay int) (domain.Period, error) {
+	in, _ := cmd.Flags().GetString("period")
+	in = strings.TrimSpace(in)
+	if in == "" {
+		return domain.Period{}, nil
+	}
+	if reporting.ValidRelativePeriod(in) {
+		return domain.Period{}, &domain.Error{
+			Code:    domain.CodeInvalidValue,
+			Message: fmt.Sprintf("relative period %q is supported only by saved reports", in),
+			Details: map[string]any{"field": "period", "value": in},
+		}
+	}
+	if strings.Contains(in, "..") {
+		fromText, toText, ok := strings.Cut(in, "..")
+		if !ok {
+			return domain.Period{}, invalidPeriod(in)
+		}
+		fromDate, err := domain.ParseDate(strings.TrimSpace(fromText))
+		if err != nil {
+			return domain.Period{}, invalidPeriod(in)
+		}
+		toDate, err := domain.ParseDate(strings.TrimSpace(toText))
+		if err != nil {
+			return domain.Period{}, invalidPeriod(in)
+		}
+		return domain.NewPeriod(fromDate, toDate)
+	}
+	day, err := domain.ParseDate(in + "-01")
+	if err != nil {
+		return domain.Period{}, invalidPeriod(in)
+	}
+	return domain.MonthPeriod(day, monthStartDay)
+}
+
+func invalidPeriod(value string) error {
+	return &domain.Error{
+		Code:    domain.CodeInvalidValue,
+		Message: fmt.Sprintf("invalid period %q", value),
+		Details: map[string]any{"field": "period", "value": value},
+	}
 }
 
 // resolveAccountIDs turns account names into IDs via the same resolution ShowAccount uses, so an

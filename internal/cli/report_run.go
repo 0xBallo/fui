@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -11,78 +10,108 @@ import (
 	"github.com/0xballo/fui/internal/domain"
 )
 
-// newReportRunCmd runs one of the predefined reports: categories (spending by category) or
-// cashflow (monthly cash-flow). Both default to the current accounting month and exclude
-// transfers.
-func newReportRunCmd(deps *Deps) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     "run NAME",
-		Short:   "Run a predefined report (categories or cashflow)",
-		Args:    exactArgs(1),
-		Example: "  fui report run categories --month 2026-10",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runReport(cmd, deps, args[0])
-		},
-	}
-	reportPeriodFlags(cmd)
-	reportAccountFlag(cmd)
-	return cmd
-}
-
-func runReport(cmd *cobra.Command, deps *Deps, name string) error {
+func runAnalyticsReportByKind(cmd *cobra.Command, deps *Deps, kind string) error {
 	rt, err := runtimeOf(cmd, deps)
 	if err != nil {
 		return err
 	}
-	ctx := cmd.Context()
-	period, err := reportPeriod(cmd, deps.Config.MonthStartDay)
+	analytics, err := requireAnalytics(deps)
 	if err != nil {
 		return err
 	}
-	names, _ := cmd.Flags().GetStringArray("account")
-	accountIDs, err := resolveAccountIDs(ctx, deps, names)
+	period, err := reportPeriodValue(cmd, deps.Config.MonthStartDay)
 	if err != nil {
 		return err
 	}
-	base, err := deps.BaseCurrency()
-	if err != nil {
-		return err
+	chart, _ := cmd.Flags().GetBool("chart")
+	account, _ := cmd.Flags().GetStringArray("account")
+	loan, _ := cmd.Flags().GetString("loan")
+	limit, _ := cmd.Flags().GetInt("limit")
+	req := reporting.ReportRequest{
+		Period: period, Account: firstValue(account), Loan: loan, Limit: limit,
 	}
-	switch name {
-	case "categories":
-		return runSpendingReport(ctx, deps, rt, period, accountIDs, base)
-	case "cashflow":
-		return runCashFlowReport(ctx, deps, rt, period, accountIDs, base)
+	return executeAnalyticsReport(cmd, deps, rt, analytics, kind, req, chart)
+}
+
+func executeAnalyticsReport(
+	cmd *cobra.Command,
+	deps *Deps,
+	rt runtimeFlags,
+	analytics *reporting.Analytics,
+	kind string,
+	req reporting.ReportRequest,
+	chart bool,
+) error {
+	switch kind {
+	case "budget-vs-actual":
+		out, err := analytics.BudgetVsActual(cmd.Context(), req)
+		if err != nil {
+			return err
+		}
+		return render.WriteBudgetReport(deps.Stdout, rt.format, deps.Locale(), rt.color, out, chart)
+	case "balance":
+		if req.Account == "" {
+			return missingField("account")
+		}
+		out, err := analytics.BalanceOverTime(cmd.Context(), req)
+		if err != nil {
+			return err
+		}
+		return render.WriteSeriesReport(deps.Stdout, rt.format, deps.Locale(), rt.color, out, chart)
+	case "remaining-debt":
+		if req.Loan == "" {
+			return missingField("loan")
+		}
+		out, err := analytics.RemainingDebt(cmd.Context(), req)
+		if err != nil {
+			return err
+		}
+		return render.WriteDebtReport(deps.Stdout, rt.format, deps.Locale(), rt.color, out, chart)
+	case "interest-paid":
+		out, err := analytics.InterestPaid(cmd.Context(), req)
+		if err != nil {
+			return err
+		}
+		return render.WriteInterestReport(deps.Stdout, rt.format, deps.Locale(), rt.color, out, chart)
+	case "networth":
+		out, err := analytics.NetWorth(cmd.Context(), req)
+		if err != nil {
+			return err
+		}
+		return render.WriteSeriesReport(deps.Stdout, rt.format, deps.Locale(), rt.color, out, chart)
+	case "top-payees":
+		out, err := analytics.TopPayees(cmd.Context(), req)
+		if err != nil {
+			return err
+		}
+		return render.WritePayeesReport(deps.Stdout, rt.format, deps.Locale(), rt.color, out, chart)
 	default:
 		return &domain.Error{
-			Code: domain.ErrInvalidValue.Code, Message: fmt.Sprintf("unknown report %q", name),
-			Details: map[string]any{"field": "report", "value": name},
+			Code:    domain.CodeInvalidValue,
+			Message: fmt.Sprintf("unknown report kind %q", kind),
+			Details: map[string]any{"field": "kind", "value": kind},
 		}
 	}
 }
 
-func runSpendingReport(
-	ctx context.Context, deps *Deps, rt runtimeFlags, period domain.Period,
-	accountIDs []domain.AccountID, base domain.Currency,
-) error {
-	result, err := deps.Reporting.Spending.Run(ctx, reporting.SpendingParams{
-		Period: period, MonthStartDay: deps.Config.MonthStartDay, AccountIDs: accountIDs, BaseCurrency: base,
-	})
-	if err != nil {
-		return err
+func requireAnalytics(deps *Deps) (*reporting.Analytics, error) {
+	if deps == nil || deps.Reporting.Analytics == nil {
+		return nil, fmt.Errorf("fui: analytics service is not configured")
 	}
-	return render.WriteSpending(deps.Stdout, rt.format, deps.Locale(), rt.color, result)
+	return deps.Reporting.Analytics, nil
 }
 
-func runCashFlowReport(
-	ctx context.Context, deps *Deps, rt runtimeFlags, period domain.Period,
-	accountIDs []domain.AccountID, base domain.Currency,
-) error {
-	result, err := deps.Reporting.CashFlow.Run(ctx, reporting.CashFlowParams{
-		Period: period, MonthStartDay: deps.Config.MonthStartDay, AccountIDs: accountIDs, BaseCurrency: base,
-	})
-	if err != nil {
-		return err
+func firstValue(values []string) string {
+	if len(values) == 0 {
+		return ""
 	}
-	return render.WriteCashFlow(deps.Stdout, rt.format, deps.Locale(), rt.color, result)
+	return values[0]
+}
+
+func missingField(name string) error {
+	return &domain.Error{
+		Code:    domain.CodeMissingField,
+		Message: fmt.Sprintf("%s is required", name),
+		Details: map[string]any{"field": name},
+	}
 }

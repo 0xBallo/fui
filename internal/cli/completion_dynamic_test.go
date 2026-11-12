@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/cli"
 )
 
@@ -55,6 +56,13 @@ func TestDynamicCompletionTagPayeeAndReport(t *testing.T) {
 	if _, err := h.svc.ApplyAddPayee(ctx, payeePlan); err != nil {
 		t.Fatalf("ApplyAddPayee: %v", err)
 	}
+	reportPlan, err := h.reporting.Analytics.PlanSave(ctx, "monthly-overview", "net-worth", reporting.SavedSpec{})
+	if err != nil {
+		t.Fatalf("PlanSave: %v", err)
+	}
+	if _, err := h.reporting.Analytics.ApplySave(ctx, reportPlan); err != nil {
+		t.Fatalf("ApplySave: %v", err)
+	}
 
 	var out, errw bytes.Buffer
 	root := cli.NewRoot(h.deps(&out, &errw))
@@ -78,9 +86,30 @@ func TestDynamicCompletionTagPayeeAndReport(t *testing.T) {
 	}
 
 	reportRun := mustFindCommand(t, root, "report", "run")
-	gotReports, directive := reportRun.ValidArgsFunction(reportRun, nil, "ca")
-	if directive != cobra.ShellCompDirectiveNoFileComp || !slices.Equal(gotReports, []string{"categories", "cashflow"}) {
-		t.Fatalf("report run completion = %v (directive=%d), want [categories cashflow] (%d)", gotReports, directive, cobra.ShellCompDirectiveNoFileComp)
+	gotSavedRun, directive := reportRun.ValidArgsFunction(reportRun, nil, "mo")
+	if directive != cobra.ShellCompDirectiveNoFileComp || !slices.Equal(gotSavedRun, []string{"monthly-overview"}) {
+		t.Fatalf("report run completion = %v (directive=%d), want [monthly-overview] (%d)", gotSavedRun, directive, cobra.ShellCompDirectiveNoFileComp)
+	}
+
+	reportKind := mustFindCommand(t, root, "report")
+	gotReports, directive := reportKind.ValidArgsFunction(reportKind, nil, "ne")
+	if directive != cobra.ShellCompDirectiveNoFileComp || !slices.Equal(gotReports, []string{"networth"}) {
+		t.Fatalf("report kind completion = %v (directive=%d), want [networth] (%d)", gotReports, directive, cobra.ShellCompDirectiveNoFileComp)
+	}
+	reportSave := mustFindCommand(t, root, "report", "save")
+	gotKinds, directive := reportSave.ValidArgsFunction(reportSave, []string{"name"}, "to")
+	if directive != cobra.ShellCompDirectiveNoFileComp || !slices.Equal(gotKinds, []string{"top-payees"}) {
+		t.Fatalf("report save kind completion = %v (directive=%d), want [top-payees] (%d)", gotKinds, directive, cobra.ShellCompDirectiveNoFileComp)
+	}
+	reportRm := mustFindCommand(t, root, "report", "rm")
+	gotSavedRm, directive := reportRm.ValidArgsFunction(reportRm, nil, "mo")
+	if directive != cobra.ShellCompDirectiveNoFileComp || !slices.Equal(gotSavedRm, []string{"monthly-overview"}) {
+		t.Fatalf("report rm completion = %v (directive=%d), want [monthly-overview] (%d)", gotSavedRm, directive, cobra.ShellCompDirectiveNoFileComp)
+	}
+
+	gotReportRoot, directive := reportKind.ValidArgsFunction(reportKind, nil, "ba")
+	if directive != cobra.ShellCompDirectiveNoFileComp || !slices.Equal(gotReportRoot, []string{"balance"}) {
+		t.Fatalf("report root completion = %v (directive=%d), want [balance] (%d)", gotReportRoot, directive, cobra.ShellCompDirectiveNoFileComp)
 	}
 }
 

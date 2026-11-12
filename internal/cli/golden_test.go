@@ -84,12 +84,12 @@ func TestGoldenModuleListJSON(t *testing.T) {
 	checkGolden(t, "module_list.json", []byte(out))
 }
 
-// TestGoldenReportRunCategories covers the --json renderer of report run categories.
-func TestGoldenReportRunCategories(t *testing.T) {
+// TestGoldenReportNetWorth covers the --json renderer of report networth.
+func TestGoldenReportNetWorth(t *testing.T) {
 	h := newHarness(t)
 	seedSpendingHistory(h)
-	out, _ := h.mustRun("report", "run", "categories", "--month", "2026-11", "--json")
-	checkGolden(t, "report_run_categories.json", []byte(out))
+	out, _ := h.mustRun("report", "networth", "--period", "2026-11", "--json")
+	checkGolden(t, "report_networth.json", []byte(out))
 }
 
 // TestGoldenKPIRunway covers the --json renderer of kpi runway.
