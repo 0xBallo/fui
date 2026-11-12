@@ -331,3 +331,27 @@ func TestRotateNeverDeletesResetBackups(t *testing.T) {
 		t.Fatalf("reset backup was removed: %v", err)
 	}
 }
+
+func TestNextFilePathAddsCounterOnCollision(t *testing.T) {
+	dir := t.TempDir()
+	ts := time.Date(2026, 11, 11, 23, 15, 30, 0, time.UTC)
+	for _, want := range []string{
+		"fui-20261111-231530-reset.db",
+		"fui-20261111-231530-reset-2.db",
+		"fui-20261111-231530-reset-3.db",
+	} {
+		got, err := backup.NextFilePath(dir, ts, backup.ReasonReset)
+		if err != nil {
+			t.Fatalf("NextFilePath: %v", err)
+		}
+		if got != filepath.Join(dir, want) {
+			t.Fatalf("NextFilePath = %q, want %q", got, want)
+		}
+		if err := os.WriteFile(got, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := backup.NextFilePath(dir, ts, "bogus"); err == nil {
+		t.Error("NextFilePath accepted an invalid reason")
+	}
+}

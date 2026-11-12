@@ -127,3 +127,32 @@ func TestResetEmptyArchiveActsAsInit(t *testing.T) {
 		t.Errorf("categories = %q, want defaults", cats)
 	}
 }
+
+func TestResetTextOutputAndAgentYes(t *testing.T) {
+	h := resetHarness(t)
+	out, _ := h.mustRun("reset", "--keep-settings", "--yes")
+	if !strings.Contains(out, "Archive reset.") {
+		t.Errorf("output = %q, want the text confirmation", out)
+	}
+
+	h = resetHarness(t)
+	h.cfg.AgentMode = true
+	out, _ = h.mustRun("reset", "--yes")
+	if !strings.Contains(out, `"keep_settings":false`) {
+		t.Errorf("agent output = %q, want JSON", out)
+	}
+
+	h = newHarness(t)
+	out, _ = h.mustRun("reset", "--yes")
+	if !strings.Contains(out, "No archive found") {
+		t.Errorf("empty-archive output = %q, want the init note", out)
+	}
+}
+
+func TestResetKeepSettingsPlanListsKept(t *testing.T) {
+	h := resetHarness(t)
+	out, _ := h.mustRun("reset", "--keep-settings", "--dry-run")
+	if !strings.Contains(out, "keep 1 categories") {
+		t.Errorf("plan = %q, want kept categories listed", out)
+	}
+}
