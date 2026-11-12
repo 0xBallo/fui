@@ -39,6 +39,8 @@ type state struct {
 	TxTags     map[domain.TransactionID][]domain.TagID
 	Payees     map[domain.PayeeID]domain.Payee
 	Splits     map[domain.TransactionID][]domain.Split
+	Budgets    map[domain.BudgetID]domain.Budget
+	Moves      []domain.BudgetMove
 	LastID     map[string]int64
 }
 
@@ -56,6 +58,7 @@ func newState() *state {
 		TxTags:     map[domain.TransactionID][]domain.TagID{},
 		Payees:     map[domain.PayeeID]domain.Payee{},
 		Splits:     map[domain.TransactionID][]domain.Split{},
+		Budgets:    map[domain.BudgetID]domain.Budget{},
 		LastID:     map[string]int64{},
 	}
 }
@@ -66,6 +69,7 @@ func (s *state) clone() *state {
 		Rules: maps.Clone(s.Rules), Groups: maps.Clone(s.Groups), FX: maps.Clone(s.FX), Batches: maps.Clone(s.Batches),
 		Refs: maps.Clone(s.Refs), LastID: maps.Clone(s.LastID),
 		Tags: maps.Clone(s.Tags), TxTags: maps.Clone(s.TxTags), Payees: maps.Clone(s.Payees), Splits: maps.Clone(s.Splits),
+		Budgets: maps.Clone(s.Budgets), Moves: slices.Clone(s.Moves),
 	}
 }
 
@@ -133,6 +137,7 @@ func (r *repos) Imports() app.ImportRepo           { return imports{r} }
 func (r *repos) Tags() app.TagRepo                 { return tags{r} }
 func (r *repos) Payees() app.PayeeRepo             { return payees{r} }
 func (r *repos) Splits() app.SplitRepo             { return splits{r} }
+func (r *repos) Budgets() app.BudgetRepo           { return budgets{r} }
 
 func (r *repos) writable() error {
 	if r.readOnly {

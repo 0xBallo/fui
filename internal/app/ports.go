@@ -68,6 +68,7 @@ type Repos interface {
 	Tags() TagRepo
 	Payees() PayeeRepo
 	Splits() SplitRepo
+	Budgets() BudgetRepo
 }
 
 // AccountRepo stores accounts. Names are unique case-insensitively.
@@ -215,4 +216,28 @@ type SplitRepo interface {
 	// ReplaceSplits stores rows after checking them with domain.ValidateSplits against the
 	// transaction amount; no rows removes the split. Rows refer to existing categories.
 	ReplaceSplits(ctx context.Context, tx domain.TransactionID, rows []domain.Split) error
+}
+
+// BudgetRepo stores budgets (caps and envelopes), their monthly amount overrides, and the
+// envelope moves ledger. Callers validate a budget with domain.NewBudget and the repository
+// set with domain.ValidateBudgets before calling Insert or Update; a budget's targets refer to
+// existing categories or tags, and a category can be the target of only one budget.
+type BudgetRepo interface {
+	// Insert stores b and returns it with its ID assigned.
+	Insert(ctx context.Context, b domain.Budget) (domain.Budget, error)
+	// Update replaces the name, mode, amount, targets, overrides, carry flag and thresholds of b.
+	Update(ctx context.Context, b domain.Budget) error
+	// Delete removes the budget, its targets, overrides and the envelope moves that touch it.
+	Delete(ctx context.Context, id domain.BudgetID) error
+	Get(ctx context.Context, id domain.BudgetID) (domain.Budget, error)
+	// List returns every budget ordered by ID, with every override they have.
+	List(ctx context.Context) ([]domain.Budget, error)
+	// ForMonth returns every budget ordered by ID, with Overrides holding at most the single
+	// entry for k (a budget has no start or end date, so every budget is in effect every month).
+	ForMonth(ctx context.Context, k domain.MonthKey) ([]domain.Budget, error)
+	// Moves returns the envelope moves dated within [from, to], inclusive, ordered by date then
+	// insertion order.
+	Moves(ctx context.Context, from, to domain.Date) ([]domain.BudgetMove, error)
+	// AddMove appends an envelope move to the ledger; a non-zero From or To must be an existing budget.
+	AddMove(ctx context.Context, m domain.BudgetMove) error
 }

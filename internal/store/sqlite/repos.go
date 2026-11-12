@@ -35,6 +35,7 @@ func (r *repos) Imports() app.ImportRepo           { return importRepo{repos: r}
 func (r *repos) Tags() app.TagRepo                 { return tagRepo{repos: r} }
 func (r *repos) Payees() app.PayeeRepo             { return payeeRepo{repos: r} }
 func (r *repos) Splits() app.SplitRepo             { return splitRepo{repos: r} }
+func (r *repos) Budgets() app.BudgetRepo           { return budgetRepo{repos: r} }
 
 func (r *repos) writable() error {
 	if r.readOnly {
