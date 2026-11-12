@@ -96,6 +96,56 @@ type ImportBatch struct {
 	UpdatedAt    string
 }
 
+type Loan struct {
+	ID             int64
+	Kind           string
+	PrincipalMinor int64
+	Currency       string
+	DisbursedOn    string
+	TermMonths     int64
+	RateType       string
+	DebitAccountID int64
+	CreatedAt      string
+	UpdatedAt      string
+}
+
+type LoanEvent struct {
+	ID                 int64
+	LoanID             int64
+	Kind               string
+	EventDate          string
+	NewRateBasisPoints sql.NullInt64
+	NewTermMonths      sql.NullInt64
+	PrepaidMinor       sql.NullInt64
+	PrepaidCurrency    sql.NullString
+	PrepayMode         sql.NullString
+	CreatedAt          string
+	UpdatedAt          string
+}
+
+type LoanInstallment struct {
+	ID             int64
+	ScheduleID     int64
+	DueDate        string
+	PrincipalMinor int64
+	InterestMinor  int64
+	FeesMinor      int64
+	RemainingMinor int64
+	TransactionID  sql.NullInt64
+	CreatedAt      string
+	UpdatedAt      string
+}
+
+type LoanSchedule struct {
+	ID              int64
+	LoanID          int64
+	ValidFrom       string
+	Origin          string
+	RateBasisPoints int64
+	CreatedAt       string
+	UpdatedAt       string
+}
+
 type Payee struct {
 	ID        int64
 	Name      string
