@@ -21,6 +21,21 @@ func TestExportToStdout(t *testing.T) {
 	}
 }
 
+// TestExportWithFilters covers that export shares filterflags.go with tx list/search: a filtered
+// export only dumps the matching rows.
+func TestExportWithFilters(t *testing.T) {
+	h := newHarness(t)
+	h.account("Checking", "checking", "EUR", "0")
+	h.category("Food", "expense")
+	h.mustRun("add", "-10", "Pizza", "-c", "Food", "-a", "Checking", "--date", "2026-01-10")
+	h.mustRun("add", "--", "-20", "Rent", "-a", "Checking", "--date", "2026-02-10")
+
+	out, _ := h.mustRun("export", "--format", "csv", "--month", "2026-01")
+	if !strings.Contains(out, "Pizza") || strings.Contains(out, "Rent") {
+		t.Errorf("export --month 2026-01 = %q, want only Pizza", out)
+	}
+}
+
 // TestExportToFileWritesConfirmation covers --output FILE: the stream is written to the file and
 // a short confirmation is printed instead of the stream itself.
 func TestExportToFileWritesConfirmation(t *testing.T) {

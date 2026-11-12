@@ -38,6 +38,20 @@ func TestAgentModeForcesJSON(t *testing.T) {
 	}
 }
 
+// TestAgentModeTxSearchForcesJSON covers that tx search, a read-only command, also gets the
+// agent mode JSON override, rendering the same TxPageDTO shape as tx list.
+func TestAgentModeTxSearchForcesJSON(t *testing.T) {
+	h := newHarness(t)
+	h.account("Checking", "checking", "EUR", "0")
+	h.mustRun("add", "-10", "Pizza", "-a", "Checking")
+	h.cfg.AgentMode = true
+
+	out, _ := h.mustRun("tx", "search", "pizza")
+	if !strings.Contains(out, `"items":[`) || !strings.Contains(out, `"summary"`) {
+		t.Errorf("output = %q, want a tx_page JSON object (agent mode forces --json)", out)
+	}
+}
+
 // TestAgentModeWithYesApplies confirms the write succeeds once --yes is given.
 func TestAgentModeWithYesApplies(t *testing.T) {
 	h := newHarness(t)

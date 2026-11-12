@@ -10,7 +10,8 @@ import (
 	"github.com/0xballo/fui/internal/domain"
 )
 
-// newTxListCmd lists transactions, most recent first, with every ListTxRequest filter as a flag.
+// newTxListCmd lists transactions, newest first by default, with every filterflags.go flag plus
+// --after-date/--after-id paging.
 func newTxListCmd(deps *Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "list",
@@ -20,22 +21,10 @@ func newTxListCmd(deps *Deps) *cobra.Command {
 			return runTxList(cmd, deps)
 		},
 	}
-	registerTxListFlags(cmd)
-	return cmd
-}
-
-func registerTxListFlags(cmd *cobra.Command) {
-	cmd.Flags().String("from", "", "earliest date, inclusive")
-	cmd.Flags().String("to", "", "latest date, inclusive")
-	cmd.Flags().StringArray("account", nil, "filter by account (repeatable)")
-	cmd.Flags().StringArray("category", nil, "filter by category (repeatable)")
-	cmd.Flags().StringArray("status", nil, "pending, booked or reconciled (repeatable)")
-	cmd.Flags().String("text", "", "case-insensitive substring of description or notes")
-	cmd.Flags().String("min", "", "minimum amount, inclusive")
-	cmd.Flags().String("max", "", "maximum amount, inclusive")
-	cmd.Flags().Int("limit", 0, "page size (default: 100)")
+	registerFilterFlags(cmd)
 	cmd.Flags().String("after-date", "", "resume after this ISO date (from the previous page)")
 	cmd.Flags().Int64("after-id", 0, "resume after this transaction id (from the previous page)")
+	return cmd
 }
 
 func runTxList(cmd *cobra.Command, deps *Deps) error {
@@ -51,7 +40,7 @@ func runTxList(cmd *cobra.Command, deps *Deps) error {
 	if err != nil {
 		return err
 	}
-	if err := render.WriteTxList(deps.Stdout, rt.format, deps.Locale(), rt.color, page.Items); err != nil {
+	if err := render.WriteTxPage(deps.Stdout, rt.format, deps.Locale(), rt.color, page); err != nil {
 		return err
 	}
 	if page.Next != nil && rt.format == render.Table {
@@ -62,17 +51,13 @@ func runTxList(cmd *cobra.Command, deps *Deps) error {
 	return nil
 }
 
+// txListRequest reads the shared filter flags and tx list's own paging flags into a
+// ListTxRequest.
 func txListRequest(cmd *cobra.Command) (app.ListTxRequest, error) {
-	req := app.ListTxRequest{}
-	req.From, _ = cmd.Flags().GetString("from")
-	req.To, _ = cmd.Flags().GetString("to")
-	req.Accounts, _ = cmd.Flags().GetStringArray("account")
-	req.Categories, _ = cmd.Flags().GetStringArray("category")
-	req.Statuses, _ = cmd.Flags().GetStringArray("status")
-	req.Text, _ = cmd.Flags().GetString("text")
-	req.MinAmount, _ = cmd.Flags().GetString("min")
-	req.MaxAmount, _ = cmd.Flags().GetString("max")
-	req.Limit, _ = cmd.Flags().GetInt("limit")
+	req, err := readFilterFlags(cmd)
+	if err != nil {
+		return app.ListTxRequest{}, err
+	}
 	afterDate, _ := cmd.Flags().GetString("after-date")
 	if afterDate != "" {
 		d, err := domain.ParseDate(afterDate)

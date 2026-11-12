@@ -25,7 +25,7 @@ func newExportCmd(deps *Deps) *cobra.Command {
 			return runExport(cmd, deps)
 		},
 	}
-	registerTxListFlags(cmd)
+	registerFilterFlags(cmd)
 	cmd.Flags().String("format", "csv", "csv, json or fui (fui only without --all)")
 	cmd.Flags().Bool("all", false, "dump the full archive into --output, one file per entity")
 	cmd.Flags().String("output", "", "output file (export) or directory (--all); stdout when omitted")
@@ -48,7 +48,7 @@ func runExport(cmd *cobra.Command, deps *Deps) error {
 	if all {
 		return runDump(ctx, deps, svc, rt, format, output)
 	}
-	req, err := txListRequest(cmd)
+	req, err := readFilterFlags(cmd)
 	if err != nil {
 		return err
 	}

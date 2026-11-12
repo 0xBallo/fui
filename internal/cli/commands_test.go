@@ -37,8 +37,9 @@ func TestTxShowEditRemove(t *testing.T) {
 	}
 
 	list, _ := h.mustRun("tx", "list", "--json")
-	if strings.TrimSpace(list) != "[]" {
-		t.Errorf("tx list after rm = %q, want an empty array", list)
+	want := `{"items":[],"summary":{"count":0,"totals":[]},"next":null}`
+	if strings.TrimSpace(list) != want {
+		t.Errorf("tx list after rm = %q, want %q", list, want)
 	}
 }
 

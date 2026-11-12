@@ -56,6 +56,19 @@ func TestGoldenTxList(t *testing.T) {
 	checkGolden(t, "tx_list.json", []byte(out))
 }
 
+// TestGoldenTxSearch covers the --json renderer of tx search, the same TxPageDTO shape as
+// tx list (TestGoldenTxList) but reached through the text positional argument and a filter flag.
+func TestGoldenTxSearch(t *testing.T) {
+	h := newHarness(t)
+	h.account("Checking", "checking", "EUR", "0")
+	h.category("Groceries", "expense")
+	h.mustRun("add", "-12.50", "Esselunga", "-c", "Groceries", "-a", "Checking", "--date", "2026-01-05")
+	h.mustRun("add", "--", "-3.00", "Amazon Prime", "-a", "Checking", "--date", "2026-01-06")
+
+	out, _ := h.mustRun("tx", "search", "esselunga", "--json")
+	checkGolden(t, "tx_search.json", []byte(out))
+}
+
 // TestGoldenHelpJSON freezes the shape of "fui help --json": the full command tree with flags,
 // examples and output schema names, used by scripts and agents to discover the CLI.
 func TestGoldenHelpJSON(t *testing.T) {
