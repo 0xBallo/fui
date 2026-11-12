@@ -167,9 +167,9 @@ func (m *Tags) View() string {
 	var body string
 	switch m.mode {
 	case tagsForm:
-		body = m.viewForm()
+		body = components.Modal(m.th, m.width, m.height, m.viewForm())
 	case tagsConfirm:
-		body = m.viewList() + "\n\n" + m.confirm.View()
+		body = components.Modal(m.th, m.width, m.height, m.confirm.View())
 	case tagsList:
 		body = m.viewList()
 	default:

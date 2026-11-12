@@ -471,7 +471,8 @@ func (m *Model) View() string {
 		out += m.viewModules()
 	}
 	if m.mode == modeConfirm {
-		out += "\n\n" + m.confirm.View()
+		// The section tabs and their blank line stay above the dialog.
+		return m.viewSectionTabs() + "\n\n" + components.Modal(m.th, m.width, max(0, m.height-2), m.confirm.View())
 	}
 	return out
 }

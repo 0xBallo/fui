@@ -2,7 +2,6 @@ package tui_test
 
 import (
 	"bytes"
-	"io"
 	"testing"
 	"time"
 
@@ -32,10 +31,8 @@ func forceColorProfile(t *testing.T, profile termenv.Profile) {
 
 // themeSnapshot renders Root with the given theme at 80x24 (FUI's minimum terminal size) and the
 // color profile pinned by forceColorProfile's caller, types keys, and diffs the raw (not
-// ANSI-stripped: that would hide the whole point, the tokens the theme chose) output captured up
-// to the point wait appears against testdata/<test name>.golden. Capturing only up to wait
-// rather than Quit's full output keeps goldens small and avoids the quit-trailer brittleness
-// that snapshot (in teatest_test.go) strips ANSI to dodge.
+// ANSI-stripped: that would hide the whole point, the tokens the theme chose) final view, once
+// wait has appeared, against testdata/<test name>.golden.
 func themeSnapshot(t *testing.T, theme, keys, wait string) {
 	t.Helper()
 	fx := newSnapshotFixture(t)
@@ -47,22 +44,17 @@ func themeSnapshot(t *testing.T, theme, keys, wait string) {
 		tm.Type(keys)
 	}
 
-	var captured bytes.Buffer
-	teatest.WaitFor(t, io.TeeReader(tm.Output(), &captured), func(b []byte) bool {
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		return bytes.Contains(b, []byte(wait))
 	}, teatest.WithDuration(3*time.Second))
 
 	if err := tm.Quit(); err != nil {
 		t.Fatalf("Quit: %v", err)
 	}
-	tm.WaitFinished(t, teatest.WithFinalTimeout(time.Second))
-	// Drain the remaining (quit-trailer) output so the program can finish; it's intentionally
-	// excluded from the golden.
-	if _, err := io.ReadAll(tm.Output()); err != nil {
-		t.Fatalf("read remaining output: %v", err)
-	}
-
-	golden.RequireEqual(t, captured.Bytes())
+	// Snapshot the final view, not the output stream: the renderer coalesces frames on a timer,
+	// so which intermediate frames reach the stream varies run to run.
+	final := tm.FinalModel(t, teatest.WithFinalTimeout(3*time.Second))
+	golden.RequireEqual(t, []byte(final.View()))
 }
 
 func TestDashboardSnapshotLatte(t *testing.T) {
@@ -92,25 +84,25 @@ func TestDashboardSnapshotNoColor(t *testing.T) {
 
 func TestTransactionsSnapshotLatte(t *testing.T) {
 	forceColorProfile(t, termenv.TrueColor)
-	themeSnapshot(t, "latte", "2", "Supermarket")
+	themeSnapshot(t, "latte", "2", "booked")
 }
 
 func TestTransactionsSnapshotMocha(t *testing.T) {
 	forceColorProfile(t, termenv.TrueColor)
-	themeSnapshot(t, "mocha", "2", "Supermarket")
+	themeSnapshot(t, "mocha", "2", "booked")
 }
 
 func TestTransactionsSnapshotTerminal(t *testing.T) {
 	forceColorProfile(t, termenv.TrueColor)
-	themeSnapshot(t, "terminal", "2", "Supermarket")
+	themeSnapshot(t, "terminal", "2", "booked")
 }
 
 func TestTransactionsSnapshotHighContrast(t *testing.T) {
 	forceColorProfile(t, termenv.TrueColor)
-	themeSnapshot(t, "high-contrast", "2", "Supermarket")
+	themeSnapshot(t, "high-contrast", "2", "booked")
 }
 
 func TestTransactionsSnapshotNoColor(t *testing.T) {
 	forceColorProfile(t, termenv.Ascii)
-	themeSnapshot(t, "mocha", "2", "Supermarket")
+	themeSnapshot(t, "mocha", "2", "booked")
 }

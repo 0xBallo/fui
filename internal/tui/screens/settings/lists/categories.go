@@ -180,11 +180,11 @@ func (m *Categories) View() string {
 	var body string
 	switch m.mode {
 	case categoriesForm:
-		body = m.viewForm()
+		body = components.Modal(m.th, m.width, m.height, m.viewForm())
 	case categoriesReassign:
-		body = m.viewReassign()
+		body = components.Modal(m.th, m.width, m.height, m.viewReassign())
 	case categoriesConfirm:
-		body = m.viewList() + "\n\n" + m.confirm.View()
+		body = components.Modal(m.th, m.width, m.height, m.confirm.View())
 	case categoriesList:
 		body = m.viewList()
 	default:

@@ -66,31 +66,37 @@ type Theme struct {
 	HelpDesc    lipgloss.Style
 	Dialog      lipgloss.Style
 	BarFill     lipgloss.Style
+	// Button and ActiveButton render a dialog's choices; the active one is the default action.
+	Button       lipgloss.Style
+	ActiveButton lipgloss.Style
 }
 
 // fromTokens builds every Theme style from t, the only place in the package that wires a
 // semantic token to a concrete lipgloss property.
 func fromTokens(name string, t Tokens) Theme {
 	return Theme{
-		Name:        name,
-		Tokens:      t,
-		Base:        lipgloss.NewStyle().Foreground(t.Text),
-		Title:       lipgloss.NewStyle().Bold(true).Foreground(t.Accent),
-		Header:      lipgloss.NewStyle().Bold(true).Foreground(t.Text),
-		ActiveTab:   lipgloss.NewStyle().Bold(true).Foreground(t.Accent).Underline(true),
-		InactiveTab: lipgloss.NewStyle().Foreground(t.Muted),
-		DisabledTab: lipgloss.NewStyle().Foreground(t.Muted).Faint(true),
-		Border:      lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(t.Border),
-		Selected:    lipgloss.NewStyle().Background(t.Selection).Bold(true),
-		Muted:       lipgloss.NewStyle().Foreground(t.Muted),
-		Positive:    lipgloss.NewStyle().Foreground(t.Income),
-		Negative:    lipgloss.NewStyle().Foreground(t.Expense),
-		Warning:     lipgloss.NewStyle().Foreground(t.Warning),
-		Error:       lipgloss.NewStyle().Bold(true).Foreground(t.Expense),
-		StatusBar:   lipgloss.NewStyle().Foreground(t.Muted),
-		HelpKey:     lipgloss.NewStyle().Bold(true).Foreground(t.Accent),
-		HelpDesc:    lipgloss.NewStyle().Foreground(t.Muted),
-		Dialog:      lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(t.Accent).Padding(1, 2),
-		BarFill:     lipgloss.NewStyle().Foreground(t.Series1),
+		Name:   name,
+		Tokens: t,
+		Base:   lipgloss.NewStyle().Foreground(t.Text),
+		Title: lipgloss.NewStyle().Bold(true).Foreground(t.Accent).
+			BorderStyle(lipgloss.NormalBorder()).BorderBottom(true).BorderForeground(t.Border),
+		Header:       lipgloss.NewStyle().Bold(true).Foreground(t.Text),
+		ActiveTab:    lipgloss.NewStyle().Bold(true).Foreground(t.Accent).Underline(true),
+		InactiveTab:  lipgloss.NewStyle().Foreground(t.Muted),
+		DisabledTab:  lipgloss.NewStyle().Foreground(t.Muted).Faint(true),
+		Border:       lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(t.Border),
+		Selected:     lipgloss.NewStyle().Background(t.Selection).Bold(true),
+		Muted:        lipgloss.NewStyle().Foreground(t.Muted),
+		Positive:     lipgloss.NewStyle().Foreground(t.Income),
+		Negative:     lipgloss.NewStyle().Foreground(t.Expense),
+		Warning:      lipgloss.NewStyle().Foreground(t.Warning),
+		Error:        lipgloss.NewStyle().Bold(true).Foreground(t.Expense),
+		StatusBar:    lipgloss.NewStyle().Foreground(t.Muted),
+		HelpKey:      lipgloss.NewStyle().Bold(true).Foreground(t.Accent),
+		HelpDesc:     lipgloss.NewStyle().Foreground(t.Muted),
+		Dialog:       lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(t.Accent).Padding(0, 2),
+		BarFill:      lipgloss.NewStyle().Foreground(t.Series1),
+		Button:       lipgloss.NewStyle().Foreground(t.Base).Background(t.Muted).Padding(0, 3),
+		ActiveButton: lipgloss.NewStyle().Foreground(t.Base).Background(t.Accent).Padding(0, 3).Underline(true),
 	}
 }

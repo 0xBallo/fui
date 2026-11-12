@@ -1,8 +1,6 @@
 package components
 
 import (
-	"strings"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -58,7 +56,7 @@ func (c *ConfirmDialog) HandleKey(msg tea.KeyMsg) (confirmed bool, cancelled boo
 	return false, false
 }
 
-// View formats the modal box with question and shortcut prompts.
+// View formats the question, its details and the Yes/No buttons; callers frame it with Modal.
 func (c *ConfirmDialog) View() string {
 	if !c.visible {
 		return ""
@@ -71,14 +69,8 @@ func (c *ConfirmDialog) View() string {
 	for _, d := range c.details {
 		lines = append(lines, c.theme.Muted.Render(d))
 	}
-	lines = append(lines, "")
-	actions := c.theme.HelpKey.Render("[y]") + " Yes   " + c.theme.HelpKey.Render("[n]") + " No"
-	lines = append(lines, actions)
-
-	body := strings.Join(lines, "\n")
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(c.theme.Warning.GetForeground()).
-		Padding(1, 2).
-		Render(body)
+	buttons := lipgloss.JoinHorizontal(lipgloss.Top,
+		c.theme.ActiveButton.Render("Yes"), "  ", c.theme.Button.Render("No"))
+	lines = append(lines, "", buttons, c.theme.Muted.Render("y/enter yes · n/esc no"))
+	return lipgloss.JoinVertical(lipgloss.Center, lines...)
 }

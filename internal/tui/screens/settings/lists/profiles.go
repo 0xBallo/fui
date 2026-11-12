@@ -182,9 +182,9 @@ func (m *Profiles) View() string {
 	var body string
 	switch m.mode {
 	case profilesForm:
-		body = m.viewForm()
+		body = components.Modal(m.th, m.width, m.height, m.viewForm())
 	case profilesConfirm:
-		body = m.viewList() + "\n\n" + m.confirm.View()
+		body = components.Modal(m.th, m.width, m.height, m.confirm.View())
 	case profilesListMode:
 		body = m.viewList()
 	default:

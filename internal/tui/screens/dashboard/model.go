@@ -220,7 +220,7 @@ func spendingBars(r reporting.SpendingResult) []components.BarItem {
 // View renders the active panel.
 func (m *Model) View() string {
 	if m.mode == modeForm {
-		return m.viewForm()
+		return components.Modal(m.th, m.width, m.height, m.viewForm())
 	}
 	return m.viewDashboard()
 }

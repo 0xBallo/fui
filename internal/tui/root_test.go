@@ -241,3 +241,51 @@ func TestThemeMessagesKeepSettingsScreen(t *testing.T) {
 		}
 	}
 }
+
+func click(m tea.Model, b tea.MouseButton, x, y int) (tea.Model, tea.Cmd) {
+	return m.Update(tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionPress, Button: b})
+}
+
+// TestRootMouse checks that a click on a tab switches to it and that the wheel moves the active
+// screen's cursor, here observed through which transaction the delete prompt names.
+func TestRootMouse(t *testing.T) {
+	fx, m := newRoot(t)
+	fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "100"})
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-1.00", Description: "Older", Date: "2026-01-01"})
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-2.00", Description: "Newer", Date: "2026-01-02"})
+	m = run(t, m, m.Init())
+
+	// At 100 columns each tab is "N Name" plus padding and borders; "1 Dashboard" spans 0-14.
+	m, cmd := click(m, tea.MouseButtonLeft, 20, 1)
+	m = run(t, m, cmd)
+	if !strings.Contains(m.View(), "Description") {
+		t.Fatalf("expected a click on tab 2 to open Transactions, got:\n%s", m.View())
+	}
+
+	m, _ = click(m, tea.MouseButtonWheelDown, 40, 10)
+	m, _ = sendRunes(m, "d")
+	if !strings.Contains(m.View(), `"Older"`) {
+		t.Fatalf("expected the wheel to move the cursor to the second row, got:\n%s", m.View())
+	}
+}
+
+// TestRootHelpModal checks that the help opens as a modal that fits the terminal, wrapping into
+// columns at the minimum size, and that a click closes it.
+func TestRootHelpModal(t *testing.T) {
+	_, m := newRoot(t)
+	m = run(t, m, m.Init())
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, _ = sendRunes(m, "2")
+	m, _ = sendRunes(m, "?")
+	view := m.View()
+	if !strings.Contains(view, "╭") || !strings.Contains(view, "Help — Transactions") || !strings.Contains(view, "bulk categorize") {
+		t.Fatalf("expected the help modal with every binding, got:\n%s", view)
+	}
+	if lines := strings.Count(view, "\n") + 1; lines != 24 {
+		t.Fatalf("help view is %d lines, want 24 (the terminal height):\n%s", lines, view)
+	}
+	m, _ = click(m, tea.MouseButtonLeft, 1, 10)
+	if strings.Contains(m.View(), "Help —") {
+		t.Fatalf("expected a click to close the help, got:\n%s", m.View())
+	}
+}

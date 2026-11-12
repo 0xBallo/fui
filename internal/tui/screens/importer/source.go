@@ -39,6 +39,9 @@ func connectorNames(cs []importing.ConnectorInfo) []string {
 
 func (m *Model) handleSourceKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	switch msg.String() {
+	case "esc":
+		m.mode = modeIdle
+		return m, nil
 	case "shift+tab":
 		m.sourceForm.Prev()
 		return m, nil
@@ -116,7 +119,7 @@ func (m *Model) handlePlanLoaded(msg planLoadedMsg) (screens.Screen, tea.Cmd) {
 
 func (m *Model) viewSource() string {
 	out := m.th.Title.Render("Import") + "\n\n" + m.sourceForm.View()
-	out += "\n\n" + m.th.Muted.Render("enter next/plan · tab/shift+tab move between fields")
+	out += "\n\n" + m.th.Muted.Render("enter next/plan · tab/shift+tab move between fields · esc cancel")
 	if m.notice != "" {
 		out += "\n" + m.th.Warning.Render(m.notice)
 	}
