@@ -39,6 +39,8 @@ const (
 	modeConfirm
 	modeFilter
 	modeSearch
+	modeSplit
+	modeTags
 	modeCategorize
 )
 
@@ -63,6 +65,7 @@ type Model struct {
 
 	accounts   []string
 	categories []string
+	tags       []string
 
 	form               components.Form
 	accountF           components.Autocomplete
@@ -90,6 +93,18 @@ type Model struct {
 	searchSeq    int
 	searchCancel context.CancelFunc
 	tick         func(seq int) tea.Cmd
+
+	splitTxID   domain.TransactionID
+	splitTotal  domain.Money
+	splitRows   []splitRowInput
+	splitForm   components.Form
+	splitNotice string
+
+	tagTxID      domain.TransactionID
+	tagAddField  components.Autocomplete
+	tagDropField components.Autocomplete
+	tagForm      components.Form
+	tagNotice    string
 
 	categorizeField components.Autocomplete
 }
@@ -132,7 +147,7 @@ func (m *Model) KeyMap() []key.Binding { return m.km.Bindings() }
 // categorize field is currently capturing keystrokes.
 func (m *Model) InputActive() bool {
 	switch m.mode {
-	case modeForm, modeFilter, modeSearch, modeCategorize:
+	case modeForm, modeFilter, modeSearch, modeSplit, modeTags, modeCategorize:
 		return true
 	case modeList, modeConfirm:
 		return false
@@ -146,6 +161,7 @@ type loadedMsg struct {
 	page           app.TxPage
 	accounts       []string
 	categories     []string
+	tags           []string
 	clearSelection bool
 }
 
@@ -178,6 +194,7 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		m.next = msg.page.Next
 		m.accounts = msg.accounts
 		m.categories = msg.categories
+		m.tags = msg.tags
 		m.table.SetRows(m.txRows())
 		if msg.clearSelection {
 			m.table.ClearSelection()
@@ -207,6 +224,9 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		m.confirm.Show("Reconciled transaction", "This transaction is reconciled. Continue anyway?")
 		m.mode = modeConfirm
 		return m, nil
+	case splitLoadedMsg:
+		m.openSplitEditor(msg)
+		return m, nil
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -234,6 +254,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		return m.handleFilterKey(msg)
 	case modeSearch:
 		return m.handleSearchKey(msg)
+	case modeSplit:
+		return m.handleSplitKey(msg)
+	case modeTags:
+		return m.handleTagsKey(msg)
 	case modeCategorize:
 		return m.handleCategorizeKey(msg)
 	case modeList:
@@ -260,6 +284,10 @@ func (m *Model) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	case key.Matches(msg, m.km.Select):
 		m.table.ToggleSelect()
 		m.table.SetShowSelect(true)
+	case key.Matches(msg, m.km.Split):
+		return m, m.loadSplitEditor()
+	case key.Matches(msg, m.km.Tags):
+		m.openTagsEditor()
 	case key.Matches(msg, m.km.Categorize):
 		m.openCategorize()
 	case key.Matches(msg, m.km.ClearFilter):
@@ -406,6 +434,10 @@ func reload(ctx context.Context, uc UseCases, req app.ListTxRequest, clearSelect
 	if err != nil {
 		return screens.ErrorMsg{Err: err}
 	}
+	tags, err := uc.ListTags(ctx)
+	if err != nil {
+		return screens.ErrorMsg{Err: err}
+	}
 	names := make([]string, len(accts))
 	for i, a := range accts {
 		names[i] = a.Account.Name
@@ -414,7 +446,11 @@ func reload(ctx context.Context, uc UseCases, req app.ListTxRequest, clearSelect
 	for i, c := range cats {
 		catNames[i] = c.Name
 	}
-	return loadedMsg{page: page, accounts: names, categories: catNames, clearSelection: clearSelection}
+	tagNames := make([]string, len(tags))
+	for i, t := range tags {
+		tagNames[i] = t.Name
+	}
+	return loadedMsg{page: page, accounts: names, categories: catNames, tags: tagNames, clearSelection: clearSelection}
 }
 
 func (m *Model) txRows() []components.Row {
@@ -442,6 +478,10 @@ func (m *Model) View() string {
 		return m.viewFilter()
 	case modeSearch:
 		return m.viewSearch()
+	case modeSplit:
+		return m.viewSplit()
+	case modeTags:
+		return m.viewTags()
 	case modeCategorize:
 		return m.viewCategorize()
 	case modeList:

@@ -471,3 +471,93 @@ func TestTransactionsBulkCategorize(t *testing.T) {
 		}
 	}
 }
+
+func TestTransactionsSplitEditor(t *testing.T) {
+	fx, scr := newFixture(t)
+	fx.Category(t, app.AddCategoryRequest{Name: "Rent", Kind: string(domain.CategoryExpense)})
+	tx := fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-30", Description: "Store", Date: "2026-06-02"})
+	scr = run(t, scr, scr.Init())
+
+	scr, cmd := sendRunes(scr, "s")
+	scr = run(t, scr, cmd)
+	if !strings.Contains(scr.View(), "Split transaction") {
+		t.Fatalf("expected split editor to open, got:\n%s", scr.View())
+	}
+
+	scr, _ = sendRunes(scr, "Groceries")
+	scr, _ = sendKey(scr, tea.KeyEnter) // accept suggestion
+	scr, _ = sendKey(scr, tea.KeyEnter) // row1 category -> row1 amount
+	for range 16 {
+		scr, _ = sendKey(scr, tea.KeyBackspace)
+	}
+	scr, _ = sendRunes(scr, "-20")
+	scr, _ = sendKey(scr, tea.KeyEnter) // row1 amount -> row2 category
+	scr, _ = sendRunes(scr, "Rent")
+	scr, _ = sendKey(scr, tea.KeyEnter) // accept suggestion
+	scr, _ = sendKey(scr, tea.KeyEnter) // row2 category -> row2 amount
+	scr, _ = sendRunes(scr, "-10")
+	scr, cmd = sendKey(scr, tea.KeyEnter)
+	scr = run(t, scr, cmd)
+
+	if strings.Contains(scr.View(), "Split transaction") {
+		t.Fatalf("expected split editor to submit and return to list, got:\n%s", scr.View())
+	}
+	splits, err := fx.Service.ListSplits(context.Background(), tx.ID)
+	if err != nil {
+		t.Fatalf("ListSplits: %v", err)
+	}
+	if len(splits) != 2 {
+		t.Fatalf("expected 2 split rows, got %+v", splits)
+	}
+}
+
+func TestTransactionsTagEditing(t *testing.T) {
+	fx, scr := newFixture(t)
+	tx := fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-12.50", Description: "Coffee", Date: "2026-06-01"})
+	ctx := context.Background()
+
+	addTag := func(name string) {
+		p, err := fx.Service.PlanAddTag(ctx, app.AddTagRequest{Name: name})
+		if err != nil {
+			t.Fatalf("PlanAddTag(%q): %v", name, err)
+		}
+		if _, err := fx.Service.ApplyAddTag(ctx, p); err != nil {
+			t.Fatalf("ApplyAddTag(%q): %v", name, err)
+		}
+	}
+	addTag("trip")
+
+	scr = run(t, scr, scr.Init())
+	scr, _ = sendRunes(scr, "t")
+	if !strings.Contains(scr.View(), "Edit transaction tags") {
+		t.Fatalf("expected tag editor to open, got:\n%s", scr.View())
+	}
+	scr, _ = sendRunes(scr, "trip")
+	scr, _ = sendKey(scr, tea.KeyEnter) // accept suggestion
+	scr, _ = sendKey(scr, tea.KeyEnter) // add -> remove
+	scr, cmd := sendKey(scr, tea.KeyEnter)
+	scr = run(t, scr, cmd)
+
+	page, err := fx.Service.ListTx(ctx, app.ListTxRequest{Tags: []string{"trip"}})
+	if err != nil {
+		t.Fatalf("ListTx with tag: %v", err)
+	}
+	if len(page.Items) != 1 || page.Items[0].Transaction.ID != tx.ID {
+		t.Fatalf("expected tagged transaction in filter result, got %+v", page.Items)
+	}
+
+	scr, _ = sendRunes(scr, "t")
+	scr, _ = sendKey(scr, tea.KeyEnter) // add -> remove
+	scr, _ = sendRunes(scr, "trip")
+	scr, _ = sendKey(scr, tea.KeyEnter) // accept suggestion
+	scr, cmd = sendKey(scr, tea.KeyEnter)
+	_ = run(t, scr, cmd)
+
+	page, err = fx.Service.ListTx(ctx, app.ListTxRequest{Tags: []string{"trip"}})
+	if err != nil {
+		t.Fatalf("ListTx with tag after remove: %v", err)
+	}
+	if len(page.Items) != 0 {
+		t.Fatalf("expected no trip-tagged transactions after removal, got %+v", page.Items)
+	}
+}

@@ -17,6 +17,8 @@ type KeyMap struct {
 	Filter      key.Binding
 	Search      key.Binding
 	Select      key.Binding
+	Split       key.Binding
+	Tags        key.Binding
 	Categorize  key.Binding
 	ClearFilter key.Binding
 	PrevChip    key.Binding
@@ -27,65 +29,29 @@ type KeyMap struct {
 // DefaultKeyMap returns the canonical key bindings for transactions.
 func DefaultKeyMap() KeyMap {
 	km := KeyMap{
-		Up: key.NewBinding(
-			key.WithKeys("k", "up"),
-			key.WithHelp("k/↑", "up"),
-		),
-		Down: key.NewBinding(
-			key.WithKeys("j", "down"),
-			key.WithHelp("j/↓", "down"),
-		),
-		PageUp: key.NewBinding(
-			key.WithKeys("pgup", "ctrl+u"),
-			key.WithHelp("pgup", "page up"),
-		),
-		PageDown: key.NewBinding(
-			key.WithKeys("pgdown", "ctrl+d"),
-			key.WithHelp("pgdn", "page down"),
-		),
-		Top: key.NewBinding(
-			key.WithKeys("g", "home"),
-			key.WithHelp("g/home", "top"),
-		),
-		Bottom: key.NewBinding(
-			key.WithKeys("G", "end"),
-			key.WithHelp("G/end", "bottom"),
-		),
-		Add: key.NewBinding(
-			key.WithKeys("a"),
-			key.WithHelp("a", "add"),
-		),
-		Edit: key.NewBinding(
-			key.WithKeys("e", "enter"),
-			key.WithHelp("e/enter", "edit"),
-		),
-		Delete: key.NewBinding(
-			key.WithKeys("d"),
-			key.WithHelp("d", "delete"),
-		),
-		Filter: key.NewBinding(
-			key.WithKeys("f"),
-			key.WithHelp("f", "filter"),
-		),
-		Search: key.NewBinding(
-			key.WithKeys("/"),
-			key.WithHelp("/", "search"),
-		),
-		Select: key.NewBinding(
-			key.WithKeys(" "),
-			key.WithHelp("space", "select"),
-		),
-		Categorize: key.NewBinding(
-			key.WithKeys("c"),
-			key.WithHelp("c", "bulk categorize"),
-		),
-		ClearFilter: key.NewBinding(
-			key.WithKeys("ctrl+r"),
-			key.WithHelp("ctrl+r", "reset filter"),
-		),
+		Up:          bind("k/↑", "up", "k", "up"),
+		Down:        bind("j/↓", "down", "j", "down"),
+		PageUp:      bind("pgup", "page up", "pgup", "ctrl+u"),
+		PageDown:    bind("pgdn", "page down", "pgdown", "ctrl+d"),
+		Top:         bind("g/home", "top", "g", "home"),
+		Bottom:      bind("G/end", "bottom", "G", "end"),
+		Add:         bind("a", "add", "a"),
+		Edit:        bind("e/enter", "edit", "e", "enter"),
+		Delete:      bind("d", "delete", "d"),
+		Filter:      bind("f", "filter", "f"),
+		Search:      bind("/", "search", "/"),
+		Select:      bind("space", "select", " "),
+		Split:       bind("s", "split", "s"),
+		Tags:        bind("t", "tags", "t"),
+		Categorize:  bind("c", "bulk categorize", "c"),
+		ClearFilter: bind("ctrl+r", "reset filter", "ctrl+r"),
 	}
 	km.PrevChip, km.NextChip, km.RemoveChip = chipKeyBindings()
 	return km
+}
+
+func bind(helpKey, helpDesc string, keys ...string) key.Binding {
+	return key.NewBinding(key.WithKeys(keys...), key.WithHelp(helpKey, helpDesc))
 }
 
 // chipKeyBindings returns the bindings that move focus between filter chips and remove the
@@ -111,7 +77,7 @@ func (k KeyMap) Bindings() []key.Binding {
 	return []key.Binding{
 		k.Up, k.Down, k.PageUp, k.PageDown, k.Top, k.Bottom,
 		k.Add, k.Edit, k.Delete, k.Filter, k.Search,
-		k.Select, k.Categorize, k.ClearFilter,
+		k.Select, k.Split, k.Tags, k.Categorize, k.ClearFilter,
 		k.PrevChip, k.NextChip, k.RemoveChip,
 	}
 }
