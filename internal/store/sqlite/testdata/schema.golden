@@ -11,6 +11,8 @@ index|idx_loan_installments_transaction|loan_installments|CREATE INDEX idx_loan_
     ON loan_installments (transaction_id)
 index|idx_loan_schedules_loan_valid_from|loan_schedules|CREATE INDEX idx_loan_schedules_loan_valid_from
     ON loan_schedules (loan_id, valid_from)
+index|idx_reconciliations_account_closed_date|reconciliations|CREATE INDEX idx_reconciliations_account_closed_date
+    ON reconciliations (account_id, closed_at, date DESC, id DESC)
 index|idx_recurrences_account_next_date|recurrences|CREATE INDEX idx_recurrences_account_next_date ON recurrences (account_id, next_date, id)
 index|idx_recurrences_next_date_id|recurrences|CREATE INDEX idx_recurrences_next_date_id ON recurrences (next_date, id)
 index|idx_rules_enabled_priority_name|rules|CREATE INDEX idx_rules_enabled_priority_name
@@ -179,6 +181,17 @@ table|payees|payees|CREATE TABLE payees (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 ) STRICT
+table|reconciliations|reconciliations|CREATE TABLE reconciliations (
+    id INTEGER PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES accounts (id) ON DELETE RESTRICT,
+    date TEXT NOT NULL CHECK (length(date) = 10),
+    statement_balance_minor INTEGER NOT NULL,
+    currency TEXT NOT NULL CHECK (length(currency) = 3),
+    closed_at TEXT CHECK (closed_at IS NULL OR length(closed_at) >= 20),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE (account_id, date)
+) STRICT
 table|recurrences|recurrences|CREATE TABLE recurrences (
     id INTEGER PRIMARY KEY,
     account_id INTEGER NOT NULL REFERENCES accounts (id) ON DELETE RESTRICT,
@@ -202,6 +215,14 @@ table|rules|rules|CREATE TABLE rules (
     enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
     conditions TEXT NOT NULL CHECK (json_valid(conditions)),
     actions TEXT NOT NULL CHECK (json_valid(actions)),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+) STRICT
+table|saved_reports|saved_reports|CREATE TABLE saved_reports (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    kind TEXT NOT NULL,
+    params TEXT NOT NULL CHECK (json_valid(params)),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 ) STRICT
