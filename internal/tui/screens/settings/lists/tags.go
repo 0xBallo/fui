@@ -43,6 +43,8 @@ type Tags struct {
 
 	confirm components.ConfirmDialog
 	pending app.RemoveTagPlan
+
+	err error // last submit error, shown inline until the next state change
 }
 
 var _ screens.Screen = (*Tags)(nil)
@@ -92,12 +94,16 @@ func (m *Tags) load() tea.Cmd {
 func (m *Tags) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tagsLoadedMsg:
+		m.err = nil
 		m.tags = msg.tags
 		m.table.SetRows(m.rows())
 		m.mode = tagsList
 		return m, nil
 	case tagRemovePlannedMsg:
 		m.openRemoveConfirm(msg.plan)
+		return m, nil
+	case screens.ErrorMsg:
+		m.err = msg.Err
 		return m, nil
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -158,15 +164,18 @@ func (m *Tags) rows() []components.Row {
 
 // View renders the active panel.
 func (m *Tags) View() string {
+	var body string
 	switch m.mode {
 	case tagsForm:
-		return m.viewForm()
+		body = m.viewForm()
 	case tagsConfirm:
-		return m.viewList() + "\n\n" + m.confirm.View()
+		body = m.viewList() + "\n\n" + m.confirm.View()
 	case tagsList:
-		return m.viewList()
+		body = m.viewList()
+	default:
+		body = m.viewList()
 	}
-	return m.viewList()
+	return withError(m.th, body, m.err)
 }
 
 func (m *Tags) viewList() string {
@@ -201,6 +210,7 @@ func (m *Tags) submitRemove() tea.Cmd {
 }
 
 func (m *Tags) openRemoveConfirm(plan app.RemoveTagPlan) {
+	m.err = nil
 	m.pending = plan
 	prompt := fmt.Sprintf("Delete tag %q?", plan.Tag.Name)
 	if plan.Detached > 0 {

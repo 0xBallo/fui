@@ -34,6 +34,43 @@ func newRecurrencesFixture(t *testing.T) (screentest.Fixture, screens.Screen) {
 	return fx, scr
 }
 
+func TestRecurrencesSubmitErrorShownInline(t *testing.T) {
+	fx, scr := newRecurrencesFixture(t)
+	fx.Category(t, app.AddCategoryRequest{Name: "Rent", Kind: "expense"})
+	scr = run(t, scr, scr.Init())
+
+	// Add a recurrence against an account that does not exist: the add form stays open with
+	// the error visible instead of silently discarding it.
+	scr, _ = sendRunes(scr, "a")
+	scr, _ = sendRunes(scr, "Nonexistent")
+	scr, _ = sendKey(scr, tea.KeyEnter) // account -> category
+	scr, _ = sendRunes(scr, "Rent")
+	scr, _ = sendKey(scr, tea.KeyEnter) // accept suggestion
+	scr, _ = sendKey(scr, tea.KeyEnter) // category -> description
+	scr, _ = sendRunes(scr, "Monthly rent")
+	scr, _ = sendKey(scr, tea.KeyEnter) // -> amount
+	scr, _ = sendRunes(scr, "-850")
+	scr, _ = sendKey(scr, tea.KeyEnter) // -> every
+	scr, _ = sendRunes(scr, "1")
+	scr, _ = sendKey(scr, tea.KeyEnter) // -> unit
+	scr, _ = sendRunes(scr, "months")
+	scr, _ = sendKey(scr, tea.KeyEnter) // accept suggestion
+	scr, _ = sendKey(scr, tea.KeyEnter) // unit -> day of month
+	scr, _ = sendRunes(scr, "1")
+	scr, _ = sendKey(scr, tea.KeyEnter) // -> start
+	scr, _ = sendRunes(scr, "2026-07-01")
+	scr, _ = sendKey(scr, tea.KeyEnter) // -> end
+	scr, cmd := sendKey(scr, tea.KeyEnter)
+	scr = run(t, scr, cmd)
+
+	if !strings.Contains(scr.View(), "Add recurrence") {
+		t.Fatalf("expected to stay on the add form after a failed submit, got:\n%s", scr.View())
+	}
+	if !strings.Contains(scr.View(), "Error:") {
+		t.Fatalf("expected the submit error to be shown inline, got:\n%s", scr.View())
+	}
+}
+
 func TestRecurrencesLoadAddEditRemove(t *testing.T) {
 	fx, scr := newRecurrencesFixture(t)
 	fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "0", OpenedOn: "2026-01-01"})
@@ -76,17 +113,21 @@ func TestRecurrencesLoadAddEditRemove(t *testing.T) {
 	if !strings.Contains(scr.View(), "Edit recurrence") {
 		t.Fatalf("expected the edit form to open, got:\n%s", scr.View())
 	}
-	scr, _ = sendKey(scr, tea.KeyEnter) // close the account suggestion popup
-	scr, _ = sendKey(scr, tea.KeyEnter) // account -> category (unchanged)
+	if !strings.Contains(scr.View(), "(read-only)") {
+		t.Fatalf("expected account and start to render read-only, got:\n%s", scr.View())
+	}
 	scr, _ = sendKey(scr, tea.KeyEnter) // close the category suggestion popup
 	scr, _ = sendKey(scr, tea.KeyEnter) // category -> description (unchanged)
 	for range "Monthly rent" {
 		scr, _ = sendKey(scr, tea.KeyBackspace)
 	}
 	scr, _ = sendRunes(scr, "Rent payment")
-	for range 7 {
-		scr, _ = sendKey(scr, tea.KeyEnter)
-	}
+	scr, _ = sendKey(scr, tea.KeyEnter) // description -> amount
+	scr, _ = sendKey(scr, tea.KeyEnter) // amount -> every
+	scr, _ = sendKey(scr, tea.KeyEnter) // every -> unit
+	scr, _ = sendKey(scr, tea.KeyEnter) // close the "months" suggestion popup
+	scr, _ = sendKey(scr, tea.KeyEnter) // unit -> day of month
+	scr, _ = sendKey(scr, tea.KeyEnter) // day of month -> end
 	scr, cmd = sendKey(scr, tea.KeyEnter)
 	scr = run(t, scr, cmd)
 	if !strings.Contains(scr.View(), "Rent payment") {

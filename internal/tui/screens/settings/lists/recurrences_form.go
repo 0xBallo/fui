@@ -13,8 +13,12 @@ import (
 	"github.com/0xballo/fui/internal/tui/screens"
 )
 
-// openForm opens the add form, or the edit form prefilled from cur when non-nil.
+// openForm opens the add form, or the edit form prefilled from cur when non-nil. recurring.
+// EditRequest has no Account or Start field (the account and the start date cannot be changed
+// once a recurrence exists), so both are excluded from the form and shown as read-only labels
+// instead (see viewForm).
 func (m *Recurrences) openForm(cur *app.Recurrence) {
+	m.err = nil
 	if cur != nil {
 		id := cur.ID
 		m.editing = &id
@@ -22,10 +26,17 @@ func (m *Recurrences) openForm(cur *app.Recurrence) {
 		m.editing = nil
 	}
 	m.buildFormFields(cur)
-	m.form = components.NewForm(
-		&m.fields.account, &m.fields.category, &m.fields.description, &m.fields.amount,
-		&m.fields.every, &m.fields.unit, &m.fields.dayOfMonth, &m.fields.start, &m.fields.end,
-	)
+	var fields []*components.Autocomplete
+	if m.editing == nil {
+		fields = append(fields, &m.fields.account)
+	}
+	fields = append(fields, &m.fields.category, &m.fields.description, &m.fields.amount,
+		&m.fields.every, &m.fields.unit, &m.fields.dayOfMonth)
+	if m.editing == nil {
+		fields = append(fields, &m.fields.start)
+	}
+	fields = append(fields, &m.fields.end)
+	m.form = components.NewForm(fields...)
 	m.mode = recurrencesForm
 	m.form.Focus()
 }
@@ -49,8 +60,9 @@ func (m *Recurrences) buildFormFields(cur *app.Recurrence) {
 	}
 }
 
-// prefillFormFields copies cur's values into every field for display and editing convenience;
-// account and start are shown but, per recurring.EditRequest, cannot actually change on submit.
+// prefillFormFields copies cur's values into every field for display; account and start are
+// rendered read-only in edit mode (see openForm/viewForm) since recurring.EditRequest cannot
+// change them.
 func (m *Recurrences) prefillFormFields(cur *app.Recurrence) {
 	f := &m.fields
 	f.account.SetValue(accountNameByID(cur.AccountID, m.accounts))
@@ -143,8 +155,11 @@ func (m *Recurrences) submitEdit() tea.Cmd {
 
 func (m *Recurrences) viewForm() string {
 	title := "Add recurrence"
+	body := m.form.View()
 	if m.editing != nil {
 		title = "Edit recurrence"
+		body = staticField(m.th, "Account:", m.fields.account.Value()) + "\n" +
+			staticField(m.th, "Start date:", m.fields.start.Value()) + "\n" + body
 	}
-	return m.th.Title.Render(title) + "\n\n" + m.form.View()
+	return m.th.Title.Render(title) + "\n\n" + body
 }

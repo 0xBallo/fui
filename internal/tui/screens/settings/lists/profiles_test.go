@@ -15,7 +15,10 @@ import (
 
 // stubProfilesConfig is an in-memory lists.ProfilesConfig for tests; no real internal/config
 // adapter exists yet (see the task report's REQ note on listing/deleting profiles).
-type stubProfilesConfig struct{ profiles map[string]lists.Profile }
+type stubProfilesConfig struct {
+	profiles map[string]lists.Profile
+	saveErr  error // when set, SaveProfile fails without storing
+}
 
 func newStubProfilesConfig() *stubProfilesConfig {
 	return &stubProfilesConfig{profiles: map[string]lists.Profile{}}
@@ -31,6 +34,9 @@ func (c *stubProfilesConfig) ListProfiles() ([]lists.Profile, error) {
 }
 
 func (c *stubProfilesConfig) SaveProfile(p lists.Profile) error {
+	if c.saveErr != nil {
+		return c.saveErr
+	}
 	c.profiles[p.Name] = p
 	return nil
 }
@@ -49,6 +55,31 @@ func newProfilesFixture(t *testing.T) (*stubProfilesConfig, screens.Screen) {
 	scr := screens.Screen(lists.NewProfiles(cfg, theme.Default()))
 	scr.SetSize(100, 30)
 	return cfg, scr
+}
+
+func TestProfilesSubmitErrorShownInline(t *testing.T) {
+	cfg := newStubProfilesConfig()
+	cfg.saveErr = fmt.Errorf("disk full")
+	scr := screens.Screen(lists.NewProfiles(cfg, theme.Default()))
+	scr.SetSize(100, 30)
+	scr = run(t, scr, scr.Init())
+
+	// Add a profile; SaveProfile fails, so the add form stays open with the error visible
+	// instead of silently discarding it.
+	scr, _ = sendRunes(scr, "a")
+	scr, _ = sendRunes(scr, "widiba")
+	for range 12 {
+		scr, _ = sendKey(scr, tea.KeyEnter)
+	}
+	scr, cmd := sendKey(scr, tea.KeyEnter)
+	scr = run(t, scr, cmd)
+
+	if !strings.Contains(scr.View(), "Add import profile") {
+		t.Fatalf("expected to stay on the add form after a failed submit, got:\n%s", scr.View())
+	}
+	if !strings.Contains(scr.View(), "Error:") {
+		t.Fatalf("expected the submit error to be shown inline, got:\n%s", scr.View())
+	}
 }
 
 func TestProfilesLoadAddEditRemove(t *testing.T) {

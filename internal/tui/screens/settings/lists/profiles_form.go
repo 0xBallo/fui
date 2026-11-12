@@ -9,6 +9,7 @@ import (
 
 // openForm opens the add form, or the edit form prefilled from cur when non-nil.
 func (m *Profiles) openForm(cur *Profile) {
+	m.err = nil
 	if cur != nil {
 		m.editing = cur.Name
 	} else {

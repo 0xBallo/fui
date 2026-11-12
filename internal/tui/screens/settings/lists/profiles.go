@@ -40,6 +40,8 @@ type Profiles struct {
 
 	confirm components.ConfirmDialog
 	pending string // name pending removal
+
+	err error // last submit error, shown inline until the next state change
 }
 
 // profileFormFields groups the add/edit form's autocomplete fields.
@@ -98,9 +100,13 @@ func (m *Profiles) load() tea.Cmd {
 func (m *Profiles) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case profilesLoadedMsg:
+		m.err = nil
 		m.profiles = msg.profiles
 		m.table.SetRows(m.rows())
 		m.mode = profilesListMode
+		return m, nil
+	case screens.ErrorMsg:
+		m.err = msg.Err
 		return m, nil
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -134,6 +140,7 @@ func (m *Profiles) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		}
 	case key.Matches(msg, m.km.Remove):
 		if row := m.table.SelectedRow(); row != nil {
+			m.err = nil
 			m.pending = row.ID
 			m.confirm.Show("Delete profile", fmt.Sprintf("Delete import profile %q?", row.ID))
 			m.mode = profilesConfirm
@@ -172,15 +179,18 @@ func (m *Profiles) rows() []components.Row {
 
 // View renders the active panel.
 func (m *Profiles) View() string {
+	var body string
 	switch m.mode {
 	case profilesForm:
-		return m.viewForm()
+		body = m.viewForm()
 	case profilesConfirm:
-		return m.viewList() + "\n\n" + m.confirm.View()
+		body = m.viewList() + "\n\n" + m.confirm.View()
 	case profilesListMode:
-		return m.viewList()
+		body = m.viewList()
+	default:
+		body = m.viewList()
 	}
-	return m.viewList()
+	return withError(m.th, body, m.err)
 }
 
 func (m *Profiles) viewList() string {

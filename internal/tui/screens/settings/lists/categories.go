@@ -48,6 +48,8 @@ type Categories struct {
 
 	confirm components.ConfirmDialog
 	pending app.RemoveCategoryPlan
+
+	err error // last submit error, shown inline until the next state change
 }
 
 var _ screens.Screen = (*Categories)(nil)
@@ -100,6 +102,7 @@ func (m *Categories) load() tea.Cmd {
 func (m *Categories) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case categoriesLoadedMsg:
+		m.err = nil
 		m.cats = msg.cats
 		m.table.SetRows(m.rows())
 		m.mode = categoriesList
@@ -109,6 +112,9 @@ func (m *Categories) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		return m, nil
 	case removePlannedMsg:
 		m.openRemoveConfirm(msg.plan)
+		return m, nil
+	case screens.ErrorMsg:
+		m.err = msg.Err
 		return m, nil
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -171,17 +177,20 @@ func (m *Categories) rows() []components.Row {
 
 // View renders the active panel.
 func (m *Categories) View() string {
+	var body string
 	switch m.mode {
 	case categoriesForm:
-		return m.viewForm()
+		body = m.viewForm()
 	case categoriesReassign:
-		return m.viewReassign()
+		body = m.viewReassign()
 	case categoriesConfirm:
-		return m.viewList() + "\n\n" + m.confirm.View()
+		body = m.viewList() + "\n\n" + m.confirm.View()
 	case categoriesList:
-		return m.viewList()
+		body = m.viewList()
+	default:
+		body = m.viewList()
 	}
-	return m.viewList()
+	return withError(m.th, body, m.err)
 }
 
 func (m *Categories) viewList() string {

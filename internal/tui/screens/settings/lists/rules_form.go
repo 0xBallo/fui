@@ -13,20 +13,27 @@ import (
 	"github.com/0xballo/fui/internal/tui/screens"
 )
 
-// openForm opens the add form, or the edit form prefilled from cur when non-nil.
+// openForm opens the add form, or the edit form prefilled from cur when non-nil. Editing a rule
+// cannot rename it (rules.EditRequest has no rename field), so the name field is excluded from
+// the form and shown as a read-only label instead (see viewForm).
 func (m *Rules) openForm(cur *domain.Rule) {
+	m.err = nil
 	if cur != nil {
 		m.editing = cur.Name
 	} else {
 		m.editing = ""
 	}
 	m.buildFormFields(cur)
-	m.form = components.NewForm(
-		&m.fields.name, &m.fields.priority, &m.fields.enabled,
+	fields := []*components.Autocomplete{
+		&m.fields.priority, &m.fields.enabled,
 		&m.fields.descContains, &m.fields.descEquals,
 		&m.fields.minAbs, &m.fields.maxAbs, &m.fields.sign,
 		&m.fields.accounts, &m.fields.category, &m.fields.payee, &m.fields.tags,
-	)
+	}
+	if m.editing == "" {
+		fields = append([]*components.Autocomplete{&m.fields.name}, fields...)
+	}
+	m.form = components.NewForm(fields...)
 	m.mode = rulesForm
 	m.form.Focus()
 }
@@ -163,15 +170,18 @@ func (m *Rules) submitEdit() tea.Cmd {
 
 func (m *Rules) viewForm() string {
 	title := "Add rule"
+	body := m.form.View()
 	if m.editing != "" {
 		title = "Edit rule"
+		body = staticField(m.th, "Name:", m.fields.name.Value()) + "\n" + body
 	}
-	return m.th.Title.Render(title) + "\n\n" + m.form.View()
+	return m.th.Title.Render(title) + "\n\n" + body
 }
 
 // openTestForm opens the preview form: test an existing transaction by ID, or a hypothetical
 // text/account/amount.
 func (m *Rules) openTestForm() {
+	m.err = nil
 	m.testText = components.NewAutocomplete("Text:", "description to test", m.th)
 	m.testAccount = components.NewAutocomplete("Account:", "e.g. Checking", m.th)
 	m.testAccount.SetSuggestions(m.accountNames)

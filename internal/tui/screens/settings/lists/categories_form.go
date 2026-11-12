@@ -14,6 +14,7 @@ import (
 
 // openForm opens the add form, or the rename form prefilled with name when non-empty.
 func (m *Categories) openForm(name string) {
+	m.err = nil
 	m.editing = name
 	m.nameField = components.NewAutocomplete("Name:", "e.g. Groceries", m.th)
 	if name != "" {
@@ -107,6 +108,7 @@ func (m *Categories) viewForm() string {
 // openReassignForm opens the prompt for a replacement category, asked when removing one still
 // used by transactions.
 func (m *Categories) openReassignForm(plan app.RemoveCategoryPlan) {
+	m.err = nil
 	m.pending = plan
 	m.removeTarget = plan.Category.Name
 	m.reassignField = components.NewAutocomplete("Reassign to:", "replacement category", m.th)
@@ -151,6 +153,7 @@ func (m *Categories) viewReassign() string {
 // openRemoveConfirm shows the final yes/no confirmation once a remove plan is ready (with or
 // without a reassignment).
 func (m *Categories) openRemoveConfirm(plan app.RemoveCategoryPlan) {
+	m.err = nil
 	m.pending = plan
 	prompt := fmt.Sprintf("Delete category %q?", plan.Category.Name)
 	if plan.Moved > 0 {

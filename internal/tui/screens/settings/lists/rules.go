@@ -60,6 +60,8 @@ type Rules struct {
 	testAccount components.Autocomplete
 	testAmount  components.Autocomplete
 	testResult  string
+
+	err error // last submit error, shown inline until the next state change
 }
 
 // ruleFormFields groups the add/edit form's autocomplete fields so they can be built and read
@@ -147,12 +149,16 @@ func (m *Rules) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		m.applyLoaded(msg)
 		return m, nil
 	case rulePlannedMsg:
+		m.err = nil
 		m.pending = msg.plan
 		m.confirm.Show("Delete rule", "Delete rule "+quote(msg.plan.Rule.Name)+"?")
 		m.mode = rulesConfirm
 		return m, nil
 	case ruleTestedMsg:
 		m.testResult = m.formatTestResult(msg.result)
+		return m, nil
+	case screens.ErrorMsg:
+		m.err = msg.Err
 		return m, nil
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -176,6 +182,7 @@ func (m *Rules) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 
 // applyLoaded stores the loaded rules and reference lists, deriving the suggestion name slices.
 func (m *Rules) applyLoaded(msg rulesLoadedMsg) {
+	m.err = nil
 	m.rules, m.accounts, m.categories, m.payees, m.tags = msg.rules, msg.accounts, msg.categories, msg.payees, msg.tags
 	m.accountNames = accountNames(msg.accounts)
 	m.categoryNames = domainCategoryNames(msg.categories)
@@ -264,17 +271,20 @@ func ruleSummary(r domain.Rule) string {
 
 // View renders the active panel.
 func (m *Rules) View() string {
+	var body string
 	switch m.mode {
 	case rulesForm:
-		return m.viewForm()
+		body = m.viewForm()
 	case rulesConfirm:
-		return m.viewList() + "\n\n" + m.confirm.View()
+		body = m.viewList() + "\n\n" + m.confirm.View()
 	case rulesTest:
-		return m.viewTest()
+		body = m.viewTest()
 	case rulesList:
-		return m.viewList()
+		body = m.viewList()
+	default:
+		body = m.viewList()
 	}
-	return m.viewList()
+	return withError(m.th, body, m.err)
 }
 
 func (m *Rules) viewList() string {

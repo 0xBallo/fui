@@ -12,6 +12,7 @@ import (
 
 // openForm opens the add form, or the rename form prefilled with name when non-empty.
 func (m *Tags) openForm(name string) {
+	m.err = nil
 	m.editing = name
 	m.nameField = components.NewAutocomplete("Name:", "e.g. vacation", m.th)
 	if name != "" {

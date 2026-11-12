@@ -34,6 +34,25 @@ func addTag(t *testing.T, fx screentest.Fixture, name string) {
 	}
 }
 
+func TestTagsSubmitErrorShownInline(t *testing.T) {
+	_, scr := newTagsFixture(t)
+	scr = run(t, scr, scr.Init())
+
+	// Add a tag with a space in the name: tags cannot contain spaces or commas, so the submit
+	// fails and the form stays open with the error visible instead of silently discarding it.
+	scr, _ = sendRunes(scr, "a")
+	scr, _ = sendRunes(scr, "has space")
+	scr, cmd := sendKey(scr, tea.KeyEnter)
+	scr = run(t, scr, cmd)
+
+	if !strings.Contains(scr.View(), "Add tag") {
+		t.Fatalf("expected to stay on the add form after a failed submit, got:\n%s", scr.View())
+	}
+	if !strings.Contains(scr.View(), "Error:") {
+		t.Fatalf("expected the submit error to be shown inline, got:\n%s", scr.View())
+	}
+}
+
 func TestTagsLoadAddRenameRemove(t *testing.T) {
 	fx, scr := newTagsFixture(t)
 	addTag(t, fx, "business")

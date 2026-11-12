@@ -49,6 +49,8 @@ type Recurrences struct {
 
 	confirm components.ConfirmDialog
 	pending recurring.RecurrencePlan
+
+	err error // last submit error, shown inline until the next state change
 }
 
 // recurrenceFormFields groups the add/edit form's autocomplete fields.
@@ -123,14 +125,19 @@ func (m *Recurrences) load() tea.Cmd {
 func (m *Recurrences) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case recurrencesLoadedMsg:
+		m.err = nil
 		m.recs, m.accounts, m.categories = msg.recs, msg.accounts, msg.categories
 		m.table.SetRows(m.rows())
 		m.mode = recurrencesListMode
 		return m, nil
 	case recurrenceRemovePlannedMsg:
+		m.err = nil
 		m.pending = msg.plan
 		m.confirm.Show("Delete recurrence", "Delete this recurrence?")
 		m.mode = recurrencesConfirm
+		return m, nil
+	case screens.ErrorMsg:
+		m.err = msg.Err
 		return m, nil
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -209,15 +216,18 @@ func (m *Recurrences) rows() []components.Row {
 
 // View renders the active panel.
 func (m *Recurrences) View() string {
+	var body string
 	switch m.mode {
 	case recurrencesForm:
-		return m.viewForm()
+		body = m.viewForm()
 	case recurrencesConfirm:
-		return m.viewList() + "\n\n" + m.confirm.View()
+		body = m.viewList() + "\n\n" + m.confirm.View()
 	case recurrencesListMode:
-		return m.viewList()
+		body = m.viewList()
+	default:
+		body = m.viewList()
 	}
-	return m.viewList()
+	return withError(m.th, body, m.err)
 }
 
 func (m *Recurrences) viewList() string {
