@@ -31,7 +31,7 @@ comparison report, generic undo, AI features, sync/web/mobile.
 
 ## 2. Schema plan (forward-only migrations, one per task)
 
-MVP ends at 0003 (assumed: FTS/`search_text`, modules). If `payees`/`tags` already exist there, V07 drops those tables from 0004.
+MVP ends at 0003 (`search_text` + FTS5; modules need no migration). No `payees`/`tags` tables exist yet: `transactions.payee_id` is a bare column, so V07 creates both and the FK. Theme choice is the existing config key `theme` (+ `theme_light`/`theme_dark`).
 
 | Migration | Owner | Tables / changes |
 | --- | --- | --- |
@@ -175,7 +175,6 @@ V14 and V16 in the same wave (separate files, but a shared plan struct, so coord
 table changes (`recurrence_id`, `due_date`) alter an MVP-critical table: the migration test must run on a populated archive.
 
 Open questions (product decision):
-1. Do `payees`/`tags` tables already exist in migration 0003? Plan assumes tags/payees arrive in 0004.
 2. Envelope mode: are credit cards/loans excluded from "liquidity accounts included in the budget", and is inclusion a per-account flag?
 3. Tag-based budgets overlapping category budgets: only reported separately (as in the spec) or also deducted from "Da assegnare"?
 4. Pending recurrences: should `recurring run` run automatically at every launch (needs a clock-driven hook) or only on demand?
@@ -183,5 +182,4 @@ Open questions (product decision):
 6. Reconciled-edit confirmation: also for bulk edits and rules apply (`--dry-run` shows them), or hard block?
 7. Rule conditions scope: regex allowed, or only contains/equals (safer for performance and testing)?
 8. Net worth report granularity and whether archived accounts count in historical series.
-9. Settings theme choice: stored in config (`ui.theme`) or in the archive? Plan assumes config, hot reload.
 10. Dynamic completion reading the archive: acceptable when the archive is locked or missing (fall back to no suggestions)?
