@@ -1,10 +1,12 @@
 # FUI — Specifiche tecniche
 
-Nov 11, 2026 · @Mattia Ballo
+Nov 12, 2026 · @Mattia Ballo
+
+**Versione 1.2** — 12 novembre 2026 · allineata alle FS 1.2, con i temi Catppuccin della TUI; le modifiche rispetto alle versioni precedenti sono nella sezione Cronologia delle versioni
 
 ## Panoramica e principi tecnici
 
-FUI è un unico binario Go che espone CLI e TUI sopra lo stesso core di dominio puro, con SQLite incluso e nessuna dipendenza di rete. Questo documento traduce le Specifiche funzionali (FS) in scelte di implementazione, convenzioni di codice, flusso Git e strategia anti-regressione.
+FUI è un unico binario Go che espone CLI e TUI sopra lo stesso core di dominio puro, con SQLite incluso e nessuna dipendenza di rete. Questo documento traduce le Specifiche funzionali (FS) in scelte di implementazione, convenzioni di codice, flusso Git e strategia anti-regressione, ed è allineato alla versione 1.2 delle FS (moduli, beni, ricerca con filtri, reset dell'archivio).
 
 | Principio delle FS | Conseguenza tecnica |
 | --- | --- |
@@ -14,8 +16,9 @@ FUI è un unico binario Go che espone CLI e TUI sopra lo stesso core di dominio 
 | Importi esatti | Tipo `Money` su `int64` in unità minime; `float64` vietato nel dominio da linter, salvo il pacchetto delle simulazioni |
 | Tastiera prima di tutto | Keymap dichiarative per schermata, generate anche nell'aiuto `?` |
 | Anteprima delle scritture | Pattern Plan/Apply: ogni scrittura produce prima un piano di modifiche, che `--dry-run` mostra e `--yes` applica |
+| Modularità | Un registro dei moduli decide quali comandi, schermate e dati sono esposti; lo schema dell'archivio resta completo, così disattivare un modulo non cancella nulla |
 
-Gli obiettivi misurabili (avvio CLI < 100 ms, TUI < 300 ms, import di 10.000 righe < 5 s) sono verificati da benchmark in CI, non solo dichiarati.
+Gli obiettivi misurabili (avvio CLI < 100 ms, TUI < 300 ms, import di 10.000 righe < 5 s, ricerca con filtri < 200 ms su 100.000 transazioni) sono verificati da benchmark in CI, non solo dichiarati.
 
 ## Stack e dipendenze
 
@@ -36,6 +39,8 @@ Lo stack resta quello deciso nelle FS (Go, Bubble Tea, SQLite senza cgo); attorn
 | Test | `testing`, `google/go-cmp`, `rogpeppe/go-internal/testscript`, `pgregory.net/rapid`, `charmbracelet/x/exp/teatest` | Unit, end-to-end CLI, property-based, snapshot della TUI |
 | Qualità | `golangci-lint`, `gofumpt`, `govulncheck` | Lint, formattazione, vulnerabilità note |
 | Release | `goreleaser` | Binari firmati per Linux e macOS, checksum, SBOM |
+| Ricerca testuale | FTS5 di SQLite con tokenizer trigram + `golang.org/x/text` per la normalizzazione | Corrispondenza parziale senza distinzione di maiuscole e accenti entro 200 ms su 100.000 transazioni |
+| Palette della TUI | `catppuccin/go` | Palette ufficiale dei quattro flavor come costanti Go, licenza MIT; usata solo da `internal/tui/theme` |
 
 Importi, date senza orario, tassi di cambio e quantità di titoli usano tipi propri in `internal/domain`, non librerie esterne: sono il cuore della correttezza e devono restare piccoli e testati a fondo.
 
@@ -43,7 +48,19 @@ Importi, date senza orario, tassi di cambio e quantità di titoli usano tipi pro
 
 FUI segue un'architettura esagonale (ports and adapters): il dominio al centro non conosce né SQLite né il terminale, gli use case orchestrano tramite porte, e CLI, TUI e adattatori stanno ai bordi. Le regole di dipendenza sono imposte da `depguard` in CI, non solo documentate.
 
-&#91;embedded content: architettura esagonale · 3 strati + adattatori\]
+```text
+   CLI · internal/cli          TUI · internal/tui
+             \                      /
+              v                    v
+        Use case · internal/app            <── porte ──   Adattatori
+        (Plan/Apply, Unit of Work,                        - Store SQLite (sqlc, goose)
+         porte: Store, Clock, Source,                     - Runner connettori
+         Backup, Config)                                  - Config e log
+                    |                                     - Backup e clock
+                    v
+        Dominio · internal/domain          <── tipi ───   Adattatori
+        (funzioni pure, solo stdlib)
+```
 
 CLI e TUI chiamano gli stessi use case; store, runner dei connettori, configurazione, backup e orologio implementano le porte definite in `internal/app` e vengono assemblati solo in `cmd/fui/main.go`.
 
@@ -53,6 +70,7 @@ CLI e TUI chiamano gli stessi use case; store, runner dei connettori, configuraz
 - `internal/app` importa il dominio e definisce le porte; non importa nessun adattatore.
 - `internal/cli` e `internal/tui` importano `app` e `domain`, mai `store` o `connector`.
 - `pkg/fuiproto` non importa nulla da `internal`.
+- `internal/module` importa solo la libreria standard ed è usabile da tutti gli strati.
 - `cmd/fui/main.go` è la composition root: l'unico punto che conosce tutte le implementazioni.
 
 **Layout del repository**
@@ -72,6 +90,7 @@ fui/
 │   ├── cli/                      comandi cobra e renderer
 │   ├── tui/                      root, screens/, components/
 │   ├── config/  backup/  clock/  skill/
+│   ├── module/                   registro dei moduli, dipendenze, preset
 │   └── testutil/                 fixture e generatori di archivi
 ├── pkg/fuiproto/                 protocollo fui/1, codec, validatore, conformance/
 ├── docs/adr/
@@ -80,6 +99,41 @@ fui/
 ```
 
 Un solo modulo Go per tutto il repository: `fui` e i connettori condividono `pkg/fuiproto` e si rilasciano insieme, con la stessa versione.
+
+## Moduli
+
+I moduli delle FS sono un registro statico nel codice che governa cosa è esposto, non cosa esiste: lo schema dell'archivio è sempre completo e un modulo disattivato nasconde comandi, schermate e dati senza toccarli. Così attivare o disattivare un modulo non richiede migrazioni e non può perdere dati.
+
+**Registro** — `internal/module` definisce un tipo `module.ID` e una tabella costante con, per ogni modulo, dipendenze, attivo di default e preset di appartenenza. Il registro è puro e testato a parte.
+
+| Modulo | Dipende da | Default | Preset `expense` |
+| --- | --- | --- | --- |
+| `core` | — | sempre | sì |
+| `budget` | — | sì | sì |
+| `recurring` | — | sì | sì |
+| `loans` | `recurring` | no | no |
+| `investments` | — | no | no |
+| `crypto` | `investments` | no | no |
+| `assets` | — | no | no |
+| `analytics` | — | sì | no |
+| `simulations` | `recurring` | no | no |
+| `ai` | `simulations` | no | no |
+
+- **Attivazione:** `Enable(id)` restituisce l'insieme chiuso rispetto alle dipendenze, mostrato come avviso; `Disable(id)` restituisce i moduli attivi che ne dipendono e richiede conferma. Entrambe sono use case Plan/Apply che scrivono solo `modules.enabled` nella configurazione.
+- **Validazione:** all'avvio un `modules.enabled` incoerente (dipendenza mancante, id sconosciuto) produce un errore di configurazione con il nome del modulo; `core` non si può disattivare.
+- **Porta applicativa:** gli use case ricevono un `module.Set` immutabile e chiamano `Require(id)` all'inizio; un modulo spento produce l'errore `module_disabled` (codice di uscita 1) con il comando per attivarlo.
+
+**Effetti di un modulo disattivato**
+
+| Dove | Comportamento | Come |
+| --- | --- | --- |
+| CLI | Comandi nascosti da `--help` e `fui help --json`; se invocati falliscono con `module_disabled` | Annotazione `module` su ogni comando cobra, applicata da un hook della radice |
+| TUI | Schermate e riquadri della Dashboard assenti; i tasti delle altre schermate non cambiano | Il router registra solo le schermate dei moduli attivi; i tasti numerici restano fissi |
+| Dati | Nessuna cancellazione; esclusi da Dashboard, report e patrimonio netto | Le query di aggregazione ricevono il `module.Set` e filtrano per tipo di conto ed entità |
+| Import | Record di moduli spenti (es. `schedule`, `installment`) segnalati nell'anteprima, con scelta tra attivare il modulo o saltarli | Il validatore dello stream classifica ogni record per modulo |
+| Agenti | La skill legge `fui module list --json` | Output stabile con id, stato e dipendenze |
+
+`fui init` accetta `--preset expense|full|custom` e `--modules`; in un terminale, senza flag, chiede il profilo con un prompt.
 
 ## Modello dati e schema SQLite
 
@@ -92,7 +146,7 @@ Lo schema usa tabelle `STRICT`, chiavi esterne attive, importi come `INTEGER` in
 - Nomi utente (conti, categorie, tag) `UNIQUE COLLATE NOCASE`.
 - Enum come `TEXT` con `CHECK (kind IN (...))`, leggibili nei dump.
 - `created_at` e `updated_at` in UTC ISO 8601; non entrano mai nei calcoli, che usano solo le date contabili.
-- Tassi di cambio come intero scalato a 10^9; quantità di titoli come intero scalato a 10^8.
+- Tassi di cambio come intero scalato a 10^9; quantità di titoli e cripto come intero con una scala per titolo (colonna `quantity_scale`, es. 8 per le cripto).
 
 | Tabella | Contenuto | Vincoli e indici chiave |
 | --- | --- | --- |
@@ -106,12 +160,18 @@ Lo schema usa tabelle `STRICT`, chiavi esterne attive, importi come `INTEGER` in
 | `recurrences` | Modelli di transazione periodica | Regola serializzata in colonne esplicite, non JSON |
 | `rules` | Regole di categorizzazione | Condizioni e azioni in JSON validato, `priority` per l'ordine |
 | `fx_rates` | Tassi manuali per valuta e data | `UNIQUE(currency, date)` |
-| `securities`, `security_prices`, `security_ops` | Titoli, prezzi manuali, operazioni (v0.3) | `security_ops.cash_tx_id` collega il movimento di liquidità |
+| `securities`, `security_prices`, `security_ops` | Titoli e cripto con scala della quantità, prezzi manuali, operazioni (v0.3, moduli investments e crypto) | `security_ops.cash_tx_id` collega il movimento di liquidità |
 | `loans`, `loan_schedules`, `loan_installments`, `loan_events` | Finanziamenti con piani versionati (v0.2) | `UNIQUE(loan_id, valid_from)` sui piani |
 | `import_batches`, `connector_account_refs` | Lotti di import annullabili, associazioni `ref` → conto | `source_sha256` per riconoscere un file già importato |
 | `saved_reports`, `dismissed_insights` | Report salvati, segnalazioni ignorate | Nessuno particolare |
+| `assets`, `asset_valuations` | Beni (immobili, veicoli, altro) e valutazioni manuali per data (v0.3, modulo assets) | `loan_id` nullable verso `loans`; `UNIQUE(asset_id, date)` sulle valutazioni |
+| `transactions_fts` | Indice FTS5 trigram su descrizione, beneficiario e note normalizzati | Tabella esterna sincronizzata da trigger su `transactions` |
 
 Il saldo non è memorizzato: si calcola come saldo iniziale più somma dei movimenti, sfruttando l'indice `(account_id, date, id)`. Se i benchmark lo richiederanno si aggiungerà una cache per mese, invalidata dalle scritture e verificata da un test che la confronta con il calcolo completo.
+
+**Ricerca testuale** — ogni transazione ha una colonna `search_text` calcolata in Go: descrizione, beneficiario e note in minuscolo, senza accenti (decomposizione NFD e rimozione dei segni diacritici) e con spazi normalizzati. Su quella colonna lavora l'indice FTS5 con tokenizer trigram, che supporta la corrispondenza parziale; la stessa funzione normalizza il testo cercato, così indice e query non possono divergere. Per testi più corti di tre caratteri si ricade su `LIKE` sulla stessa colonna.
+
+**Moduli e schema** — tutte le tabelle esistono a prescindere dai moduli attivi: la disattivazione agisce sulle query, mai sullo schema.
 
 ## Core di dominio
 
@@ -127,6 +187,8 @@ Il dominio è codice puro e deterministico: niente I/O, niente orologio, niente 
 | `Period` | Intervallo di date chiuso | Calcolo del mese contabile con `month_start_day` (giorni 29–31 limitati all'ultimo giorno del mese) |
 | `Rate` | Intero scalato a 10^9 | Conversione valutaria con arrotondamento unico per transazione |
 | `AccountID`, `CategoryID`, … | Tipi distinti su `int64` | Impossibile passare l'id di una categoria al posto di un conto |
+| `Quantity` | `int64` + scala del titolo | Operazioni solo tra quantità con la stessa scala; valore = quantità × prezzo con `big.Rat` e un solo arrotondamento finale |
+| `TxFilter` | Struct immutabile con periodo, conti, categorie, tag, beneficiario, importi, stato, natura, lotto, testo, ordinamento e limite | Filtri diversi in AND, valori ripetuti dello stesso filtro in OR; `--min` e `--max` sul valore assoluto |
 
 I costruttori validano e restituiscono errore ("parse, don't validate"): un valore di tipo `Money` o `Date` esistente è sempre valido. La politica di arrotondamento è unica, metà lontano dallo zero, implementata in un solo punto con test dedicati.
 
@@ -139,6 +201,8 @@ I costruttori validano e restituiscono errore ("parse, don't validate"): un valo
 - **Budget:** calcolo di speso, previsto, residuo e riporto per tetti e buste; esclusione di trasferimenti, movimenti di investimento e quote capitale.
 - **Ammortamento:** piano alla francese calcolato con `math/big.Rat` e arrotondato ai centesimi solo alla fine di ogni rata; l'ultima rata assorbe il residuo, così il capitale rimborsato coincide al centesimo.
 - **Autonomia e previsione:** mediana delle uscite mensili su 12 mesi completi; previsione per giorno a partire da ricorrenze, rate e spesa stimata.
+- **Filtro delle transazioni:** un solo `TxFilter` alimenta `fui tx list`, `fui tx search`, `fui export`, la schermata Transazioni e i report; il dominio offre anche `Match(tx)` in memoria, usato come oracolo nei test della traduzione in SQL.
+- **Patrimonio netto:** liquidità + posizioni + ultima valutazione dei beni − debiti residui, considerando solo i moduli attivi; un bene collegato a un mutuo mostra anche il valore netto del debito.
 
 ```latex
 R = C \cdot \frac{i}{1 - (1 + i)^{-n}}
@@ -173,7 +237,7 @@ Ogni comando è un adattatore sottile: legge flag e argomenti, costruisce una ri
 | Codice | Quando | Esempi di `code` JSON |
 | --- | --- | --- |
 | 0 | Successo, incluso `--dry-run` | — |
-| 1 | Errore di input dell'utente | `invalid_amount`, `ambiguous_name`, `missing_field`, `confirmation_required` |
+| 1 | Errore di input dell'utente | `invalid_amount`, `ambiguous_name`, `missing_field`, `module_disabled`, `confirmation_required` |
 | 2 | Errore di dati o di I/O | `db_locked`, `db_corrupted`, `connector_failed`, `migration_failed` |
 
 Con `--json` l'errore va su stderr come `{"error":{"code":"ambiguous_name","message":"…","details":{"candidates":["Fineco","Fineco Risparmio"]}}}`. La mappatura da errore di dominio a codice di uscita sta in un'unica funzione, coperta da un test che elenca tutti i codici.
@@ -181,6 +245,12 @@ Con `--json` l'errore va su stderr come `{"error":{"code":"ambiguous_name","mess
 **Riferimenti per nome** — risoluzione in tre passi: corrispondenza esatta senza distinzione di maiuscole, poi prefisso unico, poi sottostringa unica. Se un passo trova più candidati, FUI esce con `ambiguous_name` e li elenca.
 
 **Importi e date** — un parser unico per importi (virgola o punto secondo `locale`, segno, separatore delle migliaia opzionale) e uno per date (assolute, `today`, `yesterday`, `-3d`, `-2w`, `-1m`), usati da CLI e TUI e coperti da fuzzing.
+
+**Ricerca e filtri** — i flag dei filtri (`--from`, `--to`, `--month`, `--year`, `-a`, `-c`, `--uncategorized`, `-t`, `--payee`, `--min`, `--max`, `--income`, `--expense`, `--status`, `--kind`, `--batch`, `--sort`, `--desc`, `--limit`) sono definiti una volta in `internal/cli/filterflags.go` e montati su `tx list`, `tx search` ed `export`. Producono un `TxFilter`, risolvendo i nomi con le stesse regole dei riferimenti; flag incompatibili (es. `--month` con `--from`) danno `invalid_filter`. L'output in tabella termina con numero di righe e somma degli importi; in JSON lo stesso riepilogo sta in un oggetto `summary` accanto alle righe.
+
+**Reset** — `fui reset` è uno use case Plan/Apply come gli altri: il piano elenca cosa viene cancellato e cosa conservato con `--keep-settings`. In un terminale la conferma richiede di digitare `reset`; senza terminale o con `FUI_AGENT=1` serve `--yes`, altrimenti l'errore è `confirmation_required`. Se l'archivio non esiste, il comando delega a `init`.
+
+**Moduli** — `fui module list / enable / disable` e `fui init --preset|--modules` sono comandi del nucleo; `fui asset add / list / value` appartiene al modulo `assets`. L'annotazione del modulo su ogni comando cobra è verificata da un test che fallisce se un comando ne è privo.
 
 **Modalità agente** — `FUI_AGENT=1` equivale a `--no-input --json` e fa fallire con `confirmation_required` ogni scrittura senza `--yes`. `fui help --json` è generato visitando l'albero cobra e gli schemi JSON dei tipi di output, quindi non può divergere dal binario; il suo output è un golden file versionato.
 
@@ -199,11 +269,42 @@ La TUI segue l'architettura Elm di Bubble Tea con una regola ferma: `Update` e `
 
 **Tastiera e aiuto** — ogni azione è una `key.Binding` di `bubbles/key` con descrizione; l'aiuto `?` e la riga di suggerimenti si generano dalle keymap, quindi non possono divergere dalle scorciatoie reali. Un test verifica che nessuna schermata abbia due azioni sullo stesso tasto.
 
+**Ricerca e filtri** — `/` aggiorna i risultati mentre si digita: ogni tasto riavvia un timer di 150 ms e annulla la query precedente tramite `context`, così arriva a schermo solo l'ultimo risultato. `f` apre un pannello che costruisce lo stesso `TxFilter` della CLI; i filtri attivi restano in un'intestazione sopra la lista e si rimuovono singolarmente.
+
+**Moduli** — il router registra solo le schermate dei moduli attivi e la Dashboard compone i riquadri dallo stesso registro. Dalla schermata Impostazioni si attivano e disattivano i moduli; al cambio la TUI ricostruisce router e Dashboard senza riavvio.
+
 **Layout e tema**
 
 - Dimensioni lette da `tea.WindowSizeMsg`; sotto 80×24 la TUI mostra solo un avviso con la dimensione minima.
-- Colori dalla palette ANSI del terminale tramite `lipgloss.AdaptiveColor`; variante ad alto contrasto con `theme = "high-contrast"`.
+- Colori dalla palette [Catppuccin](https://catppuccin.com/palette), con scelta del tema nelle Impostazioni o selezione automatica chiara/scura in base al terminale (dettagli sotto).
 - Nessuna informazione solo cromatica: segno meno sulle uscite, etichetta `OVER` sui budget sforati, simboli per gli stati delle transazioni.
+
+**Temi** — i quattro flavor di Catppuccin diventano temi della TUI: Latte (chiaro), Frappé, Macchiato e Mocha (scuri). Il valore predefinito è `auto`: all'avvio FUI rileva lo sfondo del terminale e usa Latte su sfondo chiaro, Mocha su sfondo scuro; le due scelte sono configurabili.
+
+| Valore di `theme` | Comportamento |
+| --- | --- |
+| `auto` (predefinito) | Rileva lo sfondo del terminale e applica `theme_light` o `theme_dark` |
+| `latte`, `frappe`, `macchiato`, `mocha` | Flavor fisso, indipendente dal terminale |
+| `terminal` | Solo i 16 colori ANSI del terminale, come fallback per terminali senza truecolor o per chi preferisce il proprio schema |
+| `high-contrast` | Variante ad alto contrasto: sfondo `Crust`, testo `Text`, accenti saturi, scelta in automatico tra Latte e Mocha come per `auto` |
+
+**Rilevamento dello sfondo** — all'avvio la TUI interroga il colore di sfondo del terminale con la sequenza OSC 11, con un timeout di 100 ms per restare entro i 300 ms di apertura. Se il terminale non risponde, usa la variabile `COLORFGBG`; in mancanza di entrambi assume uno sfondo scuro. Se il terminale notifica un cambio di tema durante l'esecuzione, la TUI passa al flavor corrispondente senza riavvio.
+
+**Token semantici** — i componenti non usano mai colori della palette direttamente: il pacchetto `internal/tui/theme` espone token con un significato, e ogni tema li mappa sui colori del proprio flavor.
+
+| Token | Colore Catppuccin | Uso |
+| --- | --- | --- |
+| `Base`, `Surface`, `Selection` | Base, Surface0, Surface1 | Sfondo, pannelli, riga selezionata |
+| `Text`, `Muted`, `Border` | Text, Subtext0, Overlay0 | Testo, testo secondario, bordi |
+| `Accent` | Mauve | Schermata attiva, focus, titoli |
+| `Income`, `Expense` | Green, Red | Entrate e uscite (sempre insieme al segno) |
+| `Warning`, `Over` | Yellow, Red | Budget oltre soglia e sforati (sempre con etichetta) |
+| `Pending`, `Reconciled` | Peach, Teal | Stati delle transazioni (sempre con simbolo) |
+| `Series1…8` | Blue, Sapphire, Teal, Green, Yellow, Peach, Maroon, Mauve | Serie dei grafici e sparkline |
+
+**Profondità di colore e `NO_COLOR`** — Lip Gloss riduce i colori esadecimali a 256 colori quando il terminale non supporta il truecolor; con soli 16 colori FUI passa al tema `terminal`. Con `NO_COLOR` impostato non si usano colori, qualunque sia il tema.
+
+**Scelta del tema** — nella schermata Impostazioni una voce Aspetto elenca i temi con anteprima immediata; la scelta si salva in `theme` (oppure con `fui config set theme mocha`). Un tema scelto esplicitamente non viene mai sovrascritto dal rilevamento automatico.
 
 **Salvataggio** — ogni modifica chiama subito lo use case corrispondente; un errore compare nella barra di stato e la vista ricarica i dati dall'archivio, senza stato ottimistico da riconciliare.
 
@@ -224,7 +325,7 @@ Connettori integrati ed esterni producono lo stesso flusso di record `fui/1`; da
 
 **Pipeline di import**
 
-1. Lettura dalla `Source` e validazione dello stream.
+1. Lettura dalla `Source` e validazione dello stream; i record dei moduli disattivati vengono marcati per l'anteprima, che chiede se attivare il modulo o saltarli.
 2. Risoluzione dei `ref` in conti tramite `connector_account_refs`, con richiesta all'utente al primo uso.
 3. Normalizzazione di descrizioni e beneficiari tramite alias.
 4. Deduplicazione per id esterno, poi per impronta; marcatura delle righe dubbie.
@@ -256,11 +357,13 @@ Ogni use case di scrittura è una sola transazione SQL: o si applica tutto o nie
 
 **Backup**
 
-- `VACUUM INTO` produce una copia coerente anche con l'archivio aperto, nominata `fui-AAAAMMGG-HHMMSS-<motivo>.db` (motivo: `manual`, `import`, `migrate`, `bulk`, `restore`).
-- Backup automatico prima di import, migrazioni, modifiche di massa e `restore`; si conservano gli ultimi `backup.keep` (predefinito 10).
+- `VACUUM INTO` produce una copia coerente anche con l'archivio aperto, nominata `fui-AAAAMMGG-HHMMSS-<motivo>.db` (motivo: `manual`, `import`, `migrate`, `bulk`, `restore`, `reset`).
+- Backup automatico prima di import, migrazioni, modifiche di massa, `restore` e `reset`; si conservano gli ultimi `backup.keep` (predefinito 10).
 - Permessi `600` sui file e `700` sulle directory, impostati alla creazione e non corretti dopo.
 
 **Ripristino** — `fui restore` controlla il file con `PRAGMA integrity_check` e la versione dello schema, fa un backup dell'archivio corrente, scrive in un file temporaneo nella stessa directory e lo sostituisce con un `rename` atomico. Il dump completo in JSON o CSV segue lo stesso percorso dopo aver ricostruito un archivio temporaneo.
+
+**Reset** — `fui reset` costruisce l'archivio nuovo in un file temporaneo nella stessa directory: esegue le migrazioni, crea le categorie predefinite e, con `--keep-settings`, copia categorie, tag, regole, profili di import e associazioni dei connettori dall'archivio corrente. Prima del `rename` atomico crea un backup con motivo `reset`, che la rotazione di `backup.keep` non cancella mai; resta finché l'utente non lo elimina. Il file di configurazione non viene toccato.
 
 ## Configurazione, log e sicurezza
 
@@ -272,6 +375,8 @@ La configurazione è una struct tipata validata all'avvio; i log non contengono 
 - Precedenza: flag > variabili `FUI_*` > file > predefiniti, risolta in un'unica funzione con test per ogni livello.
 - Chiavi sconosciute producono un avviso, valori non validi un errore con il nome della chiave.
 - Percorsi: rispetto di `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`; in loro assenza `~/.config/fui`, `~/.local/share/fui` e `~/.local/state/fui` su Linux e macOS, come indicato nelle FS.
+- `modules.enabled` è una lista di id validata contro il registro dei moduli; le dipendenze mancanti sono un errore, non vengono aggiunte in silenzio.
+- `theme` accetta `auto` (predefinito), `latte`, `frappe`, `macchiato`, `mocha`, `terminal` o `high-contrast`; `theme_light` (predefinito `latte`) e `theme_dark` (predefinito `mocha`) scelgono i flavor usati da `auto`. Un valore sconosciuto è un errore con l'elenco dei temi validi.
 
 **Log**
 
@@ -306,6 +411,7 @@ La base sono [Effective Go](https://go.dev/doc/effective_go) e le [Go Code Revie
 | CLI e TUI non importano lo store | `depguard` | `internal/cli`, `internal/tui` |
 | Niente `net/http` | `depguard` + test sul grafo | `internal/`, `cmd/fui` |
 | `switch` esaustivi sugli enum | `exhaustive` | Ovunque |
+| Niente colori letterali (`lipgloss.Color`, palette Catppuccin) fuori dai temi | `forbidigo` + `depguard` | `internal/tui` tranne `internal/tui/theme` |
 
 **Nomi e pacchetti**
 
@@ -366,7 +472,7 @@ FUI usa il trunk-based development: `main` è sempre rilasciabile, i branch vivo
 | `docs` | Documentazione, ADR, skill | nessuno |
 | `build`, `ci`, `chore` | Build, pipeline, manutenzione | nessuno |
 
-Scope tra `domain`, `app`, `cli`, `tui`, `store`, `import`, `connector/revolut`, `connector/widiba`, `proto`, `config`, `skill`. Un cambiamento incompatibile su output JSON, protocollo `fui/1`, configurazione o comandi usa `!` e il footer `BREAKING CHANGE:`. Il formato è controllato da un hook `commit-msg` e in CI.
+Scope tra `domain`, `app`, `cli`, `tui`, `store`, `import`, `connector/revolut`, `connector/widiba`, `proto`, `config`, `skill`, `module`. Un cambiamento incompatibile su output JSON, protocollo `fui/1`, configurazione o comandi usa `!` e il footer `BREAKING CHANGE:`. Il formato è controllato da un hook `commit-msg` e in CI.
 
 **Pull request**
 
@@ -421,6 +527,16 @@ Le regressioni si prevengono su tre fronti: invarianti verificate automaticament
 - In un piano di ammortamento la somma delle quote capitale è uguale al capitale e il debito residuo finale è zero.
 - Con le buste, totale delle buste più "Da assegnare" = somma dei saldi dei conti di liquidità inclusi.
 - Formattare e poi analizzare un importo o una data restituisce lo stesso valore, per ogni locale supportato.
+- Disattivare e riattivare un modulo lascia l'archivio identico byte per byte.
+- Per ogni `TxFilter` generato, la query SQL restituisce esattamente le transazioni per cui `Match(tx)` in memoria è vero, nello stesso ordine.
+- `fui reset --keep-settings` conserva categorie, tag, regole, profili e associazioni dei connettori, e lascia vuote tutte le altre tabelle.
+- L'attivazione di un modulo produce sempre un insieme chiuso rispetto alle dipendenze; nessuna sequenza di attivazioni e disattivazioni lascia una dipendenza mancante.
+- Per ogni tema, ogni token di testo (`Text`, `Muted`, `Income`, `Expense`, `Warning`, `Over`, `Pending`, `Reconciled`) ha un contrasto WCAG di almeno 4,5:1 con `Base`, e di almeno 7:1 nel tema `high-contrast`; un token che non rispetta la soglia fa fallire il test.
+- Ogni tema definisce tutti i token: aggiungere un token senza mapparlo in ogni flavor fa fallire i test.
+
+**Matrice dei moduli** — gli script `testscript` girano con i preset `expense` e `full` e con ogni modulo opzionale spento uno alla volta; un golden file di `fui help --json` per preset verifica che i comandi compaiano e spariscano come previsto. Le prestazioni della ricerca (< 200 ms su 100.000 transazioni) sono un benchmark dedicato tra quelli notturni.
+
+**Temi** — gli snapshot `teatest` della Dashboard e della lista Transazioni si generano per ogni tema (Latte, Frappé, Macchiato, Mocha, `terminal`, `high-contrast`) e con `NO_COLOR`. Il rilevamento dello sfondo è testato con risposte OSC 11 simulate (chiaro, scuro, nessuna risposta entro il timeout) e con `COLORFGBG`.
 
 **Golden file come contratto** — output JSON, `help --json`, stream dei connettori e schema SQL sono i contratti verso script, agenti e archivi esistenti. Ogni modifica a un golden file compare nel diff della PR e va motivata nel messaggio di commit; un golden cambiato per un `fix` o un `refactor` è un segnale d'allarme in revisione.
 
@@ -478,13 +594,17 @@ Le decisioni architetturali si registrano come ADR in `docs/adr/NNNN-titolo.md` 
 | ADR | Decisione |
 | --- | --- |
 | 0001 | Architettura esagonale con dominio puro e regole di dipendenza imposte da `depguard` |
-| 0002 | Importi `int64` in unità minime, tassi a 10^9, quantità a 10^8, arrotondamento metà lontano dallo zero in un solo punto |
+| 0002 | Importi `int64` in unità minime, tassi a 10^9, quantità con scala per titolo, arrotondamento metà lontano dallo zero in un solo punto |
 | 0003 | `sqlc` al posto di un ORM; migrazioni `goose` solo in avanti con backup automatico |
 | 0004 | Pattern Plan/Apply per tutte le scritture, base di `--dry-run`, anteprime TUI e sicurezza degli agenti |
 | 0005 | Protocollo `fui/1` in `pkg/fuiproto` come unico pacchetto pubblico |
 | 0006 | Trunk-based development, Conventional Commits, merge con rebase |
 | 0007 | Golden file come contratto per output JSON, `help --json`, stream dei connettori e schema |
 | 0008 | Percorsi XDG anche su macOS per coerenza con le FS |
+| 0009 | Moduli come registro statico che agisce su esposizione e query; schema sempre completo, nessuna migrazione legata ai moduli |
+| 0010 | Ricerca testuale con FTS5 trigram su una colonna normalizzata in Go; un unico `TxFilter` per CLI, TUI, export e report |
+| 0011 | Reset come ricostruzione in file temporaneo con rename atomico e backup escluso dalla rotazione |
+| 0012 | Temi della TUI dalla palette Catppuccin tramite token semantici; tema `auto` con rilevamento dello sfondo (OSC 11, poi `COLORFGBG`, poi scuro) |
 
 **Da decidere**
 
@@ -494,3 +614,41 @@ Le decisioni architetturali si registrano come ADR in `docs/adr/NNNN-titolo.md` 
 - [ ] Definire l'integrazione del modello AI locale (runtime, processo separato o libreria), oggi indicata come da definire nelle FS.
 - [ ] Valutare se aggiungere un isolamento dei connettori esterni (es. permessi ridotti del processo) dopo l'MVP.
 - [ ] Fissare la soglia di regressione dei benchmark che blocca una PR (proposta: 10% su `add` e import), dopo aver misurato il rumore dei runner di CI.
+- [ ] Verificare che il build di `modernc.org/sqlite` in uso includa FTS5 con il tokenizer trigram; in caso contrario ripiegare su `LIKE` sulla colonna normalizzata e misurare i 200 ms.
+- [ ] Confermare i nomi dei preset (`expense`, `full`, `custom`) e degli id dei moduli, che diventano parte del contratto della CLI.
+- [ ] Aggiornare le FS: la chiave `theme` ha ora valore predefinito `auto` con i flavor Catppuccin, mentre le FS 1.2 indicano che il tema segue i colori del terminale.
+- [ ] Verificare come la major di Bubble Tea scelta espone il colore di sfondo e la notifica del cambio di tema, che determinano l'implementazione del rilevamento.
+
+## Cronologia delle versioni
+
+**Versione 1.2** — 12 novembre 2026, temi della TUI basati su Catppuccin
+
+| Sezione | Modifica |
+| --- | --- |
+| Stack e dipendenze | Nuova dipendenza `catppuccin/go` per la palette |
+| TUI | Temi Latte, Frappé, Macchiato e Mocha; tema `auto` con rilevamento dello sfondo del terminale; temi `terminal` e `high-contrast`; token semantici; scelta del tema dalle Impostazioni con anteprima |
+| Configurazione, log e sicurezza | Chiavi `theme`, `theme_light` e `theme_dark` |
+| Code convention e clean code | Divieto di colori letterali fuori da `internal/tui/theme` |
+| Test e prevenzione delle regressioni | Test di contrasto WCAG per ogni tema, completezza dei token, snapshot per tema e test del rilevamento dello sfondo |
+| Decisioni tecniche e punti aperti | ADR 0012; punti aperti su aggiornamento delle FS e rilevamento con la major di Bubble Tea |
+
+**Versione 1.1** — 12 novembre 2026, allineata alle FS 1.2 (moduli, beni, ricerca con filtri, reset dell'archivio)
+
+| Sezione | Modifica |
+| --- | --- |
+| Panoramica e principi tecnici | Nuovo principio di modularità; obiettivo di ricerca con filtri < 200 ms su 100.000 transazioni |
+| Stack e dipendenze | Ricerca testuale con FTS5 trigram e `golang.org/x/text` per la normalizzazione |
+| Architettura | Pacchetto `internal/module` nel layout del repository e nelle regole di dipendenza |
+| Moduli | Nuova sezione: registro statico, dipendenze, preset, effetti della disattivazione su CLI, TUI, dati, import e agenti |
+| Modello dati e schema SQLite | Tabelle `assets`, `asset_valuations` e `transactions_fts`; colonna `search_text` normalizzata; scala della quantità per titolo al posto di 10^8 fisso; schema indipendente dai moduli attivi |
+| Core di dominio | Nuovi tipi `Quantity` e `TxFilter`; servizi di filtro delle transazioni (con oracolo in memoria) e patrimonio netto con i beni |
+| CLI | Flag di filtro condivisi da `tx list`, `tx search` ed `export`; `fui reset` con conferma digitata o `--yes`; comandi `module` e `asset`; errore `module_disabled` |
+| TUI | Ricerca live con annullamento della query precedente, pannello filtri, gestione dei moduli dalle Impostazioni senza riavvio |
+| Connettori e protocollo fui/1 | L'anteprima segnala i record dei moduli disattivati e chiede se attivarli o saltarli |
+| Persistenza, migrazioni e backup | Reset come ricostruzione in file temporaneo con rename atomico; backup `reset` escluso dalla rotazione |
+| Configurazione, log e sicurezza | Chiave `modules.enabled` validata contro il registro dei moduli |
+| Flusso Git | Nuovo scope `module` |
+| Test e prevenzione delle regressioni | Quattro nuovi invarianti (moduli, filtro SQL contro oracolo, reset, dipendenze); matrice dei moduli; benchmark della ricerca |
+| Decisioni tecniche e punti aperti | ADR 0009–0011; ADR 0002 aggiornato per la scala delle quantità; due nuovi punti aperti (FTS5 in `modernc.org/sqlite`, nomi di preset e moduli) |
+
+**Versione 1.0** — 11 novembre 2026: prima versione delle specifiche tecniche, basata sulle FS 1.0.
