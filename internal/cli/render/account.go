@@ -31,12 +31,25 @@ func accountDTO(a app.AccountBalance) AccountDTO {
 	}
 }
 
-func accountRows(accts []app.AccountBalance, loc domain.Locale) Rows {
+func accountTableRows(accts []app.AccountBalance, loc domain.Locale) Rows {
 	t := Rows{Header: []string{"NAME", "KIND", "CURRENCY", "BALANCE", "ARCHIVED"}, MoneyCols: []int{3}}
 	for _, a := range accts {
 		t.Body = append(t.Body, []string{
 			a.Account.Name, string(a.Account.Kind), a.Account.Currency.Code(),
 			FormatMoney(a.Balance, loc), boolCell(a.Account.Archived),
+		})
+	}
+	return t
+}
+
+// accountCSVRows builds --csv rows: unlike accountTableRows, the balance is always machine
+// format, independent of locale (there is no loc parameter to misuse).
+func accountCSVRows(accts []app.AccountBalance) Rows {
+	t := Rows{Header: []string{"NAME", "KIND", "CURRENCY", "BALANCE", "ARCHIVED"}, MoneyCols: []int{3}}
+	for _, a := range accts {
+		t.Body = append(t.Body, []string{
+			a.Account.Name, string(a.Account.Kind), a.Account.Currency.Code(),
+			FormatMoneyMachine(a.Balance), boolCell(a.Account.Archived),
 		})
 	}
 	return t
@@ -59,9 +72,9 @@ func WriteAccountList(w io.Writer, f Format, loc domain.Locale, color bool, acct
 		return WriteJSON(w, dtos)
 	}
 	if f == CSV {
-		return WriteCSV(w, accountRows(accts, loc))
+		return WriteCSV(w, accountCSVRows(accts))
 	}
-	return WriteTable(w, accountRows(accts, loc), color)
+	return WriteTable(w, accountTableRows(accts, loc), color)
 }
 
 // WriteAccount renders one account with its balance.

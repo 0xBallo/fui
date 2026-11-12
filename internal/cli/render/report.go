@@ -39,12 +39,23 @@ func spendingDTO(r reporting.SpendingResult) SpendingDTO {
 	}
 }
 
-func spendingRows(r reporting.SpendingResult, loc domain.Locale) Rows {
+func spendingTableRows(r reporting.SpendingResult, loc domain.Locale) Rows {
 	t := Rows{Header: []string{"CATEGORY", "TOTAL"}, MoneyCols: []int{1}}
 	for _, row := range r.Rows {
 		t.Body = append(t.Body, []string{row.CategoryName, FormatMoney(row.Total, loc)})
 	}
 	t.Body = append(t.Body, []string{"TOTAL", FormatMoney(r.Total, loc)})
+	return t
+}
+
+// spendingCSVRows builds --csv rows: totals are always machine format, independent of locale
+// (there is no loc parameter to misuse).
+func spendingCSVRows(r reporting.SpendingResult) Rows {
+	t := Rows{Header: []string{"CATEGORY", "TOTAL"}, MoneyCols: []int{1}}
+	for _, row := range r.Rows {
+		t.Body = append(t.Body, []string{row.CategoryName, FormatMoneyMachine(row.Total)})
+	}
+	t.Body = append(t.Body, []string{"TOTAL", FormatMoneyMachine(r.Total)})
 	return t
 }
 
@@ -54,9 +65,9 @@ func WriteSpending(w io.Writer, f Format, loc domain.Locale, color bool, r repor
 		return WriteJSON(w, spendingDTO(r))
 	}
 	if f == CSV {
-		return WriteCSV(w, spendingRows(r, loc))
+		return WriteCSV(w, spendingCSVRows(r))
 	}
-	return WriteTable(w, spendingRows(r, loc), color)
+	return WriteTable(w, spendingTableRows(r, loc), color)
 }
 
 // CashFlowMonthDTO is the --json shape of one month of a cash-flow report.
@@ -94,7 +105,7 @@ func cashFlowDTO(r reporting.CashFlowResult) CashFlowDTO {
 	}
 }
 
-func cashFlowRows(r reporting.CashFlowResult, loc domain.Locale) Rows {
+func cashFlowTableRows(r reporting.CashFlowResult, loc domain.Locale) Rows {
 	t := Rows{Header: []string{"MONTH", "INFLOW", "OUTFLOW", "NET"}, MoneyCols: []int{1, 2, 3}}
 	for _, m := range r.Months {
 		t.Body = append(t.Body, []string{
@@ -108,15 +119,31 @@ func cashFlowRows(r reporting.CashFlowResult, loc domain.Locale) Rows {
 	return t
 }
 
+// cashFlowCSVRows builds --csv rows: dates and amounts are always machine format, independent of
+// locale (there is no loc parameter to misuse).
+func cashFlowCSVRows(r reporting.CashFlowResult) Rows {
+	t := Rows{Header: []string{"MONTH", "INFLOW", "OUTFLOW", "NET"}, MoneyCols: []int{1, 2, 3}}
+	for _, m := range r.Months {
+		t.Body = append(t.Body, []string{
+			FormatDateMachine(m.Period.From()), FormatMoneyMachine(m.Inflow),
+			FormatMoneyMachine(m.Outflow), FormatMoneyMachine(m.Net),
+		})
+	}
+	t.Body = append(t.Body, []string{
+		"TOTAL", FormatMoneyMachine(r.TotalInflow), FormatMoneyMachine(r.TotalOutflow), FormatMoneyMachine(r.TotalNet),
+	})
+	return t
+}
+
 // WriteCashFlow renders the monthly cash-flow report.
 func WriteCashFlow(w io.Writer, f Format, loc domain.Locale, color bool, r reporting.CashFlowResult) error {
 	if f == JSON {
 		return WriteJSON(w, cashFlowDTO(r))
 	}
 	if f == CSV {
-		return WriteCSV(w, cashFlowRows(r, loc))
+		return WriteCSV(w, cashFlowCSVRows(r))
 	}
-	return WriteTable(w, cashFlowRows(r, loc), color)
+	return WriteTable(w, cashFlowTableRows(r, loc), color)
 }
 
 // RunwayDTO is the --json shape of the runway KPI.
@@ -138,7 +165,7 @@ func runwayDTO(r reporting.RunwayResult) RunwayDTO {
 	}
 }
 
-func runwayRows(r reporting.RunwayResult, loc domain.Locale) Rows {
+func runwayTableRows(r reporting.RunwayResult, loc domain.Locale) Rows {
 	return Rows{
 		Header:    []string{"AS OF", "LIQUIDITY", "MONTHLY SPENDING", "MONTHS", "DAYS", "ZERO DATE"},
 		MoneyCols: []int{1, 2},
@@ -149,13 +176,26 @@ func runwayRows(r reporting.RunwayResult, loc domain.Locale) Rows {
 	}
 }
 
+// runwayCSVRows builds --csv rows: dates and amounts are always machine format, independent of
+// locale (there is no loc parameter to misuse).
+func runwayCSVRows(r reporting.RunwayResult) Rows {
+	return Rows{
+		Header:    []string{"AS OF", "LIQUIDITY", "MONTHLY SPENDING", "MONTHS", "DAYS", "ZERO DATE"},
+		MoneyCols: []int{1, 2},
+		Body: [][]string{{
+			FormatDateMachine(r.AsOf), FormatMoneyMachine(r.Liquidity), FormatMoneyMachine(r.ReferenceMonthlySpending),
+			strconv.Itoa(r.Months), strconv.Itoa(r.Days), FormatDateMachine(r.ZeroDate),
+		}},
+	}
+}
+
 // WriteRunway renders the runway KPI.
 func WriteRunway(w io.Writer, f Format, loc domain.Locale, color bool, r reporting.RunwayResult) error {
 	if f == JSON {
 		return WriteJSON(w, runwayDTO(r))
 	}
 	if f == CSV {
-		return WriteCSV(w, runwayRows(r, loc))
+		return WriteCSV(w, runwayCSVRows(r))
 	}
-	return WriteTable(w, runwayRows(r, loc), color)
+	return WriteTable(w, runwayTableRows(r, loc), color)
 }

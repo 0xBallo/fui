@@ -32,12 +32,25 @@ func transactionDTO(v app.TxView) TransactionDTO {
 	}
 }
 
-func transactionRows(items []app.TxView, loc domain.Locale) Rows {
+func transactionTableRows(items []app.TxView, loc domain.Locale) Rows {
 	t := Rows{Header: []string{"DATE", "ACCOUNT", "CATEGORY", "DESCRIPTION", "AMOUNT", "STATUS"}, MoneyCols: []int{4}}
 	for _, v := range items {
 		t.Body = append(t.Body, []string{
 			FormatDate(v.Transaction.Date, loc), v.Account, v.Category, v.Transaction.Description,
 			FormatMoney(v.Transaction.Amount, loc), string(v.Transaction.Status),
+		})
+	}
+	return t
+}
+
+// transactionCSVRows builds --csv rows: dates and amounts are always machine format, independent
+// of locale (there is no loc parameter to misuse).
+func transactionCSVRows(items []app.TxView) Rows {
+	t := Rows{Header: []string{"DATE", "ACCOUNT", "CATEGORY", "DESCRIPTION", "AMOUNT", "STATUS"}, MoneyCols: []int{4}}
+	for _, v := range items {
+		t.Body = append(t.Body, []string{
+			FormatDateMachine(v.Transaction.Date), v.Account, v.Category, v.Transaction.Description,
+			FormatMoneyMachine(v.Transaction.Amount), string(v.Transaction.Status),
 		})
 	}
 	return t
@@ -53,9 +66,9 @@ func WriteTxList(w io.Writer, f Format, loc domain.Locale, color bool, items []a
 		return WriteJSON(w, dtos)
 	}
 	if f == CSV {
-		return WriteCSV(w, transactionRows(items, loc))
+		return WriteCSV(w, transactionCSVRows(items))
 	}
-	return WriteTable(w, transactionRows(items, loc), color)
+	return WriteTable(w, transactionTableRows(items, loc), color)
 }
 
 // WriteTx renders one transaction.

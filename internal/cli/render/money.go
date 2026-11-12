@@ -15,9 +15,25 @@ func FormatDate(d domain.Date, loc domain.Locale) string {
 	return d.Format(loc)
 }
 
+// FormatDateMachine renders d for --csv: the locale-independent ISO form YYYY-MM-DD, per the
+// technical spec's "Output" rule that --csv is independent of locale (the same convention --json
+// already uses for dates).
+func FormatDateMachine(d domain.Date) string {
+	if d.IsZero() {
+		return ""
+	}
+	return d.String()
+}
+
 // FormatMoney renders m for the table format, per locale, with a leading "-" on outflows.
 func FormatMoney(m domain.Money, loc domain.Locale) string {
 	return domain.FormatAmount(m, loc)
+}
+
+// FormatMoneyMachine renders m for --csv: dot decimal, no thousands separator, leading "-" on
+// outflows, independent of locale, per the technical spec's "Output" rule for --csv.
+func FormatMoneyMachine(m domain.Money) string {
+	return domain.FormatMachine(m)
 }
 
 // FormatRate renders a scaled exchange rate with its significant decimals, e.g.
