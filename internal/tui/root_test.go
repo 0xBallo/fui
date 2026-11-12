@@ -9,8 +9,13 @@ import (
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 	"github.com/0xballo/fui/internal/tui"
+	"github.com/0xballo/fui/internal/tui/screens/budget"
+	"github.com/0xballo/fui/internal/tui/screens/importer"
+	"github.com/0xballo/fui/internal/tui/screens/report"
 	"github.com/0xballo/fui/internal/tui/screens/screentest"
+	"github.com/0xballo/fui/internal/tui/screens/settings"
 )
 
 // useCases composes a Fixture's Service with its reporting use cases to satisfy tui.UseCases.
@@ -165,5 +170,71 @@ func TestRootHelpOverlay(t *testing.T) {
 	m, _ = sendRunes(m, "?")
 	if strings.Contains(m.View(), "Help —") {
 		t.Fatalf("expected the help overlay to close, got:\n%s", m.View())
+	}
+}
+
+// routedConfig wires every optional screen with nil-embedding stubs: the tests below only route and
+// render, they never run a screen's Init command.
+func routedConfig(mods ...module.ID) tui.Config {
+	set, err := module.Validate(append([]module.ID{module.Core}, mods...))
+	if err != nil {
+		panic(err)
+	}
+	return tui.Config{
+		Locale: domain.LocaleENUS, Modules: set,
+		Budget: struct{ budget.UseCases }{}, Report: struct{ report.UseCases }{},
+		Importer: struct{ importer.UseCases }{}, Settings: struct{ settings.UseCases }{},
+		ModuleConfig: struct{ settings.ModuleConfig }{}, ThemeConfig: struct{ settings.ThemeConfig }{},
+	}
+}
+
+func newRoutedRoot(t *testing.T, cfg tui.Config) tea.Model {
+	t.Helper()
+	fx := screentest.New(t)
+	root := tui.New(useCases{Service: fx.Service, Reporting: fx.NewReporting(t)}, cfg)
+	m, _ := root.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	return m
+}
+
+func TestModuleMatrixRoutesBudgetTab(t *testing.T) {
+	m := newRoutedRoot(t, routedConfig(module.Budget))
+	m, _ = sendRunes(m, "4")
+	if got := m.(*tui.Root).ActiveKeyMap(); len(got) == 0 {
+		t.Fatal("budget tab should be active with the budget module enabled")
+	}
+
+	set, err := module.Validate([]module.ID{module.Core})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, _ = m.Update(settings.ModulesChangedMsg{Enabled: set})
+	if !strings.Contains(m.View(), "4 Budget") {
+		t.Fatalf("budget tab should stay listed (disabled): %s", m.View())
+	}
+	m, _ = sendRunes(m, "4")
+	if !strings.Contains(m.View(), "not available") {
+		t.Fatalf("disabled budget tab must not be routed: %s", m.View())
+	}
+}
+
+func TestSevenFixedKeysRoute(t *testing.T) {
+	m := newRoutedRoot(t, routedConfig(module.Budget))
+	for _, k := range []string{"1", "2", "3", "4", "5", "6", "7"} {
+		m, _ = sendRunes(m, k)
+		if strings.Contains(m.View(), "not available") {
+			t.Fatalf("key %s not routed with every screen wired", k)
+		}
+	}
+}
+
+func TestThemeChangedRebuildsAndKeepsScreen(t *testing.T) {
+	m := newRoutedRoot(t, routedConfig())
+	m, _ = sendRunes(m, "7")
+	m, cmd := m.Update(settings.ThemeChangedMsg{Theme: "mocha"})
+	if cmd == nil {
+		t.Fatal("theme change should reload the active screen")
+	}
+	if m.(*tui.Root).ActiveKeyMap() == nil {
+		t.Fatal("settings tab should survive a theme change")
 	}
 }

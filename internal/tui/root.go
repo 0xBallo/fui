@@ -12,9 +12,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 	"github.com/0xballo/fui/internal/tui/screens"
 	"github.com/0xballo/fui/internal/tui/screens/accounts"
+	"github.com/0xballo/fui/internal/tui/screens/budget"
 	"github.com/0xballo/fui/internal/tui/screens/dashboard"
+	"github.com/0xballo/fui/internal/tui/screens/importer"
+	"github.com/0xballo/fui/internal/tui/screens/report"
+	"github.com/0xballo/fui/internal/tui/screens/settings"
 	"github.com/0xballo/fui/internal/tui/screens/transactions"
 	"github.com/0xballo/fui/internal/tui/theme"
 )
@@ -43,23 +48,40 @@ type UseCases interface {
 // Catppuccin flavors, "terminal", or "high-contrast"), the light/dark flavors "auto" picks
 // between, and the first day of the accounting month (1..31, see domain.MonthPeriod) used by the
 // dashboard's spending and runway reports.
+//
+// Modules is the enabled module set; a v0.2 screen is routed only when its use cases below are
+// set and its module is enabled, so a zero Config yields the three MVP tabs.
 type Config struct {
 	Locale        domain.Locale
 	Theme         string
 	ThemeLight    string
 	ThemeDark     string
 	MonthStartDay int
+
+	Modules module.Set
+	// Budget backs the Budget tab (module budget); Report the Reports tab and Importer the Import
+	// tab (both core). Settings, ModuleConfig and ThemeConfig back the Settings tab (core).
+	Budget       budget.UseCases
+	Report       report.UseCases
+	Importer     importer.UseCases
+	Settings     settings.UseCases
+	ModuleConfig settings.ModuleConfig
+	ThemeConfig  settings.ThemeConfig
 }
 
-// Root is the top-level Bubble Tea model: it routes between the MVP screens (keys 1/2/3),
+// Root is the top-level Bubble Tea model: it routes between the screens (fixed keys 1..7),
 // surfaces errors and status messages on a status bar, and renders a help overlay from every
 // screen's keymap.
 type Root struct {
+	uc  UseCases
+	cfg Config
 	loc domain.Locale
 	th  theme.Theme
 	km  KeyMap
 
-	tabs   [3]screens.Screen
+	// tabs is indexed by screens.ID; a nil entry is a screen that is not routed (module disabled
+	// or no use cases wired) and renders as a disabled tab.
+	tabs   [len(tabNames)]screens.Screen
 	active screens.ID
 
 	width, height int
@@ -74,18 +96,54 @@ var _ tea.Model = (*Root)(nil)
 // "auto" when unset; "auto" and "high-contrast" detect the terminal's background with
 // theme.OSCDetector (OSC 11, falling back to COLORFGBG, then assuming a dark background).
 func New(uc UseCases, cfg Config) *Root {
-	loc := cfg.Locale
-	if loc == "" {
-		loc = domain.LocaleENUS
+	if cfg.Locale == "" {
+		cfg.Locale = domain.LocaleENUS
 	}
-	th := theme.Resolve(theme.Config{
+	r := &Root{uc: uc, cfg: cfg, km: DefaultKeyMap()}
+	r.rebuild()
+	return r
+}
+
+// rebuild resolves the theme and rebuilds every routed screen from r.cfg. Screens keep no state
+// across visits, so replacing them is how a module or theme change takes effect without a
+// restart.
+func (r *Root) rebuild() {
+	cfg := r.cfg
+	r.loc = cfg.Locale
+	r.th = theme.Resolve(theme.Config{
 		Theme: cfg.Theme, ThemeLight: cfg.ThemeLight, ThemeDark: cfg.ThemeDark,
 	}, theme.OSCDetector{})
-	r := &Root{loc: loc, th: th, km: DefaultKeyMap()}
-	r.tabs[screens.TabDashboard] = dashboard.New(uc, loc, th, cfg.MonthStartDay)
-	r.tabs[screens.TabTransactions] = transactions.New(uc, loc, th)
-	r.tabs[screens.TabAccounts] = accounts.New(uc, loc, th)
-	return r
+	r.tabs = [len(tabNames)]screens.Screen{}
+	r.tabs[screens.TabDashboard] = dashboard.New(r.uc, r.loc, r.th, cfg.MonthStartDay)
+	r.tabs[screens.TabTransactions] = transactions.New(r.uc, r.loc, r.th)
+	r.tabs[screens.TabAccounts] = accounts.New(r.uc, r.loc, r.th)
+	if cfg.Budget != nil && cfg.Modules.Has(module.Budget) {
+		r.tabs[screens.TabBudget] = budget.New(cfg.Budget, r.loc, r.th)
+	}
+	if cfg.Report != nil {
+		r.tabs[screens.TabReports] = report.New(cfg.Report, r.loc, cfg.MonthStartDay, r.th)
+	}
+	if cfg.Importer != nil {
+		r.tabs[screens.TabImport] = importer.New(cfg.Importer, r.loc, r.th)
+	}
+	if cfg.Settings != nil && cfg.ModuleConfig != nil && cfg.ThemeConfig != nil {
+		r.tabs[screens.TabSettings] = settings.New(cfg.Settings, cfg.ModuleConfig, cfg.ThemeConfig, r.th)
+	}
+	if r.tabs[r.active] == nil {
+		r.active = screens.TabDashboard
+	}
+	if r.height > 0 {
+		r.resize()
+	}
+}
+
+func (r *Root) resize() {
+	h := max(1, r.height-reservedRows)
+	for _, scr := range r.tabs {
+		if scr != nil {
+			scr.SetSize(r.width, h)
+		}
+	}
 }
 
 // Run starts the program over uc and cfg and blocks until the user quits or ctx is cancelled.
@@ -105,11 +163,16 @@ func (r *Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		r.width, r.height = msg.Width, msg.Height
-		h := max(1, r.height-reservedRows)
-		for _, scr := range r.tabs {
-			scr.SetSize(r.width, h)
-		}
+		r.resize()
 		return r, nil
+	case settings.ModulesChangedMsg:
+		r.cfg.Modules = msg.Enabled
+		r.rebuild()
+		return r, r.tabs[r.active].Init()
+	case settings.ThemeChangedMsg:
+		r.cfg.Theme = msg.Theme
+		r.rebuild()
+		return r, r.tabs[r.active].Init()
 	case screens.ErrorMsg:
 		r.err, r.status = msg.Err, ""
 		return r, nil
@@ -144,16 +207,24 @@ func (r *Root) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return r.switchTo(screens.TabTransactions)
 		case key.Matches(msg, r.km.Accounts):
 			return r.switchTo(screens.TabAccounts)
+		case key.Matches(msg, r.km.Budget):
+			return r.switchTo(screens.TabBudget)
+		case key.Matches(msg, r.km.Reports):
+			return r.switchTo(screens.TabReports)
+		case key.Matches(msg, r.km.Import):
+			return r.switchTo(screens.TabImport)
+		case key.Matches(msg, r.km.Settings):
+			return r.switchTo(screens.TabSettings)
 		}
 	}
 	return r.forward(msg)
 }
 
-// switchTo activates target (ignoring the v0.2 tabs, which have no screen yet) and reloads its
-// data, since screens never keep optimistic state between visits.
+// switchTo activates target (ignoring tabs with no screen: module disabled or not wired) and
+// reloads its data, since screens never keep optimistic state between visits.
 func (r *Root) switchTo(target screens.ID) (tea.Model, tea.Cmd) {
-	if target < 0 || int(target) >= len(r.tabs) {
-		r.status = "that screen is not available yet"
+	if target < 0 || int(target) >= len(r.tabs) || r.tabs[target] == nil {
+		r.status = "that screen is not available"
 		return r, nil
 	}
 	r.active, r.status, r.err = target, "", nil
@@ -184,8 +255,7 @@ func (r *Root) View() string {
 	return r.viewTabs() + "\n\n" + body + "\n\n" + r.viewStatus()
 }
 
-// tabNames are the seven screens in tab order; indexes beyond len(r.tabs) have no Screen yet
-// (v0.2) and are rendered disabled.
+// tabNames are the seven screens in tab order; a tab with no Screen is rendered disabled.
 var tabNames = [...]string{"Dashboard", "Transactions", "Accounts", "Budget", "Reports", "Import", "Settings"}
 
 func (r *Root) viewTabs() string {
@@ -193,7 +263,7 @@ func (r *Root) viewTabs() string {
 	for i, name := range tabNames {
 		label := fmt.Sprintf("%d %s", i+1, name)
 		switch {
-		case i >= len(r.tabs):
+		case r.tabs[i] == nil:
 			parts[i] = r.th.DisabledTab.Render(label)
 		case screens.ID(i) == r.active:
 			parts[i] = r.th.ActiveTab.Render(label)

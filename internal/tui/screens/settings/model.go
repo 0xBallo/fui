@@ -70,6 +70,12 @@ type ModulesChangedMsg struct {
 	Enabled module.Set
 }
 
+// ThemeChangedMsg reports that a theme was selected and persisted: the root re-themes the running
+// TUI immediately instead of waiting for a restart.
+type ThemeChangedMsg struct {
+	Theme string
+}
+
 // New builds the settings screen over uc, moduleCfg (reads and persists modules.enabled), and
 // themeCfg (reads and persists theme), rendering its own chrome with th.
 func New(uc UseCases, moduleCfg ModuleConfig, themeCfg ThemeConfig, th theme.Theme) *Model {
@@ -169,7 +175,9 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		m.currentTheme = msg.theme
 		m.themeTbl.SetRows(m.themeRows())
 		m.mode = modeList
-		return m, m.notify(fmt.Sprintf("theme saved: %s", msg.theme))
+		name := msg.theme
+		return m, tea.Batch(m.notify(fmt.Sprintf("theme saved: %s", name)),
+			func() tea.Msg { return ThemeChangedMsg{Theme: name} })
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
