@@ -29,6 +29,7 @@ func RunContract(t *testing.T, newStore func(t *testing.T) app.Store) {
 		"tags":           contractTags,
 		"payees":         contractPayees,
 		"splits":         contractSplits,
+		"loans":          contractLoans,
 		"split reassign": contractSplitReassign,
 		"budgets":        contractBudgets,
 		"recurrences":    contractRecurrences,

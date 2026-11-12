@@ -68,6 +68,7 @@ type Repos interface {
 	Tags() TagRepo
 	Payees() PayeeRepo
 	Splits() SplitRepo
+	Loans() LoanRepo
 	Budgets() BudgetRepo
 	Recurrences() RecurrenceRepo
 }
@@ -217,6 +218,25 @@ type SplitRepo interface {
 	// ReplaceSplits stores rows after checking them with domain.ValidateSplits against the
 	// transaction amount; no rows removes the split. Rows refer to existing categories.
 	ReplaceSplits(ctx context.Context, tx domain.TransactionID, rows []domain.Split) error
+}
+
+// LoanRepo stores financing contracts and their schedule versions.
+type LoanRepo interface {
+	Insert(ctx context.Context, loan domain.Loan) (domain.Loan, error)
+	Update(ctx context.Context, loan domain.Loan) error
+	Delete(ctx context.Context, id domain.LoanID) error
+	Get(ctx context.Context, id domain.LoanID) (domain.Loan, error)
+	// List returns every loan ordered by ID.
+	List(ctx context.Context) ([]domain.Loan, error)
+	// AddScheduleVersion stores one schedule version and all its installments atomically.
+	AddScheduleVersion(ctx context.Context, schedule domain.Schedule) error
+	// ScheduleAt returns the newest schedule version whose ValidFrom is on or before at.
+	ScheduleAt(ctx context.Context, loanID domain.LoanID, at domain.Date) (domain.Schedule, error)
+	InsertEvent(ctx context.Context, event domain.LoanEvent) (domain.LoanEvent, error)
+	// ListEvents returns the loan events ordered by date, then by insertion order.
+	ListEvents(ctx context.Context, loanID domain.LoanID) ([]domain.LoanEvent, error)
+	LinkInstallment(ctx context.Context, loanID domain.LoanID, scheduleFrom, due domain.Date, txID domain.TransactionID) error
+	UnlinkInstallment(ctx context.Context, loanID domain.LoanID, scheduleFrom, due domain.Date) error
 }
 
 // BudgetRepo stores budgets (caps and envelopes), their monthly amount overrides, and the

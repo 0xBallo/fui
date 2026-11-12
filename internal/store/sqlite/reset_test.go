@@ -83,7 +83,7 @@ func seed(t tb, s *Store, accounts, salt int) {
 		exec(`INSERT INTO connector_account_refs (connector, ref, account_id)
 			VALUES ('c', ?, (SELECT id FROM accounts WHERE name = ?))`, fmt.Sprintf("r%d_%d", salt, i), name)
 	}
-	exec(`INSERT INTO fx_rates (currency, date, rate_scaled) VALUES ('USD', '2026-01-01', 1000000)`)
+	exec(`INSERT OR IGNORE INTO fx_rates (currency, date, rate_scaled) VALUES ('USD', '2026-01-01', 1000000)`)
 	exec(`INSERT INTO import_batches (connector, source, source_sha256, imported_at) VALUES ('c', 's', 'x', '2026-01-01T00:00:00Z')`)
 	exec(`INSERT INTO transfer_groups (fee_minor) VALUES (0)`)
 	exec(`INSERT OR IGNORE INTO tags (name) VALUES ('trip')`)
@@ -111,6 +111,16 @@ func seed(t tb, s *Store, accounts, salt int) {
 		exec(`UPDATE transactions
 			SET recurrence_id = (SELECT id FROM recurrences LIMIT 1), due_date = '2026-01-05'
 			WHERE id = (SELECT id FROM transactions ORDER BY id LIMIT 1)`)
+		exec(`INSERT INTO loans (kind, principal_minor, currency, disbursed_on, term_months, rate_type, debit_account_id)
+			VALUES ('loan', 100000, 'EUR', '2026-01-01', 24, 'fixed',
+				(SELECT id FROM accounts WHERE name = ? LIMIT 1))`, fmt.Sprintf("Acc%d_%d", salt, 1))
+		exec(`INSERT INTO loan_schedules (loan_id, valid_from, origin, rate_basis_points)
+			VALUES ((SELECT id FROM loans ORDER BY id DESC LIMIT 1), '2026-01-01', 'computed', 350)`)
+		exec(`INSERT INTO loan_installments (schedule_id, due_date, principal_minor, interest_minor, fees_minor, remaining_minor, transaction_id)
+			VALUES ((SELECT id FROM loan_schedules ORDER BY id DESC LIMIT 1), '2026-02-01', 1000, 100, 0, 99000,
+				(SELECT id FROM transactions ORDER BY id LIMIT 1))`)
+		exec(`INSERT INTO loan_events (loan_id, kind, event_date, new_rate_basis_points)
+			VALUES ((SELECT id FROM loans ORDER BY id DESC LIMIT 1), 'rate_change', '2026-02-15', 320)`)
 	}
 }
 
@@ -141,7 +151,9 @@ func assertEmptyExceptCategories(t tb, s *Store) {
 	t.Helper()
 	for _, table := range []string{
 		"accounts", "transactions", "transfer_groups", "import_batches", "fx_rates",
-		"connector_account_refs", "transaction_tags", "transaction_splits", "rules", "recurrences",
+		"connector_account_refs", "transaction_tags", "transaction_splits", "rules",
+		"loans", "loan_schedules", "loan_installments", "loan_events",
+		"recurrences",
 	} {
 		if n := count(t, s, table); n != 0 {
 			t.Errorf("table %s has %d rows after reset, want 0", table, n)
@@ -242,7 +254,11 @@ func TestResetKeepSettingsProperty(t *testing.T) {
 			rt.Fatalf("Reset: %v", err)
 		}
 
-		for _, table := range []string{"accounts", "transactions", "transfer_groups", "import_batches", "fx_rates", "connector_account_refs"} {
+		for _, table := range []string{
+			"accounts", "transactions", "transfer_groups", "import_batches", "fx_rates", "connector_account_refs",
+			"loans", "loan_schedules", "loan_installments", "loan_events",
+			"recurrences",
+		} {
 			if n := count(rt, s, table); n != 0 {
 				rt.Fatalf("table %s has %d rows after reset, want 0", table, n)
 			}

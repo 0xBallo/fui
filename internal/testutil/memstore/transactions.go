@@ -69,6 +69,11 @@ func (t transactions) Delete(_ context.Context, id domain.TransactionID) error {
 	delete(t.st.Txs, id)
 	delete(t.st.TxTags, id) // ON DELETE CASCADE in the SQLite store
 	delete(t.st.Splits, id)
+	for key, linked := range t.st.InstallmentLinks {
+		if linked == id {
+			delete(t.st.InstallmentLinks, key)
+		}
+	}
 	return nil
 }
 

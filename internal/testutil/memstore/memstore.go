@@ -27,52 +27,74 @@ type fxKey struct {
 type refKey struct{ connector, ref string }
 
 type state struct {
-	Accounts   map[domain.AccountID]domain.Account
-	Txs        map[domain.TransactionID]domain.Transaction
-	Categories map[domain.CategoryID]domain.Category
-	Rules      map[string]domain.Rule
-	Groups     map[domain.TransferGroupID]domain.Money
-	FX         map[fxKey]domain.FXRate
-	Batches    map[domain.ImportBatchID]app.ImportBatch
-	Refs       map[refKey]domain.AccountID
-	Tags       map[domain.TagID]domain.Tag
-	TxTags     map[domain.TransactionID][]domain.TagID
-	Payees     map[domain.PayeeID]domain.Payee
-	Splits     map[domain.TransactionID][]domain.Split
-	Budgets    map[domain.BudgetID]domain.Budget
-	Moves      []domain.BudgetMove
-	Recurs     map[app.RecurrenceID]app.Recurrence
-	LastID     map[string]int64
+	Accounts         map[domain.AccountID]domain.Account
+	Txs              map[domain.TransactionID]domain.Transaction
+	Categories       map[domain.CategoryID]domain.Category
+	Rules            map[string]domain.Rule
+	Groups           map[domain.TransferGroupID]domain.Money
+	FX               map[fxKey]domain.FXRate
+	Batches          map[domain.ImportBatchID]app.ImportBatch
+	Refs             map[refKey]domain.AccountID
+	Tags             map[domain.TagID]domain.Tag
+	TxTags           map[domain.TransactionID][]domain.TagID
+	Payees           map[domain.PayeeID]domain.Payee
+	Splits           map[domain.TransactionID][]domain.Split
+	Loans            map[domain.LoanID]domain.Loan
+	LoanSchedules    map[loanScheduleKey]domain.Schedule
+	LoanEvents       map[domain.LoanID][]domain.LoanEvent
+	InstallmentLinks map[loanInstallmentKey]domain.TransactionID
+	Budgets          map[domain.BudgetID]domain.Budget
+	Moves            []domain.BudgetMove
+	Recurs           map[app.RecurrenceID]app.Recurrence
+	LastID           map[string]int64
 }
 
 func newState() *state {
 	return &state{
-		Accounts:   map[domain.AccountID]domain.Account{},
-		Txs:        map[domain.TransactionID]domain.Transaction{},
-		Categories: map[domain.CategoryID]domain.Category{},
-		Rules:      map[string]domain.Rule{},
-		Groups:     map[domain.TransferGroupID]domain.Money{},
-		FX:         map[fxKey]domain.FXRate{},
-		Batches:    map[domain.ImportBatchID]app.ImportBatch{},
-		Refs:       map[refKey]domain.AccountID{},
-		Tags:       map[domain.TagID]domain.Tag{},
-		TxTags:     map[domain.TransactionID][]domain.TagID{},
-		Payees:     map[domain.PayeeID]domain.Payee{},
-		Splits:     map[domain.TransactionID][]domain.Split{},
-		Budgets:    map[domain.BudgetID]domain.Budget{},
-		Recurs:     map[app.RecurrenceID]app.Recurrence{},
-		LastID:     map[string]int64{},
+		Accounts:         map[domain.AccountID]domain.Account{},
+		Txs:              map[domain.TransactionID]domain.Transaction{},
+		Categories:       map[domain.CategoryID]domain.Category{},
+		Rules:            map[string]domain.Rule{},
+		Groups:           map[domain.TransferGroupID]domain.Money{},
+		FX:               map[fxKey]domain.FXRate{},
+		Batches:          map[domain.ImportBatchID]app.ImportBatch{},
+		Refs:             map[refKey]domain.AccountID{},
+		Tags:             map[domain.TagID]domain.Tag{},
+		TxTags:           map[domain.TransactionID][]domain.TagID{},
+		Payees:           map[domain.PayeeID]domain.Payee{},
+		Splits:           map[domain.TransactionID][]domain.Split{},
+		Loans:            map[domain.LoanID]domain.Loan{},
+		LoanSchedules:    map[loanScheduleKey]domain.Schedule{},
+		LoanEvents:       map[domain.LoanID][]domain.LoanEvent{},
+		InstallmentLinks: map[loanInstallmentKey]domain.TransactionID{},
+		Budgets:          map[domain.BudgetID]domain.Budget{},
+		Recurs:           map[app.RecurrenceID]app.Recurrence{},
+		LastID:           map[string]int64{},
 	}
 }
 
 func (s *state) clone() *state {
 	return &state{
-		Accounts: maps.Clone(s.Accounts), Txs: maps.Clone(s.Txs), Categories: maps.Clone(s.Categories),
-		Rules: maps.Clone(s.Rules), Groups: maps.Clone(s.Groups), FX: maps.Clone(s.FX), Batches: maps.Clone(s.Batches),
-		Refs: maps.Clone(s.Refs), LastID: maps.Clone(s.LastID),
-		Tags: maps.Clone(s.Tags), TxTags: maps.Clone(s.TxTags), Payees: maps.Clone(s.Payees), Splits: maps.Clone(s.Splits),
-		Budgets: maps.Clone(s.Budgets), Moves: slices.Clone(s.Moves),
-		Recurs: maps.Clone(s.Recurs),
+		Accounts:         maps.Clone(s.Accounts),
+		Txs:              maps.Clone(s.Txs),
+		Categories:       maps.Clone(s.Categories),
+		Rules:            maps.Clone(s.Rules),
+		Groups:           maps.Clone(s.Groups),
+		FX:               maps.Clone(s.FX),
+		Batches:          maps.Clone(s.Batches),
+		Refs:             maps.Clone(s.Refs),
+		LastID:           maps.Clone(s.LastID),
+		Tags:             maps.Clone(s.Tags),
+		TxTags:           maps.Clone(s.TxTags),
+		Payees:           maps.Clone(s.Payees),
+		Splits:           maps.Clone(s.Splits),
+		Loans:            maps.Clone(s.Loans),
+		LoanSchedules:    cloneSchedules(s.LoanSchedules),
+		LoanEvents:       cloneEvents(s.LoanEvents),
+		InstallmentLinks: maps.Clone(s.InstallmentLinks),
+		Budgets:          maps.Clone(s.Budgets),
+		Moves:            slices.Clone(s.Moves),
+		Recurs:           maps.Clone(s.Recurs),
 	}
 }
 
@@ -140,6 +162,7 @@ func (r *repos) Imports() app.ImportRepo           { return imports{r} }
 func (r *repos) Tags() app.TagRepo                 { return tags{r} }
 func (r *repos) Payees() app.PayeeRepo             { return payees{r} }
 func (r *repos) Splits() app.SplitRepo             { return splits{r} }
+func (r *repos) Loans() app.LoanRepo               { return loans{r} }
 func (r *repos) Budgets() app.BudgetRepo           { return budgets{r} }
 func (r *repos) Recurrences() app.RecurrenceRepo   { return recurrences{r} }
 
