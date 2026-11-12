@@ -175,11 +175,11 @@ V14 and V16 in the same wave (separate files, but a shared plan struct, so coord
 table changes (`recurrence_id`, `due_date`) alter an MVP-critical table: the migration test must run on a populated archive.
 
 Open questions (product decision):
-2. Envelope mode: are credit cards/loans excluded from "liquidity accounts included in the budget", and is inclusion a per-account flag?
-3. Tag-based budgets overlapping category budgets: only reported separately (as in the spec) or also deducted from "Da assegnare"?
-4. Pending recurrences: should `recurring run` run automatically at every launch (needs a clock-driven hook) or only on demand?
-5. Variable-rate loan: is the new rate always entered by the user, or inferred from a mismatched debit (spec: "proposes")? Default plan: proposes only.
-6. Reconciled-edit confirmation: also for bulk edits and rules apply (`--dry-run` shows them), or hard block?
-7. Rule conditions scope: regex allowed, or only contains/equals (safer for performance and testing)?
-8. Net worth report granularity and whether archived accounts count in historical series.
-10. Dynamic completion reading the archive: acceptable when the archive is locked or missing (fall back to no suggestions)?
+1. Envelope mode: are credit cards/loans excluded from "liquidity accounts included in the budget", and is inclusion a per-account flag?
+2. Tag-based budgets overlapping category budgets: only reported separately (as in the spec) or also deducted from "Da assegnare"?
+3. Pending recurrences: should `recurring run` run automatically at every launch (needs a clock-driven hook) or only on demand?
+4. Variable-rate loan: is the new rate always entered by the user, or inferred from a mismatched debit (spec: "proposes")? Default plan: proposes only.
+5. Reconciled-edit confirmation: also for bulk edits and rules apply (`--dry-run` shows them), or hard block?
+6. Rule conditions scope: regex allowed, or only contains/equals (safer for performance and testing)?
+7. Net worth report granularity and whether archived accounts count in historical series.
+8. Dynamic completion reading the archive: acceptable when the archive is locked or missing (fall back to no suggestions)?
