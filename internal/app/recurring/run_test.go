@@ -83,11 +83,11 @@ func TestRunRespectsEnd(t *testing.T) {
 		t.Fatalf("ApplyRun: %v", err)
 	}
 	got := e.mustGet(t, rec.ID)
-	if got.NextDate != must(domain.ParseDate("2026-02-01")) {
-		t.Errorf("next_date = %s, want 2026-02-01 (capped at the last occurrence: see run.go's occurrences doc)", got.NextDate)
+	if !got.NextDate.IsZero() {
+		t.Errorf("next_date = %s, want zero (recurrence exhausted by End)", got.NextDate)
 	}
 
-	// Running again after exhaustion creates nothing new, even though the recurrence stays "due".
+	// Running again after exhaustion creates nothing new: Due() no longer lists it.
 	p2, err := e.svc.PlanRun(ctx, e.all, recurring.RunRequest{Until: "2026-12-01"})
 	if err != nil {
 		t.Fatalf("PlanRun after exhaustion: %v", err)
@@ -118,7 +118,8 @@ func TestRunAfterConfirmDoesNotDuplicateExhaustedOccurrence(t *testing.T) {
 		t.Fatalf("ApplyConfirm: %v", err)
 	}
 
-	// Running again must not recreate the now-booked occurrence (see existingOccurrenceDates).
+	// Running again must not recreate the now-booked occurrence: the recurrence is exhausted
+	// (zero NextDate), so Due() no longer lists it.
 	p2, err := e.svc.PlanRun(ctx, e.all, recurring.RunRequest{Until: "2026-12-01"})
 	if err != nil {
 		t.Fatalf("PlanRun after confirm: %v", err)
@@ -172,12 +173,28 @@ func TestSkipAdvancesWithoutCreatingTx(t *testing.T) {
 	}
 }
 
-func TestSkipExhaustedErrors(t *testing.T) {
+func TestSkipExhaustsRecurrence(t *testing.T) {
 	e := newEnv(t)
 	rec := e.addRecurrence(t, func(r *recurring.AddRequest) { r.End = "2026-01-01" }) // single occurrence
 	ctx := context.Background()
 
-	_, err := e.svc.PlanSkip(ctx, e.all, rec.ID)
+	p, err := e.svc.PlanSkip(ctx, e.all, rec.ID)
+	if err != nil {
+		t.Fatalf("PlanSkip: %v", err)
+	}
+	if !p.Recurrence.NextDate.IsZero() {
+		t.Fatalf("NextDate = %s, want zero (exhausted)", p.Recurrence.NextDate)
+	}
+	if err := e.svc.ApplySkip(ctx, p); err != nil {
+		t.Fatalf("ApplySkip: %v", err)
+	}
+	got := e.mustGet(t, rec.ID)
+	if !got.NextDate.IsZero() {
+		t.Fatalf("persisted next_date = %s, want zero", got.NextDate)
+	}
+
+	// Skipping an already-exhausted recurrence has nothing left to skip to.
+	_, err = e.svc.PlanSkip(ctx, e.all, rec.ID)
 	var de *domain.Error
 	if !errors.As(err, &de) || de.Code != domain.CodeInvalidValue {
 		t.Fatalf("err = %v, want domain.CodeInvalidValue", err)

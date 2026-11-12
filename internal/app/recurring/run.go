@@ -41,14 +41,7 @@ func (s *Service) PlanRun(ctx context.Context, enabled module.Set, req RunReques
 			return fmt.Errorf("list due recurrences: %w", err)
 		}
 		for _, rec := range due {
-			if rec.NextDate.IsZero() {
-				continue // exhausted: Due() may still list it since the zero Date sorts first
-			}
-			existing, err := existingOccurrenceDates(ctx, r, rec)
-			if err != nil {
-				return err
-			}
-			created, next, err := occurrences(rec, until, existing)
+			created, next, err := occurrences(rec, until)
 			if err != nil {
 				return err
 			}
@@ -66,75 +59,37 @@ func (s *Service) PlanRun(ctx context.Context, enabled module.Set, req RunReques
 	return out, err
 }
 
-// existingOccurrenceDates returns, keyed by due date, the transactions already linked to rec
-// (of any status): once the last in-range occurrence of an End-bound recurrence has been
-// created, its NextDate stays capped at that occurrence (see occurrences), so Expand keeps
-// re-proposing the same date on every later run; this lets occurrences recognise and skip it.
-func existingOccurrenceDates(ctx context.Context, r app.Repos, rec app.Recurrence) (map[domain.Date]bool, error) {
-	f, err := domain.NewTxFilter(domain.TxFilterSpec{AccountIDs: []domain.AccountID{rec.AccountID}})
-	if err != nil {
-		return nil, fmt.Errorf("existing occurrences filter: %w", err)
-	}
-	txs, err := r.Transactions().List(ctx, f, nil, 0)
-	if err != nil {
-		return nil, fmt.Errorf("list existing occurrences: %w", err)
-	}
-	want := domain.RecurrenceID(rec.ID)
-	out := map[domain.Date]bool{}
-	for _, tx := range txs {
-		if tx.RecurrenceID != want {
-			continue
-		}
-		d := tx.DueDate
-		if d.IsZero() {
-			d = tx.Date
-		}
-		out[d] = true
-	}
-	return out, nil
-}
-
 // occurrences expands rec from its next date through until and returns the pending transactions
-// to create (skipping dates already in existing) plus the next date to persist afterwards.
-//
-// domain.Advance documents that it zeroes NextDate once a recurrence is exhausted by End, but
-// domain.NewRecurrence (revalidated by the repo on every Update) rejects a zero NextDate, so that
-// state can never be persisted. occurrences works around this: once advancing would exhaust the
-// recurrence, NextDate is instead capped at the date of that last occurrence (itself always a
-// valid, in-range date) rather than moved past it. Expand then keeps re-proposing that same date
-// on every later run, which existingOccurrenceDates recognises so it is never recreated. See
-// REQ in .task-report.md: domain.NewRecurrence should accept a zero NextDate.
-func occurrences(rec app.Recurrence, until domain.Date, existing map[domain.Date]bool) ([]domain.Transaction, domain.Date, error) {
+// to create plus the next date to persist afterwards (the zero Date once the recurrence is
+// exhausted by its End; see domain.Advance and domain.Recurrence.Exhausted).
+func occurrences(rec app.Recurrence, until domain.Date) ([]domain.Transaction, domain.Date, error) {
 	dom := toDomain(rec)
 	dates := domain.Expand(dom, dom.NextDate, until)
 	if len(dates) == 0 {
 		return nil, dom.NextDate, nil
 	}
 	created := make([]domain.Transaction, 0, len(dates))
-	cur, next := dom, dom.NextDate
+	cur := dom
 	for _, d := range dates {
-		if !existing[d] {
-			tx, err := domain.NewTransaction(domain.Transaction{
-				AccountID: rec.AccountID, Date: d, DueDate: d, Amount: rec.Amount, Description: rec.Description,
-				CategoryID: rec.CategoryID, Status: domain.StatusPending, Kind: domain.KindPayment,
-				RecurrenceID: domain.RecurrenceID(rec.ID),
-			})
-			if err != nil {
-				return nil, domain.Date{}, fmt.Errorf("occurrence of recurrence %d on %s: %w", rec.ID, d, err)
-			}
-			created = append(created, tx)
+		tx, err := domain.NewTransaction(domain.Transaction{
+			AccountID: rec.AccountID, Date: d, DueDate: d, Amount: rec.Amount, Description: rec.Description,
+			CategoryID: rec.CategoryID, Status: domain.StatusPending, Kind: domain.KindPayment,
+			RecurrenceID: domain.RecurrenceID(rec.ID),
+		})
+		if err != nil {
+			return nil, domain.Date{}, fmt.Errorf("occurrence of recurrence %d on %s: %w", rec.ID, d, err)
 		}
+		created = append(created, tx)
 		advanced, err := domain.Advance(cur)
 		if err != nil {
 			return nil, domain.Date{}, fmt.Errorf("advance recurrence %d: %w", rec.ID, err)
 		}
-		if advanced.NextDate.IsZero() {
-			next = d // exhausted: cap at the last occurrence instead of persisting a zero date
+		cur = advanced
+		if cur.Exhausted() {
 			break
 		}
-		cur, next = advanced, advanced.NextDate
 	}
-	return created, next, nil
+	return created, cur.NextDate, nil
 }
 
 func occurrenceChanges(rec app.Recurrence, created []domain.Transaction) []app.Change {
@@ -210,20 +165,18 @@ func (s *Service) PlanSkip(ctx context.Context, enabled module.Set, id app.Recur
 		if err != nil {
 			return fmt.Errorf("advance recurrence %d: %w", id, err)
 		}
-		if next.NextDate.IsZero() {
-			// domain.NewRecurrence rejects a zero NextDate (see occurrences' doc in run.go), so
-			// skipping past the recurrence's last occurrence cannot be persisted: refuse it.
-			return &domain.Error{
-				Code: domain.CodeInvalidValue, Message: "recurrence has no further occurrence to skip to",
-				Details: map[string]any{"field": "next_date"},
-			}
-		}
 		rec.NextDate = next.NextDate
+		fields := map[string]any{"id": int64(id), "skipped": skipped.String()}
+		if rec.NextDate.IsZero() {
+			fields["exhausted"] = true
+		} else {
+			fields["next_date"] = rec.NextDate.String()
+		}
 		out = SkipPlan{
 			Plan: app.Plan{Changes: []app.Change{{
 				Op: app.OpUpdate, Entity: EntityRecurrence,
 				Summary: fmt.Sprintf("skip occurrence of recurrence %d on %s", id, skipped),
-				Fields:  map[string]any{"id": int64(id), "skipped": skipped.String(), "next_date": rec.NextDate.String()},
+				Fields:  fields,
 			}}},
 			Recurrence: rec,
 		}
