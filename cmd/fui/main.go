@@ -21,6 +21,7 @@ import (
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/app/reporting"
+	"github.com/0xballo/fui/internal/app/rules"
 	"github.com/0xballo/fui/internal/cli"
 	"github.com/0xballo/fui/internal/cli/render"
 	"github.com/0xballo/fui/internal/clock"
@@ -142,6 +143,7 @@ func wireStore(ctx context.Context, cfg *config.Config, appClock app.Clock, deps
 		Profiles: cfg.Import.Profiles,
 		Currency: cfg.Currency,
 	})
+	deps.Rules = rules.New(store, store)
 	deps.RunTUI = func(ctx context.Context) error {
 		return tui.Run(ctx, newTUIUseCases(deps.Service, rep), tui.Config{
 			Locale: domain.Locale(cfg.Locale), Theme: cfg.Theme,

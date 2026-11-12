@@ -11,6 +11,7 @@ import (
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/app/reporting"
+	"github.com/0xballo/fui/internal/app/rules"
 	"github.com/0xballo/fui/internal/config"
 	"github.com/0xballo/fui/internal/domain"
 )
@@ -26,6 +27,8 @@ type Deps struct {
 	Importing *importing.Service
 	// Reporting runs the read-only report and KPI use cases.
 	Reporting Reporting
+	// Rules runs the categorization-rule CRUD/test/apply use cases.
+	Rules *rules.Service
 	// Config is the resolved configuration; AgentMode reflects FUI_AGENT, Locale and Currency
 	// drive parsing and formatting.
 	Config *config.Config
