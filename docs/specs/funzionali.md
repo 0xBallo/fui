@@ -2,6 +2,8 @@
 
 Nov 9, 2026 · @Mattia Ballo
 
+**Versione 1.2** — 12 novembre 2026 · le modifiche rispetto alle versioni precedenti sono nella sezione Cronologia delle versioni
+
 ## Panoramica e obiettivi
 
 FUI è un gestore di finanze personali da terminale, con una CLI scriptabile e una TUI interattiva, che conserva tutti i dati in locale senza alcun servizio cloud.
@@ -22,6 +24,37 @@ FUI è un gestore di finanze personali da terminale, con una CLI scriptabile e u
 - **Importi esatti:** nessun numero in virgola mobile; gli importi sono interi nell'unità minima della valuta (centesimi).
 - **Tastiera prima di tutto:** ogni azione della TUI è raggiungibile senza mouse.
 
+## Moduli
+
+FUI è modulare: il nucleo è sempre attivo e ogni altra area si attiva solo se serve, così chi vuole un semplice expense tracker non vede investimenti, mutui o simulazioni.
+
+| Modulo | Cosa attiva | Attivo di default | Dipende da |
+| --- | --- | --- | --- |
+| Nucleo | Conti di liquidità e carte, transazioni, trasferimenti, categorie, tag, regole, import ed export, backup, ricerca, report spese e flusso di cassa, KPI di autonomia | sempre | — |
+| Budget | Tetti o buste, schermata Budget, report budget vs effettivo | sì | — |
+| Ricorrenze | Ricorrenze e previsione di cassa | sì | — |
+| Mutui e prestiti | Finanziamenti, piani di ammortamento, eventi, report debito residuo e interessi pagati | no | Ricorrenze |
+| Investimenti | Conti di investimento, titoli, operazioni e posizioni | no | — |
+| Crypto | Wallet e cripto-attività, con quantità frazionarie | no | Investimenti |
+| Beni | Immobili, veicoli e altri beni con valutazioni manuali, collegabili a un mutuo | no | — |
+| Analisi | Analisi automatiche e report salvati | sì | — |
+| Simulazioni | Rendimento investimenti, PAC e flussi di cassa | no | Ricorrenze |
+| AI | Funzioni AI con modello locale, inclusa la simulazione Monte Carlo | no | Simulazioni |
+
+**Attivazione**
+
+- Al primo avvio `fui init` chiede un profilo: Expense tracker (nucleo, budget, ricorrenze), Completo (tutti i moduli) o Personalizzato; da CLI si sceglie con `--preset` o `--modules`.
+- In seguito i moduli si attivano e disattivano con `fui module enable` e `fui module disable` o dalla schermata Impostazioni; la scelta è salvata nella chiave `modules.enabled`.
+- Attivare un modulo attiva anche quelli da cui dipende, con un avviso; disattivarlo chiede conferma se altri moduli attivi ne dipendono.
+
+**Effetti di un modulo disattivato**
+
+- I suoi comandi spariscono dall'aiuto e da `fui help --json`; se invocati falliscono con un messaggio che spiega come attivarlo.
+- Le sue schermate e i suoi riquadri spariscono dalla TUI; i tasti delle altre schermate non cambiano.
+- I dati non vengono cancellati: restano nell'archivio, esclusi da Dashboard, report e patrimonio netto, e ricompaiono riattivando il modulo.
+- Se un import contiene record di un modulo disattivato (es. `schedule` e `installment` senza Mutui e prestiti), l'anteprima li segnala e chiede se attivare il modulo o saltarli.
+- La skill per agenti legge i moduli attivi con `fui module list --json` e propone solo comandi disponibili.
+
 ## Modello di dominio
 
 Il dominio ruota attorno a conti e transazioni; categorie, tag, budget, ricorrenze e regole servono a classificare e prevedere i movimenti.
@@ -39,8 +72,9 @@ Il dominio ruota attorno a conti e transazioni; categorie, tag, budget, ricorren
 | Ricorrenza | Modello di transazione periodica | transazione modello, regola (ogni N giorni/settimane/mesi, giorno del mese), prossima data, registrazione automatica in stato in sospeso, confermata dall'utente o da un import |
 | Regola | Classificazione automatica | condizioni su descrizione, importo, conto; azioni: imposta categoria, beneficiario, tag |
 | Valuta | Valuta di un conto | codice ISO 4217, tassi di cambio manuali per data |
-| Titolo | Strumento finanziario detenuto in un conto di investimento | nome, ticker o ISIN, tipo (azione, ETF, obbligazione, fondo, cripto), valuta, prezzi manuali per data |
+| Titolo | Strumento finanziario detenuto in un conto di investimento | nome, ticker o ISIN, tipo (azione, ETF, obbligazione, fondo, cripto), valuta, precisione della quantità (es. 8 decimali per le cripto, salvata come intero), prezzi manuali per data |
 | Operazione su titolo | Acquisto, vendita o provento; la posizione è la somma delle operazioni e vale quantità × ultimo prezzo noto | data, conto, titolo, tipo (acquisto, vendita, dividendo o cedola), quantità, prezzo unitario, commissioni, movimento di liquidità collegato |
+| Bene | Bene non finanziario dell'utente; entra nel patrimonio netto all'ultima valutazione | nome, tipo (immobile, veicolo, altro), data e valore di acquisto, valutazioni manuali per data, finanziamento collegato (opzionale) |
 | Finanziamento | Mutuo o prestito, gestito come conto passività con saldo pari al debito residuo | tipo (mutuo, prestito), capitale erogato, data di erogazione, durata, tipo di tasso (fisso, variabile, misto), conto di addebito delle rate |
 | Piano di ammortamento | Versione del piano delle rate, valida da una data | data di validità, origine (importato o calcolato), tasso; rate con scadenza, quota capitale, quota interessi, spese, debito residuo |
 | Evento di finanziamento | Fatto che cambia il piano | tipo (variazione tasso, rinegoziazione, estinzione parziale), data, nuovi valori (tasso, rata, durata, capitale rimborsato) |
@@ -77,9 +111,10 @@ Il binario si chiama `fui`: senza argomenti apre la TUI, con un sottocomando ese
 
 | Comando | Scopo | Esempio |
 | --- | --- | --- |
-| `fui init` | Crea l'archivio e le categorie predefinite | `fui init --currency EUR` |
+| `fui init` | Crea l'archivio e le categorie predefinite e sceglie i moduli | `fui init --currency EUR --preset expense` |
+| `fui module list / enable / disable` | Mostra e cambia i moduli attivi | `fui module enable investments` |
 | `fui add` | Aggiunge una transazione; data predefinita oggi | `fui add -12,50 Esselunga -c Spesa -a Contanti` |
-| `fui tx list / show / edit / rm` | Elenca e modifica transazioni con filtri | `fui tx list --from 2026-10-01 -c Ristoranti` |
+| `fui tx list / search / show / edit / rm` | Elenca, cerca e modifica transazioni con filtri | `fui tx search amazon --from 2026-01-01 --min 50` |
 | `fui transfer` | Sposta denaro tra due conti | `fui transfer 500 --from Fineco --to Risparmio` |
 | `fui account add / list / edit / archive` | Gestisce i conti e mostra i saldi | `fui account list --json` |
 | `fui category add / list / rename / merge / rm` | Gestisce le categorie | `fui category merge Bar Ristoranti` |
@@ -87,6 +122,7 @@ Il binario si chiama `fui`: senza argomenti apre la TUI, con un sottocomando ese
 | `fui budget set / list / status / assign / move` | Imposta e controlla i budget; con le buste assegna e sposta importi | `fui budget set Spesa 400 --month 2026-11` |
 | `fui recurring add / list / run / skip / confirm` | Gestisce le ricorrenze | `fui recurring run --until today` |
 | `fui loan add / show / schedule / event` | Gestisce mutui e prestiti, i piani di ammortamento e i loro eventi | `fui loan event Mutuo --rate 3,15 --from 2027-01-01` |
+| `fui asset add / list / value` | Gestisce i beni e le loro valutazioni | `fui asset value Casa 320000 --date 2026-12-31` |
 | `fui rule add / list / test / apply` | Gestisce le regole di categorizzazione | `fui rule test "AMAZON"` |
 | `fui connector list / show / test` | Elenca i connettori installati, ne mostra i parametri e ne prova l'output senza importare | `fui connector test fineco-pdf estratto.pdf` |
 | `fui import` | Importa movimenti tramite un connettore | `fui import ott.csv --connector csv --profile fineco --dry-run` |
@@ -98,6 +134,7 @@ Il binario si chiama `fui`: senza argomenti apre la TUI, con un sottocomando ese
 | `fui simulate investment / pac / cashflow / save / list / compare` | Calcola, salva e confronta scenari ipotetici senza toccare i dati | `fui simulate pac --monthly 200 --years 20 --rate 4,5` |
 | `fui reconcile` | Riconcilia un conto con un saldo noto | `fui reconcile Fineco --balance 2340,18 --date 2026-10-31` |
 | `fui backup / restore` | Copia e ripristina l'archivio | `fui backup` |
+| `fui reset` | Azzera l'archivio e lo riporta allo stato iniziale, dopo un backup | `fui reset --keep-settings` |
 | `fui skill install / show` | Installa o mostra la skill per gli agenti AI | `fui skill install --target ~/.claude/skills` |
 | `fui help` | Mostra l'aiuto; con `--json` il riferimento completo per gli agenti | `fui help --json` |
 | `fui config get / set` | Legge e modifica la configurazione | `fui config set locale it-IT` |
@@ -111,6 +148,35 @@ Il binario si chiama `fui`: senza argomenti apre la TUI, con un sottocomando ese
 - **Importi e date:** accetta virgola o punto decimale secondo il locale; date assolute (`2026-11-09`) e relative (`today`, `yesterday`, `-3d`).
 - **Anteprima:** `--dry-run` su import, applicazione regole, ricorrenze e modifiche di massa.
 - **Aiuto:** `--help` su ogni comando, con almeno un esempio; completamento per bash, zsh e fish.
+
+**Ricerca e filtri delle transazioni** — `fui tx list` elenca le transazioni con filtri, `fui tx search <testo>` aggiunge la ricerca testuale; gli stessi filtri valgono per `fui export` e per la schermata Transazioni della TUI.
+
+| Filtro | Opzioni CLI | Esempio |
+| --- | --- | --- |
+| Periodo | `--from`, `--to`, `--month`, `--year` | `--month 2026-10` |
+| Conti | `-a`, `--account` (ripetibile) | `-a Widiba -a Revolut` |
+| Categorie | `-c`, `--category` (ripetibile), `--uncategorized` | `--uncategorized` |
+| Tag | `-t`, `--tag` (ripetibile) | `-t vacanze-2026` |
+| Beneficiario | `--payee` | `--payee Esselunga` |
+| Importo | `--min`, `--max` sul valore assoluto; `--income` o `--expense` | `--min 50 --expense` |
+| Stato | `--status` (pending, booked, reconciled) | `--status pending` |
+| Natura | `--kind` (payment, transfer, investment…) | `--kind transfer` |
+| Lotto di import | `--batch` | `--batch 2026-11-10-01` |
+| Testo | argomento di `fui tx search` | `fui tx search "amazon prime"` |
+
+- Filtri diversi si combinano in AND; lo stesso filtro ripetuto vale come OR (es. due conti).
+- La ricerca testuale guarda descrizione, beneficiario e note, senza distinguere maiuscole, minuscole e accenti, con corrispondenza parziale.
+- I risultati si ordinano con `--sort` (date, amount, payee) e `--desc`, si limitano con `--limit` e mostrano in fondo il numero di righe e la somma degli importi.
+- Nella TUI `/` avvia la ricerca testuale con risultati aggiornati mentre si digita e `f` apre il pannello con gli stessi filtri; i filtri attivi restano visibili in testa alla lista.
+- Su un archivio di 100.000 transazioni una ricerca con filtri risponde in meno di 200 ms.
+
+**Reset dell'archivio** — `fui reset` riporta l'archivio allo stato iniziale, come subito dopo `fui init`.
+
+- Prima di azzerare, FUI crea sempre un backup, escluso dalla rotazione automatica finché l'utente non lo cancella.
+- In un terminale FUI chiede di digitare `reset` per confermare; senza terminale serve `--yes`.
+- Senza opzioni cancella tutto e ricrea le categorie predefinite; con `--keep-settings` conserva categorie, tag, regole, profili e associazioni dei connettori, e cancella conti, transazioni, budget, ricorrenze, finanziamenti, investimenti e simulazioni.
+- Il file di configurazione non viene toccato.
+- Se l'archivio non esiste, `fui reset` si comporta come `fui init`.
 
 ## Uso con agenti AI
 
@@ -132,7 +198,7 @@ La versione free include una skill che insegna agli agenti AI (Claude Code e alt
 
 1. Prima di ogni scrittura l'agente esegue il comando con `--dry-run` e mostra all'utente cosa cambierebbe.
 2. Scrive solo dopo la conferma dell'utente, aggiungendo `--yes`.
-3. Non cancella dati, non esegue `restore` e non modifica transazioni riconciliate senza una richiesta esplicita.
+3. Non cancella dati, non azzera l'archivio, non esegue `restore` e non modifica transazioni riconciliate senza una richiesta esplicita.
 4. Preferisce dati aggregati (report, totali) ai movimenti riga per riga, per limitare quanti dati finiscono nel contesto del modello.
 
 Se l'agente usa un modello remoto, i dati che legge escono dalla macchina: è una scelta dell'utente, coerente con il principio local-first perché FUI di suo non apre connessioni.
@@ -144,12 +210,12 @@ La TUI si apre sulla Dashboard e offre sette schermate raggiungibili con un tast
 | Tasto | Schermata | Contenuto | Azioni principali |
 | --- | --- | --- | --- |
 | 1 | Dashboard | Saldi dei conti, patrimonio netto, autonomia in mesi, spese del mese contro budget, prossime ricorrenze | Aggiunta rapida, salto alla schermata di dettaglio |
-| 2 | Transazioni | Lista filtrabile e ordinabile (data, conto, beneficiario, categoria, importo, stato) | Aggiungi, modifica, elimina, split, categorizzazione multipla, ricerca |
+| 2 | Transazioni | Lista filtrabile e ordinabile (data, conto, beneficiario, categoria, importo, stato) | Aggiungi, modifica, elimina, split, categorizzazione multipla, ricerca testuale e filtri |
 | 3 | Conti | Elenco conti con saldo; dettaglio movimenti per conto | Aggiungi, archivia, riconcilia |
 | 4 | Budget | Per tetto o busta: importo, speso, previsto, residuo con riporto, barra di avanzamento; con le buste anche il saldo Da assegnare | Imposta importo, mese precedente e successivo, copia dal mese prima, assegna e sposta tra buste |
 | 5 | Report | Report predefiniti e salvati con grafici a barre testuali e tabelle, previsione di cassa | Cambia report e periodo, esporta |
 | 6 | Import | Anteprima del file, mappatura colonne, duplicati evidenziati | Scegli connettore e profilo, includi o escludi righe, conferma |
-| 7 | Impostazioni | Categorie, tag, regole, ricorrenze, profili di import | CRUD su ogni elemento |
+| 7 | Impostazioni | Moduli attivi, categorie, tag, regole, ricorrenze, profili di import | CRUD su ogni elemento |
 
 **Scorciatoie globali**
 
@@ -493,7 +559,7 @@ Tutti i dati stanno in un unico file locale; FUI non apre connessioni di rete e 
 **Backup**
 
 - `fui backup` crea una copia datata nella directory dei backup.
-- Backup automatico prima di import, migrazioni, modifiche di massa e `restore`.
+- Backup automatico prima di import, migrazioni, modifiche di massa, reset e `restore`.
 - Conservazione configurabile, predefinita agli ultimi 10 backup.
 
 **Sicurezza e privacy**
@@ -538,9 +604,9 @@ L'MVP copre il ciclo base registra, importa, consulta; budget, ricorrenze e auto
 
 | Versione | Contenuto | Uscita quando |
 | --- | --- | --- |
-| v0.1 (MVP) | `init`; conti, transazioni, trasferimenti, categorie; CLI completa per queste entità; TUI con Dashboard, Transazioni e Conti; import tramite connettori (formato FUI, connettori esterni Widiba e Revolut, connettore CSV integrato), dedup e annullamento; multi-valuta con tassi di cambio manuali; export CSV/JSON e in formato FUI; backup manuale e automatico; report spese per categoria e flusso di cassa; KPI di autonomia; skill per agenti AI | Un mese reale di movimenti gestito solo con FUI |
+| v0.1 (MVP) | `init`; conti, transazioni, trasferimenti, categorie; CLI completa per queste entità; TUI con Dashboard, Transazioni e Conti; import tramite connettori (formato FUI, connettori esterni Widiba e Revolut, connettore CSV integrato), dedup e annullamento; multi-valuta con tassi di cambio manuali; export CSV/JSON e in formato FUI; backup manuale e automatico; report spese per categoria e flusso di cassa; KPI di autonomia; skill per agenti AI; ricerca delle transazioni con filtri; reset dell'archivio; attivazione dei moduli | Un mese reale di movimenti gestito solo con FUI |
 | v0.2 | Budget, ricorrenze, mutui e prestiti, patrimonio netto, report salvati, previsione di cassa, regole di categorizzazione, riconciliazione, split, tag, schermate Budget, Report, Import e Impostazioni, completamento shell | Budget e riconciliazione usati per due mesi consecutivi |
-| v0.3 | Connettori integrati OFX e CAMT.053, investimenti con posizioni dettagliate, analisi automatiche, simulazioni, confronto periodi, annullamento generico | Da definire |
+| v0.3 | Connettori integrati OFX e CAMT.053, investimenti con posizioni dettagliate, moduli Crypto e Beni, analisi automatiche, simulazioni, confronto periodi, annullamento generico | Da definire |
 
 **Versioni free e premium** — la versione free comprende tutte le funzioni descritte in questo documento, incluse le funzioni AI basate su un modello locale. La versione premium aggiunge la sincronizzazione dei dati su più dispositivi e le interfacce web e mobile, e permette di usare modelli AI di frontiera al posto del modello locale, ad esempio per la simulazione Monte Carlo; l'invio di dati a un modello esterno richiede un consenso esplicito. Restano da definire le funzioni AI e il modello locale da usare, il modello di distribuzione e come realizzare la sincronizzazione senza rinunciare al principio local-first.
 
@@ -578,3 +644,29 @@ Lo stack è deciso; le domande rimaste riguardano il perimetro e si possono chiu
 **Da decidere**
 
 - [ ] Raccogliere export Widiba e Revolut su periodi più lunghi per verificare causali e tipi di movimento assenti negli export di prova.
+
+## Cronologia delle versioni
+
+**Versione 1.2** — 12 novembre 2026
+
+| Sezione | Modifica |
+| --- | --- |
+| Moduli | Nuova sezione: attivazione selettiva delle funzioni, profili Expense tracker, Completo e Personalizzato, dipendenze tra moduli, effetti della disattivazione |
+| Modello di dominio | Nuova entità Bene; precisione della quantità per titolo, necessaria per le cripto-attività |
+| Requisiti funzionali — CLI | Nuovi comandi `fui module` e `fui asset`; `fui init` accetta `--preset` e `--modules` |
+| Requisiti funzionali — TUI | Le Impostazioni gestiscono i moduli attivi |
+| Perimetro MVP e roadmap | Attivazione dei moduli nell'MVP; moduli Crypto e Beni in v0.3 |
+
+**Versione 1.1** — 12 novembre 2026
+
+| Sezione | Modifica |
+| --- | --- |
+| Requisiti funzionali — CLI | Nuovo comando `fui tx search` per la ricerca testuale; `fui tx list` ora ha filtri definiti |
+| Requisiti funzionali — CLI | Nuova parte "Ricerca e filtri delle transazioni": elenco dei filtri, combinazione in AND/OR, ordinamento e limiti, uso nella TUI, obiettivo di 200 ms su 100.000 transazioni |
+| Requisiti funzionali — CLI | Nuovo comando `fui reset` e nuova parte "Reset dell'archivio": backup preventivo escluso dalla rotazione, conferma esplicita, opzione `--keep-settings`, comportamento come `fui init` se l'archivio non esiste |
+| Uso con agenti AI | La regola 3 vieta anche di azzerare l'archivio senza una richiesta esplicita |
+| Requisiti funzionali — TUI | La schermata Transazioni offre ricerca testuale e filtri |
+| Persistenza, backup, sicurezza e configurazione | Backup automatico anche prima del reset |
+| Perimetro MVP e roadmap | Ricerca delle transazioni con filtri e reset dell'archivio aggiunti all'MVP |
+
+**Versione 1.0** — 12 novembre 2026: prima versione completa delle specifiche funzionali.
