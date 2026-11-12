@@ -65,9 +65,13 @@ func (s reportingSource) ListCategories(ctx context.Context, categoryIDs []domai
 func (s reportingSource) ListTransactions(ctx context.Context, filter reporting.TransactionFilter) ([]domain.Transaction, error) {
 	var out []domain.Transaction
 	err := s.store.Read(ctx, func(r app.Repos) error {
-		txs, err := r.Transactions().List(ctx, app.TxFilter{
-			From: filter.Period.From(), To: filter.Period.To(), AccountIDs: filter.AccountIDs,
-		}, nil, 0)
+		f, err := domain.NewTxFilter(domain.TxFilterSpec{
+			From: filter.Period.From(), To: filter.Period.To(), AccountIDs: filter.AccountIDs, Desc: true,
+		})
+		if err != nil {
+			return err
+		}
+		txs, err := r.Transactions().List(ctx, f, nil, 0)
 		out = txs
 		return err
 	})

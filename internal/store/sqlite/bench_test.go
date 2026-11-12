@@ -38,7 +38,11 @@ func BenchmarkTransactionKeysetPage50k(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if err := store.Read(context.Background(), func(r app.Repos) error {
-			_, err := r.Transactions().List(context.Background(), app.TxFilter{}, nil, limit)
+			f, err := domain.NewTxFilter(domain.TxFilterSpec{Desc: true})
+			if err != nil {
+				return err
+			}
+			_, err = r.Transactions().List(context.Background(), f, nil, limit)
 			return err
 		}); err != nil {
 			b.Fatalf("Read: %v", err)

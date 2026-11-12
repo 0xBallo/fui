@@ -3,8 +3,10 @@ package app
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/textnorm"
 )
 
 // DefaultTxLimit is the page size of ListTx when the request sets none.
@@ -130,14 +132,18 @@ type TxPage struct {
 // way ListTx does: account and category names against the archive, the amount range in the
 // currency of the selected accounts. Other use cases that filter transactions the way `tx list`
 // does (for example `export`) call this instead of duplicating name and amount resolution.
-func (s *Service) ResolveTxFilter(ctx context.Context, req ListTxRequest) (TxFilter, error) {
-	var f TxFilter
+func (s *Service) ResolveTxFilter(ctx context.Context, req ListTxRequest) (domain.TxFilter, error) {
+	var f domain.TxFilter
 	err := s.store.Read(ctx, func(r Repos) error {
 		accts, cats, err := loadNames(ctx, r)
 		if err != nil {
 			return err
 		}
-		f, err = s.txFilter(req, accts, cats)
+		spec, err := s.txFilterSpec(req, accts, cats)
+		if err != nil {
+			return err
+		}
+		f, err = domain.NewTxFilter(spec)
 		return err
 	})
 	return f, err
@@ -155,7 +161,12 @@ func (s *Service) ListTx(ctx context.Context, req ListTxRequest) (TxPage, error)
 		if err != nil {
 			return err
 		}
-		f, err := s.txFilter(req, accts, cats)
+		spec, err := s.txFilterSpec(req, accts, cats)
+		if err != nil {
+			return err
+		}
+		spec.Desc = true // newest first
+		f, err := domain.NewTxFilter(spec)
 		if err != nil {
 			return err
 		}
@@ -177,14 +188,14 @@ func (s *Service) ListTx(ctx context.Context, req ListTxRequest) (TxPage, error)
 	return page, err
 }
 
-func (s *Service) txFilter(req ListTxRequest, accts []domain.Account, cats []domain.Category) (TxFilter, error) {
-	f := TxFilter{Text: req.Text}
+func (s *Service) txFilterSpec(req ListTxRequest, accts []domain.Account, cats []domain.Category) (domain.TxFilterSpec, error) {
+	spec := domain.TxFilterSpec{Text: textnorm.Normalize(req.Text)}
 	var err error
-	if f.From, err = s.optionalDate(req.From); err != nil {
-		return TxFilter{}, err
+	if spec.From, err = s.optionalDate(req.From); err != nil {
+		return domain.TxFilterSpec{}, err
 	}
-	if f.To, err = s.optionalDate(req.To); err != nil {
-		return TxFilter{}, err
+	if spec.To, err = s.optionalDate(req.To); err != nil {
+		return domain.TxFilterSpec{}, err
 	}
 	selected := accts
 	if len(req.Accounts) > 0 {
@@ -192,30 +203,30 @@ func (s *Service) txFilter(req ListTxRequest, accts []domain.Account, cats []dom
 		for _, ref := range req.Accounts {
 			a, err := pickAccount(accts, ref)
 			if err != nil {
-				return TxFilter{}, err
+				return domain.TxFilterSpec{}, err
 			}
-			f.AccountIDs = append(f.AccountIDs, a.ID)
+			spec.AccountIDs = append(spec.AccountIDs, a.ID)
 			selected = append(selected, a)
 		}
 	}
 	for _, ref := range req.Categories {
 		c, err := pickCategory(cats, ref)
 		if err != nil {
-			return TxFilter{}, err
+			return domain.TxFilterSpec{}, err
 		}
-		f.CategoryIDs = append(f.CategoryIDs, c.ID)
+		spec.CategoryIDs = append(spec.CategoryIDs, c.ID)
 	}
 	for _, st := range req.Statuses {
 		v, err := domain.ParseTxStatus(st)
 		if err != nil {
-			return TxFilter{}, fmt.Errorf("status: %w", err)
+			return domain.TxFilterSpec{}, fmt.Errorf("status: %w", err)
 		}
-		f.Statuses = append(f.Statuses, v)
+		spec.Statuses = append(spec.Statuses, v)
 	}
-	if f.MinMinor, f.MaxMinor, err = s.amountRange(req, selected); err != nil {
-		return TxFilter{}, err
+	if spec.MinAbs, spec.MaxAbs, err = s.amountRange(req, selected); err != nil {
+		return domain.TxFilterSpec{}, err
 	}
-	return f, nil
+	return spec, nil
 }
 
 func (s *Service) optionalDate(in string) (domain.Date, error) {
@@ -242,6 +253,9 @@ func (s *Service) amountRange(req ListTxRequest, selected []domain.Account) (lo,
 			return nil, err
 		}
 		v := m.Minor()
+		if v < 0 && v != math.MinInt64 {
+			v = -v // --min/--max bound the absolute value
+		}
 		return &v, nil
 	}
 	if lo, err = parse(req.MinAmount); err != nil {

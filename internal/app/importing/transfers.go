@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
 )
 
@@ -154,7 +153,11 @@ func (b *builder) archivedCandidates(ctx context.Context) ([]domain.TransferCand
 	if to, err = to.AddDays(2); err != nil {
 		return nil, fmt.Errorf("transfer window: %w", err)
 	}
-	near, err := b.r.Transactions().List(ctx, app.TxFilter{From: from, To: to}, nil, 0)
+	window, err := domain.NewTxFilter(domain.TxFilterSpec{From: from, To: to, Desc: true})
+	if err != nil {
+		return nil, fmt.Errorf("transfer window: %w", err)
+	}
+	near, err := b.r.Transactions().List(ctx, window, nil, 0)
 	if err != nil {
 		return nil, fmt.Errorf("list transactions: %w", err)
 	}

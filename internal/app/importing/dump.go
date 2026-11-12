@@ -163,11 +163,14 @@ func dumpCategories(ctx context.Context, r app.Repos, format DumpFormat, create 
 
 // dumpTransactions writes transactions and, from their group IDs, the transfers.
 func dumpTransactions(ctx context.Context, r app.Repos, format DumpFormat, create DumpFile) error {
-	all, err := r.Transactions().List(ctx, app.TxFilter{}, nil, 0)
+	oldestFirst, err := domain.NewTxFilter(domain.TxFilterSpec{})
+	if err != nil {
+		return fmt.Errorf("transaction filter: %w", err)
+	}
+	all, err := r.Transactions().List(ctx, oldestFirst, nil, 0)
 	if err != nil {
 		return fmt.Errorf("list transactions: %w", err)
 	}
-	slices.Reverse(all)
 	items := make([]transactionDump, len(all))
 	var groups []domain.TransferGroupID
 	for i, t := range all {

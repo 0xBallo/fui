@@ -3,6 +3,8 @@ package sqlite
 import (
 	"context"
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -65,7 +67,7 @@ func (r transactionRepo) Get(ctx context.Context, id domain.TransactionID) (doma
 	return toTransaction(row)
 }
 
-func (r transactionRepo) List(ctx context.Context, f app.TxFilter, after *app.TxCursor, limit int) ([]domain.Transaction, error) {
+func (r transactionRepo) List(ctx context.Context, f domain.TxFilter, after *app.TxCursor, limit int) ([]domain.Transaction, error) {
 	params, err := listTransactionParams(f, after, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list transactions: %w", err)
@@ -180,49 +182,92 @@ func toUpdateTransactionParams(t domain.Transaction) gen.UpdateTransactionParams
 	}
 }
 
-func listTransactionParams(f app.TxFilter, after *app.TxCursor, limit int) (gen.ListTransactionsParams, error) {
-	accountIDsJSON, err := encodeIDSlice(f.AccountIDs)
+// ftsMinRunes is the shortest text the trigram index can match; shorter texts use instr.
+const ftsMinRunes = 3
+
+func listTransactionParams(f domain.TxFilter, after *app.TxCursor, limit int) (gen.ListTransactionsParams, error) {
+	accountIDsJSON, err := encodeIDSlice(f.AccountIDs())
 	if err != nil {
 		return gen.ListTransactionsParams{}, err
 	}
-	categoryIDsJSON, err := encodeIDSlice(f.CategoryIDs)
+	categoryIDsJSON, err := encodeIDSlice(f.CategoryIDs())
 	if err != nil {
 		return gen.ListTransactionsParams{}, err
 	}
-	statusesJSON, err := encodeStatusSlice(f.Statuses)
+	payeeIDsJSON, err := encodeIDSlice(f.PayeeIDs())
+	if err != nil {
+		return gen.ListTransactionsParams{}, err
+	}
+	statusesJSON, err := encodeJSON(stringsOf(f.Statuses()))
+	if err != nil {
+		return gen.ListTransactionsParams{}, err
+	}
+	kindsJSON, err := encodeJSON(stringsOf(f.Kinds()))
 	if err != nil {
 		return gen.ListTransactionsParams{}, err
 	}
 
+	if f.Limit() > 0 && (limit <= 0 || f.Limit() < limit) {
+		limit = f.Limit()
+	}
 	params := gen.ListTransactionsParams{
-		FromDate:        dateStringOrEmpty(f.From),
-		ToDate:          dateStringOrEmpty(f.To),
+		FromDate:        dateStringOrEmpty(f.From()),
+		ToDate:          dateStringOrEmpty(f.To()),
 		AccountIdsJson:  accountIDsJSON,
 		CategoryIdsJson: categoryIDsJSON,
+		PayeeIdsJson:    payeeIDsJSON,
 		StatusesJson:    statusesJSON,
-		Text:            f.Text,
-		MinSet:          int64(0),
-		MaxSet:          int64(0),
-		ImportBatchID:   int64(f.ImportBatchID),
-		AfterSet:        int64(0),
-		AfterDate:       "",
-		AfterID:         int64(0),
+		KindsJson:       kindsJSON,
+		ImportBatchID:   int64(f.ImportBatchID()),
+		Sign:            string(f.Sign()),
+		SortKey:         string(f.Sort()),
 		LimitValue:      int64(limit),
+		// sqlc types these flags as interface{}; nil would make the SQL comparisons NULL.
+		Uncategorized: int64(0), MinAbsSet: int64(0), MaxAbsSet: int64(0), MaxAbs: int64(0),
+		TextMode: int64(0), AfterSet: int64(0), Desc: int64(0),
 	}
-	if f.MinMinor != nil {
-		params.MinSet = 1
-		params.MinMinor = *f.MinMinor
+	if f.Uncategorized() {
+		params.Uncategorized = int64(1)
 	}
-	if f.MaxMinor != nil {
-		params.MaxSet = 1
-		params.MaxMinor = *f.MaxMinor
+	if f.Desc() {
+		params.Desc = int64(1)
 	}
-	if after != nil {
-		params.AfterSet = 1
+	if v := f.MinAbs(); v != nil {
+		params.MinAbsSet, params.MinAbs = int64(1), *v
+	}
+	if v := f.MaxAbs(); v != nil {
+		params.MaxAbsSet, params.MaxAbs = int64(1), *v
+	}
+	setTextParams(&params, f.Text())
+	// The keyset cursor only makes sense for the date sort; amount and payee page by limit only.
+	if after != nil && f.Sort() == domain.TxSortDate {
+		params.AfterSet = int64(1)
 		params.AfterDate = after.Date.String()
 		params.AfterID = int64(after.ID)
 	}
 	return params, nil
+}
+
+// setTextParams normalizes the text exactly like the indexed column (textnorm) and picks the
+// trigram index when it can match, instr otherwise.
+func setTextParams(params *gen.ListTransactionsParams, text string) {
+	text = textnorm.Normalize(text)
+	switch {
+	case text == "":
+	case utf8.RuneCountInString(text) < ftsMinRunes:
+		params.TextMode, params.Text = int64(1), text
+	default:
+		// A quoted FTS5 string is a phrase; for the trigram tokenizer that is a substring match.
+		params.TextMode, params.FtsQuery = int64(2), `"`+strings.ReplaceAll(text, `"`, `""`)+`"`
+	}
+}
+
+func stringsOf[T ~string](in []T) []string {
+	out := make([]string, len(in))
+	for i, v := range in {
+		out[i] = string(v)
+	}
+	return out
 }
 
 func dateStringOrEmpty(date domain.Date) string {

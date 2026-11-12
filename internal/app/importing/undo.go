@@ -65,7 +65,11 @@ func (s *Service) PlanUndo(ctx context.Context, batch domain.ImportBatchID) (Und
 
 // batchTransactions returns the transactions of the batch, refusing reconciled ones.
 func batchTransactions(ctx context.Context, r app.Repos, batch domain.ImportBatchID) ([]domain.Transaction, error) {
-	txs, err := r.Transactions().List(ctx, app.TxFilter{ImportBatchID: batch}, nil, 0)
+	f, err := domain.NewTxFilter(domain.TxFilterSpec{ImportBatchID: batch, Desc: true})
+	if err != nil {
+		return nil, fmt.Errorf("transaction filter: %w", err)
+	}
+	txs, err := r.Transactions().List(ctx, f, nil, 0)
 	if err != nil {
 		return nil, fmt.Errorf("list transactions of batch %d: %w", batch, err)
 	}

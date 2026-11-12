@@ -3,10 +3,10 @@ package memstore
 import (
 	"context"
 	"slices"
-	"strings"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/textnorm"
 )
 
 type transactions struct{ *repos }
@@ -72,54 +72,39 @@ func (t transactions) Get(_ context.Context, id domain.TransactionID) (domain.Tr
 	return tx, nil
 }
 
-// newestFirst orders by (date, id) descending.
-func newestFirst(a, b domain.Transaction) int {
-	if c := b.Date.Cmp(a.Date); c != 0 {
-		return c
-	}
-	switch {
-	case a.ID < b.ID:
-		return 1
-	case a.ID > b.ID:
-		return -1
-	}
-	return 0
+// searchText mirrors what the SQLite store indexes; payees have no table yet, so no payee name.
+func searchText(tx domain.Transaction) string {
+	return textnorm.SearchText(tx.Description, "", tx.Notes)
 }
 
-func (t transactions) List(_ context.Context, f app.TxFilter, after *app.TxCursor, limit int) ([]domain.Transaction, error) {
+// List is the oracle of the SQL translation: filter with TxFilter.Match, order with TxFilter.Less.
+func (t transactions) List(_ context.Context, f domain.TxFilter, after *app.TxCursor, limit int) ([]domain.Transaction, error) {
 	var out []domain.Transaction
 	for _, tx := range t.st.Txs {
-		if matches(tx, f) {
+		if f.Match(tx, searchText(tx)) {
 			out = append(out, tx)
 		}
 	}
-	slices.SortFunc(out, newestFirst)
-	if after != nil {
+	slices.SortFunc(out, func(a, b domain.Transaction) int {
+		switch {
+		case f.Less(a, b, "", ""):
+			return -1
+		case f.Less(b, a, "", ""):
+			return 1
+		}
+		return 0
+	})
+	if after != nil && f.Sort() == domain.TxSortDate {
 		cur := domain.Transaction{Date: after.Date, ID: after.ID}
-		out = slices.DeleteFunc(out, func(tx domain.Transaction) bool { return newestFirst(tx, cur) <= 0 })
+		out = slices.DeleteFunc(out, func(tx domain.Transaction) bool { return !f.Less(cur, tx, "", "") })
+	}
+	if f.Limit() > 0 && (limit <= 0 || f.Limit() < limit) {
+		limit = f.Limit()
 	}
 	if limit > 0 && len(out) > limit {
 		out = out[:limit]
 	}
 	return out, nil
-}
-
-func matches(tx domain.Transaction, f app.TxFilter) bool {
-	switch {
-	case !f.From.IsZero() && tx.Date.Before(f.From),
-		!f.To.IsZero() && tx.Date.After(f.To),
-		len(f.AccountIDs) > 0 && !slices.Contains(f.AccountIDs, tx.AccountID),
-		len(f.CategoryIDs) > 0 && !slices.Contains(f.CategoryIDs, tx.CategoryID),
-		len(f.Statuses) > 0 && !slices.Contains(f.Statuses, tx.Status),
-		f.MinMinor != nil && tx.Amount.Minor() < *f.MinMinor,
-		f.MaxMinor != nil && tx.Amount.Minor() > *f.MaxMinor,
-		f.ImportBatchID != 0 && tx.ImportBatchID != f.ImportBatchID:
-		return false
-	}
-	if f.Text == "" {
-		return true
-	}
-	return strings.Contains(strings.ToLower(tx.Description+"\n"+tx.Notes), strings.ToLower(f.Text))
 }
 
 func (t transactions) SumUpTo(_ context.Context, id domain.AccountID, date domain.Date) (int64, error) {

@@ -190,7 +190,11 @@ func (e env) txs(t tb) []domain.Transaction {
 	t.Helper()
 	var out []domain.Transaction
 	err := e.store.Read(context.Background(), func(r app.Repos) (err error) {
-		out, err = r.Transactions().List(context.Background(), app.TxFilter{}, nil, 0)
+		f, err := domain.NewTxFilter(domain.TxFilterSpec{Desc: true})
+		if err != nil {
+			return err
+		}
+		out, err = r.Transactions().List(context.Background(), f, nil, 0)
 		return err
 	})
 	if err != nil {

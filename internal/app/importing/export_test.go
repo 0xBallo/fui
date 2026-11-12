@@ -60,8 +60,12 @@ func seedExport(t *testing.T) env {
 	return e
 }
 
-func export(t *testing.T, e env, f importing.ExportFormat, filter app.TxFilter) (string, int) {
+func export(t *testing.T, e env, f importing.ExportFormat, spec domain.TxFilterSpec) (string, int) {
 	t.Helper()
+	filter, err := domain.NewTxFilter(spec)
+	if err != nil {
+		t.Fatalf("NewTxFilter: %v", err)
+	}
 	var buf bytes.Buffer
 	n, err := e.svc.Export(context.Background(), importing.ExportRequest{Format: f, Filter: filter}, &buf)
 	if err != nil {
@@ -72,7 +76,7 @@ func export(t *testing.T, e env, f importing.ExportFormat, filter app.TxFilter) 
 
 func TestExportCSV(t *testing.T) {
 	e := seedExport(t)
-	out, n := export(t, e, importing.FormatCSV, app.TxFilter{})
+	out, n := export(t, e, importing.FormatCSV, domain.TxFilterSpec{})
 	if n != 4 || !strings.Contains(out, "\r\n") {
 		t.Fatalf("n=%d, want 4 records with CRLF line ends:\n%q", n, out)
 	}
@@ -91,7 +95,7 @@ func TestExportCSV(t *testing.T) {
 
 func TestExportFiltered(t *testing.T) {
 	e := seedExport(t)
-	_, n := export(t, e, importing.FormatCSV, app.TxFilter{From: date("2026-10-02"), To: date("2026-10-02")})
+	_, n := export(t, e, importing.FormatCSV, domain.TxFilterSpec{From: date("2026-10-02"), To: date("2026-10-02")})
 	if n != 2 {
 		t.Fatalf("filtered export wrote %d transactions, want 2", n)
 	}
@@ -99,7 +103,7 @@ func TestExportFiltered(t *testing.T) {
 
 func TestExportJSON(t *testing.T) {
 	e := seedExport(t)
-	out, _ := export(t, e, importing.FormatJSON, app.TxFilter{})
+	out, _ := export(t, e, importing.FormatJSON, domain.TxFilterSpec{})
 	var got []struct {
 		Amount      string `json:"amount"`
 		AmountMinor int64  `json:"amount_minor"`
@@ -115,7 +119,7 @@ func TestExportJSON(t *testing.T) {
 
 func TestExportFUIIsAValidStream(t *testing.T) {
 	e := seedExport(t)
-	out, n := export(t, e, importing.FormatFUI, app.TxFilter{})
+	out, n := export(t, e, importing.FormatFUI, domain.TxFilterSpec{})
 	res, err := fuiproto.ValidateStream(fuiproto.DecodeJSONL(strings.NewReader(out)))
 	if err != nil || len(res.RowErrors) != 0 {
 		t.Fatalf("export is not a valid stream: %v %+v", err, res.RowErrors)
@@ -151,7 +155,7 @@ func TestExportFUIIsAValidStream(t *testing.T) {
 
 func TestExportFUIReimportIntoSameArchiveCreatesNothing(t *testing.T) {
 	e := seedExport(t)
-	out, _ := export(t, e, importing.FormatFUI, app.TxFilter{})
+	out, _ := export(t, e, importing.FormatFUI, domain.TxFilterSpec{})
 	plan := e.plan(t, fuiSource(t, []byte(out)))
 	// The transaction without a description is exported as "-", so its fingerprint no longer
 	// matches: it is flagged as doubtful rather than created silently.

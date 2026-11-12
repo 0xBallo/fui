@@ -126,8 +126,8 @@ func TestListTx(t *testing.T) {
 		{"category", app.ListTxRequest{Categories: []string{"fun"}}, 3},
 		{"status", app.ListTxRequest{Statuses: []string{"Pending"}}, 3},
 		{"text", app.ListTxRequest{Text: "shop 3"}, 1},
-		{"amount range", app.ListTxRequest{Accounts: []string{"A", "B"}, MinAmount: "-40", MaxAmount: "-20"}, 3},
-		{"amount range over EUR accounts only", app.ListTxRequest{Accounts: []string{"A"}, MaxAmount: "-30"}, 3},
+		{"amount range", app.ListTxRequest{Accounts: []string{"A", "B"}, MinAmount: "20", MaxAmount: "40"}, 3},
+		{"amount range over EUR accounts only", app.ListTxRequest{Accounts: []string{"A"}, MinAmount: "30"}, 3},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

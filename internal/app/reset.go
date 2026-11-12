@@ -48,7 +48,11 @@ func (s *Service) PlanReset(ctx context.Context, req ResetRequest) (ResetPlan, e
 		if accounts, err = r.Accounts().List(ctx); err != nil {
 			return fmt.Errorf("list accounts: %w", err)
 		}
-		if txs, err = r.Transactions().List(ctx, TxFilter{}, nil, 0); err != nil {
+		all, err := domain.NewTxFilter(domain.TxFilterSpec{Desc: true})
+		if err != nil {
+			return fmt.Errorf("transaction filter: %w", err)
+		}
+		if txs, err = r.Transactions().List(ctx, all, nil, 0); err != nil {
 			return fmt.Errorf("list transactions: %w", err)
 		}
 		if cats, err = r.Categories().List(ctx); err != nil {

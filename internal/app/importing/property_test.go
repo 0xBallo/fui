@@ -110,7 +110,7 @@ func TestPropertyFUIExportRoundTrips(t *testing.T) {
 		a := newEnv(nil)
 		a.importAll(t, src)
 		var buf bytes.Buffer
-		n := must(a.svc.Export(context.Background(), importing.ExportRequest{Format: importing.FormatFUI}, &buf))
+		n := must(a.svc.Export(context.Background(), importing.ExportRequest{Format: importing.FormatFUI, Filter: must(domain.NewTxFilter(domain.TxFilterSpec{}))}, &buf))
 
 		b := newEnv(nil)
 		file := fuiSource(t, buf.Bytes())
@@ -150,7 +150,7 @@ func (e env) view(t tb) []string {
 		ctx := context.Background()
 		accts := must(r.Accounts().List(ctx))
 		cats := must(r.Categories().List(ctx))
-		txs := must(r.Transactions().List(ctx, app.TxFilter{}, nil, 0))
+		txs := must(r.Transactions().List(ctx, must(domain.NewTxFilter(domain.TxFilterSpec{Desc: true})), nil, 0))
 		name := map[domain.AccountID]string{}
 		used := map[domain.AccountID]bool{}
 		for _, tx := range txs {

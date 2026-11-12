@@ -174,19 +174,38 @@ FROM transactions
 WHERE (?1 = '' OR date >= ?1)
     AND (?2 = '' OR date <= ?2)
     AND (json_array_length(?3) = 0 OR account_id IN (SELECT value FROM json_each(?3)))
-    AND (json_array_length(?4) = 0 OR category_id IN (SELECT value FROM json_each(?4)))
-    AND (json_array_length(?5) = 0 OR status IN (SELECT value FROM json_each(?5)))
-    AND (?6 = '' OR instr(lower(description || char(10) || notes), lower(?6)) > 0)
-    AND (?7 = 0 OR amount_minor >= ?8)
-    AND (?9 = 0 OR amount_minor <= ?10)
-    AND (?11 = 0 OR import_batch_id = ?11)
     AND (
-        ?12 = 0 OR date < ?13 OR (date = ?13 AND id < ?14)
+        (json_array_length(?4) = 0 AND ?5 = 0)
+        OR (category_id IS NULL AND ?5 = 1)
+        OR category_id IN (SELECT value FROM json_each(?4))
     )
-ORDER BY date DESC, id DESC
+    AND (json_array_length(?6) = 0 OR payee_id IN (SELECT value FROM json_each(?6)))
+    AND (json_array_length(?7) = 0 OR status IN (SELECT value FROM json_each(?7)))
+    AND (json_array_length(?8) = 0 OR kind IN (SELECT value FROM json_each(?8)))
+    AND (?9 = 0 OR import_batch_id = ?9)
+    AND (?10 = 'any' OR (?10 = 'income' AND amount_minor > 0) OR (?10 = 'expense' AND amount_minor < 0))
+    AND (?11 = 0 OR amount_minor >= ?12 OR amount_minor <= (0 - ?12))
+    AND (?13 = 0 OR (amount_minor >= (0 - ?14) AND amount_minor <= ?14))
+    AND (
+        ?15 = 0
+        OR (?15 = 1 AND instr(search_text, ?16) > 0)
+        OR (?15 = 2 AND id IN (SELECT fts.rowid FROM transactions_fts AS fts WHERE fts.search_text MATCH ?17))
+    )
+    AND (
+        ?18 = 0
+        OR (?19 = 0 AND (date > ?20 OR (date = ?20 AND id > ?21)))
+        OR (?19 = 1 AND (date < ?20 OR (date = ?20 AND id > ?21)))
+    )
+    AND (?22 = 'date' OR ?22 = 'amount' OR ?22 = 'payee')
+ORDER BY
+    CASE WHEN ?22 = 'date' AND ?19 = 0 THEN date END ASC,
+    CASE WHEN ?22 = 'date' AND ?19 = 1 THEN date END DESC,
+    CASE WHEN ?22 = 'amount' AND ?19 = 0 THEN amount_minor END ASC,
+    CASE WHEN ?22 = 'amount' AND ?19 = 1 THEN amount_minor END DESC,
+    id ASC
 LIMIT CASE
-    WHEN ?15 <= 0 THEN -1
-    ELSE ?15
+    WHEN ?23 <= 0 THEN -1
+    ELSE ?23
 END
 `
 
@@ -195,35 +214,55 @@ type ListTransactionsParams struct {
 	ToDate          interface{}
 	AccountIdsJson  interface{}
 	CategoryIdsJson interface{}
+	Uncategorized   interface{}
+	PayeeIdsJson    interface{}
 	StatusesJson    interface{}
-	Text            interface{}
-	MinSet          interface{}
-	MinMinor        int64
-	MaxSet          interface{}
-	MaxMinor        int64
+	KindsJson       interface{}
 	ImportBatchID   interface{}
+	Sign            interface{}
+	MinAbsSet       interface{}
+	MinAbs          int64
+	MaxAbsSet       interface{}
+	MaxAbs          interface{}
+	TextMode        interface{}
+	Text            string
+	FtsQuery        string
 	AfterSet        interface{}
+	Desc            interface{}
 	AfterDate       string
 	AfterID         int64
+	SortKey         interface{}
 	LimitValue      interface{}
 }
 
+// Translation of domain.TxFilter; text_mode is 0 (none), 1 (instr on search_text) or 2 (FTS5 MATCH).
+// The abs bounds avoid abs(): it overflows on the minimum int64. sqlc does not rewrite named
+// parameters in ORDER BY, so that clause uses the numbers sqlc assigns to @desc (?19) and @sort_key
+// (?22); the payee sort has no key because payees have no names yet (ties fall to id).
 func (q *Queries) ListTransactions(ctx context.Context, arg ListTransactionsParams) ([]Transaction, error) {
 	rows, err := q.db.QueryContext(ctx, listTransactions,
 		arg.FromDate,
 		arg.ToDate,
 		arg.AccountIdsJson,
 		arg.CategoryIdsJson,
+		arg.Uncategorized,
+		arg.PayeeIdsJson,
 		arg.StatusesJson,
-		arg.Text,
-		arg.MinSet,
-		arg.MinMinor,
-		arg.MaxSet,
-		arg.MaxMinor,
+		arg.KindsJson,
 		arg.ImportBatchID,
+		arg.Sign,
+		arg.MinAbsSet,
+		arg.MinAbs,
+		arg.MaxAbsSet,
+		arg.MaxAbs,
+		arg.TextMode,
+		arg.Text,
+		arg.FtsQuery,
 		arg.AfterSet,
+		arg.Desc,
 		arg.AfterDate,
 		arg.AfterID,
+		arg.SortKey,
 		arg.LimitValue,
 	)
 	if err != nil {

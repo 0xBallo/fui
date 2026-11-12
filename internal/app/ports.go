@@ -76,18 +76,6 @@ type AccountRepo interface {
 	List(ctx context.Context) ([]domain.Account, error)
 }
 
-// TxFilter selects transactions. Zero fields do not filter; the others combine with AND.
-type TxFilter struct {
-	From, To      domain.Date // inclusive accounting-date bounds
-	AccountIDs    []domain.AccountID
-	CategoryIDs   []domain.CategoryID
-	Statuses      []domain.TxStatus
-	Text          string // case-insensitive substring of description or notes
-	MinMinor      *int64 // inclusive bounds on the signed amount in minor units
-	MaxMinor      *int64
-	ImportBatchID domain.ImportBatchID
-}
-
 // TxCursor is the keyset position of the last row of a page.
 type TxCursor struct {
 	Date domain.Date
@@ -101,9 +89,11 @@ type TransactionRepo interface {
 	Update(ctx context.Context, t domain.Transaction) error
 	Delete(ctx context.Context, id domain.TransactionID) error
 	Get(ctx context.Context, id domain.TransactionID) (domain.Transaction, error)
-	// List returns the matching rows ordered by (date, id) descending. With a cursor it returns
-	// only the rows strictly after it in that order. limit <= 0 means no limit.
-	List(ctx context.Context, f TxFilter, after *TxCursor, limit int) ([]domain.Transaction, error)
+	// List returns the rows matching f in the order of f.Less (sort key, then ID ascending).
+	// limit <= 0 means no limit beyond f.Limit(); when both are set the smaller wins. The keyset
+	// cursor works only for the date sort, where it returns the rows strictly after it in that
+	// order; for the amount and payee sorts paging is limit-only and after is ignored.
+	List(ctx context.Context, f domain.TxFilter, after *TxCursor, limit int) ([]domain.Transaction, error)
 	// SumUpTo returns the sum, in minor units, of every movement of the account dated on or before date.
 	SumUpTo(ctx context.Context, id domain.AccountID, date domain.Date) (int64, error)
 	// ByExternalID, ByFingerprint, NearAmount and ByTransferGroup are the lookups of the import

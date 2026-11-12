@@ -254,15 +254,24 @@ func seedList(t *testing.T, f *fixture) (a, b domain.Account, newest []domain.Tr
 		}
 		newest = append([]domain.Transaction{f.tx(t, tx)}, newest...)
 	}
-	// Order is (date desc, id desc).
+	// Order is (date desc, id asc): the date sort of TxFilter.Less, descending.
 	for i := range newest {
 		for j := i + 1; j < len(newest); j++ {
-			if newest[j].Date.After(newest[i].Date) || (newest[j].Date == newest[i].Date && newest[j].ID > newest[i].ID) {
+			if newest[j].Date.After(newest[i].Date) || (newest[j].Date == newest[i].Date && newest[j].ID < newest[i].ID) {
 				newest[i], newest[j] = newest[j], newest[i]
 			}
 		}
 	}
 	return a, b, newest
+}
+
+func filter(t *testing.T, spec domain.TxFilterSpec) domain.TxFilter {
+	t.Helper()
+	f, err := domain.NewTxFilter(spec)
+	if err != nil {
+		t.Fatalf("NewTxFilter: %v", err)
+	}
+	return f
 }
 
 func contractList(t *testing.T, f *fixture) {
@@ -272,7 +281,7 @@ func contractList(t *testing.T, f *fixture) {
 		var got []domain.Transaction
 		var cur *app.TxCursor
 		for pages := 0; ; pages++ {
-			rows, err := r.Transactions().List(ctx, app.TxFilter{}, cur, 10)
+			rows, err := r.Transactions().List(ctx, filter(t, domain.TxFilterSpec{Desc: true}), cur, 10)
 			if err != nil {
 				t.Fatalf("List: %v", err)
 			}
@@ -294,25 +303,25 @@ func contractList(t *testing.T, f *fixture) {
 				t.Fatalf("row %d = %+v, want %+v", i, got[i], newest[i])
 			}
 		}
-		all, _ := r.Transactions().List(ctx, app.TxFilter{}, nil, 0)
+		all, _ := r.Transactions().List(ctx, filter(t, domain.TxFilterSpec{}), nil, 0)
 		if len(all) != 25 {
 			t.Errorf("limit 0 returned %d rows, want all 25", len(all))
 		}
-		lo, hi := int64(-1000), int64(-300)
+		lo, hi := int64(300), int64(1000)
 		cases := map[string]struct {
-			f    app.TxFilter
+			f    domain.TxFilterSpec
 			want int
 		}{
-			"period":   {app.TxFilter{From: mustDate(t, "2026-04-02"), To: mustDate(t, "2026-04-03")}, 10},
-			"account":  {app.TxFilter{AccountIDs: []domain.AccountID{a.ID}}, 13},
-			"accounts": {app.TxFilter{AccountIDs: []domain.AccountID{a.ID, b.ID}}, 25},
-			"status":   {app.TxFilter{Statuses: []domain.TxStatus{domain.StatusPending}}, 12},
-			"text":     {app.TxFilter{Text: "SHOP 1"}, 11}, // Shop 1, Shop 10..19
-			"amount":   {app.TxFilter{MinMinor: &lo, MaxMinor: &hi}, 8},
-			"none":     {app.TxFilter{Text: "no such thing"}, 0},
+			"period":   {domain.TxFilterSpec{From: mustDate(t, "2026-04-02"), To: mustDate(t, "2026-04-03")}, 10},
+			"account":  {domain.TxFilterSpec{AccountIDs: []domain.AccountID{a.ID}}, 13},
+			"accounts": {domain.TxFilterSpec{AccountIDs: []domain.AccountID{a.ID, b.ID}}, 25},
+			"status":   {domain.TxFilterSpec{Statuses: []domain.TxStatus{domain.StatusPending}}, 12},
+			"text":     {domain.TxFilterSpec{Text: "shop 1"}, 11}, // Shop 1, Shop 10..19
+			"amount":   {domain.TxFilterSpec{Sign: domain.TxSignExpense, MinAbs: &lo, MaxAbs: &hi}, 8},
+			"none":     {domain.TxFilterSpec{Text: "no such thing"}, 0},
 		}
 		for name, c := range cases {
-			rows, err := r.Transactions().List(ctx, c.f, nil, 0)
+			rows, err := r.Transactions().List(ctx, filter(t, c.f), nil, 0)
 			if err != nil || len(rows) != c.want {
 				t.Errorf("filter %s: %d rows, %v; want %d", name, len(rows), err, c.want)
 			}
@@ -462,7 +471,7 @@ func contractImports(t *testing.T, f *fixture) {
 		if all, _ := r.Imports().Batches(ctx); len(all) != 2 || all[0].ID != b2.ID {
 			t.Errorf("Batches = %+v, want most recent first", all)
 		}
-		if rows, _ := r.Transactions().List(ctx, app.TxFilter{ImportBatchID: b1.ID}, nil, 0); len(rows) != 1 || rows[0].ID != tx.ID {
+		if rows, _ := r.Transactions().List(ctx, filter(t, domain.TxFilterSpec{ImportBatchID: b1.ID}), nil, 0); len(rows) != 1 || rows[0].ID != tx.ID {
 			t.Errorf("List by batch = %+v", rows)
 		}
 		_, err = r.Imports().AccountRef(ctx, "csv", "ref-1")

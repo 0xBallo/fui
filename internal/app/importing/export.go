@@ -33,7 +33,7 @@ const noDescription = "-"
 // ExportRequest selects the transactions to export with the same filter as `tx list`
 // (already resolved to IDs by the caller).
 type ExportRequest struct {
-	Filter app.TxFilter
+	Filter domain.TxFilter
 	Format ExportFormat
 }
 
@@ -74,10 +74,10 @@ type exportData struct {
 	balDate  domain.Date
 }
 
-func (s *Service) loadExport(ctx context.Context, r app.Repos, f app.TxFilter) (exportData, error) {
+func (s *Service) loadExport(ctx context.Context, r app.Repos, f domain.TxFilter) (exportData, error) {
 	d := exportData{
 		accounts: map[domain.AccountID]domain.Account{}, cats: map[domain.CategoryID]domain.Category{},
-		balances: map[domain.AccountID]domain.Money{}, balDate: f.To,
+		balances: map[domain.AccountID]domain.Money{}, balDate: f.To(),
 	}
 	accts, err := r.Accounts().List(ctx)
 	if err != nil {
@@ -96,7 +96,6 @@ func (s *Service) loadExport(ctx context.Context, r app.Repos, f app.TxFilter) (
 	if d.txs, err = r.Transactions().List(ctx, f, nil, 0); err != nil {
 		return d, fmt.Errorf("list transactions: %w", err)
 	}
-	slices.Reverse(d.txs)
 	if d.balDate.IsZero() {
 		if d.balDate, err = domain.FromTime(s.clock.Now()); err != nil {
 			return d, fmt.Errorf("today: %w", err)
