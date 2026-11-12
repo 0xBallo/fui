@@ -5,6 +5,9 @@ Read `AGENTS.md` first; it is binding. Extra rules learned in previous waves:
 - Stay inside your worktree. Scratch files go in `./.scratch/` (already git-excluded). Never touch `/tmp`, `$HOME`,
   the module cache or other worktrees; inspect deps with `go doc -src` / `go list -m`. Do not write `/dev/null`
   inside `$(...)`.
+- **Never run the `fui` binary against the real archive/config.** Any manual run must sandbox every path:
+  `XDG_CONFIG_HOME=$PWD/.scratch/cfg XDG_DATA_HOME=$PWD/.scratch/data XDG_STATE_HOME=$PWD/.scratch/state go run ./cmd/fui ...`
+  (prefer tests/testscript, which already sandbox). Touching `~/.config/fui` or `~/.local/*/fui` is an incident.
 - Atomic Conventional Commits, each one builds and passes tests. **No `Co-authored-by` trailer, no mention of
   AI/agents/Claude/Copilot/Gemini** in commit messages. Do not push, do not merge.
 - Before declaring done run on the whole repo: `gofumpt -l . ; go build ./... ; go vet ./... ;
