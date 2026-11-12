@@ -1,8 +1,12 @@
 package cli_test
 
 import (
+	"context"
 	"strings"
 	"testing"
+
+	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/domain"
 )
 
 // TestFilterFlagsIncompatibleCombinations covers every pair of mutually exclusive filter flags on
@@ -99,5 +103,57 @@ func TestFilterFlagsInvalidBatch(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "invalid_filter") {
 		t.Errorf("stderr = %q, want invalid_filter", stderr)
+	}
+}
+
+// TestFilterFlagsTagFilter covers -t/--tag on tx list: repeated -t ORs among themselves, and a
+// transaction without the tag is excluded.
+func TestFilterFlagsTagFilter(t *testing.T) {
+	h := newHarness(t)
+	h.account("Checking", "checking", "EUR", "0")
+	h.category("Food", "expense")
+	ctx := context.Background()
+
+	addTag := func(name string) domain.Tag {
+		p, err := h.svc.PlanAddTag(ctx, app.AddTagRequest{Name: name})
+		if err != nil {
+			t.Fatalf("PlanAddTag(%s): %v", name, err)
+		}
+		tg, err := h.svc.ApplyAddTag(ctx, p)
+		if err != nil {
+			t.Fatalf("ApplyAddTag(%s): %v", name, err)
+		}
+		return tg
+	}
+	vacanze := addTag("vacanze")
+	addTag("lavoro")
+
+	h.mustRun("add", "-10", "Groceries", "-c", "Food", "-a", "Checking", "--date", "2026-01-10")
+	h.mustRun("add", "-20", "Hotel", "-c", "Food", "-a", "Checking", "--date", "2026-01-11")
+
+	tagPlan, err := h.svc.PlanTagTransaction(ctx, app.TagTransactionRequest{ID: 2, Add: []string{vacanze.Name}})
+	if err != nil {
+		t.Fatalf("PlanTagTransaction: %v", err)
+	}
+	if err := h.svc.ApplyTagTransaction(ctx, tagPlan); err != nil {
+		t.Fatalf("ApplyTagTransaction: %v", err)
+	}
+
+	out, _ := h.mustRun("tx", "list", "-t", "vacanze", "--json")
+	if !strings.Contains(out, `"count":1`) || !strings.Contains(out, `"description":"Hotel"`) {
+		t.Fatalf("tx list -t vacanze = %q, want only Hotel", out)
+	}
+
+	out, _ = h.mustRun("tx", "list", "-t", "vacanze", "-t", "lavoro", "--json")
+	if !strings.Contains(out, `"count":1`) {
+		t.Fatalf("tx list -t vacanze -t lavoro = %q, want count:1 (OR, lavoro unused)", out)
+	}
+
+	_, stderr, code := h.run("tx", "list", "-t", "nope", "--json")
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1; stderr=%s", code, stderr)
+	}
+	if !strings.Contains(stderr, "not_found") {
+		t.Errorf("stderr = %q, want not_found for an unknown tag", stderr)
 	}
 }

@@ -11,9 +11,8 @@ import (
 )
 
 // registerFilterFlags declares the transaction filter flags shared by tx list, tx search and
-// export, defined once per the technical spec's "Ricerca e filtri" ("-t/--tag" is v0.2 and is
-// deliberately not registered here). Paging (--after-date/--after-id) is tx list's own, since
-// tx search and export do not page.
+// export, defined once per the technical spec's "Ricerca e filtri". Paging
+// (--after-date/--after-id) is tx list's own, since tx search and export do not page.
 func registerFilterFlags(cmd *cobra.Command) {
 	cmd.Flags().String("from", "", "earliest date, inclusive")
 	cmd.Flags().String("to", "", "latest date, inclusive")
@@ -22,6 +21,7 @@ func registerFilterFlags(cmd *cobra.Command) {
 	cmd.Flags().StringArrayP("account", "a", nil, "filter by account (repeatable)")
 	cmd.Flags().StringArrayP("category", "c", nil, "filter by category (repeatable)")
 	cmd.Flags().Bool("uncategorized", false, "only transactions without a category")
+	cmd.Flags().StringArrayP("tag", "t", nil, "filter by tag (repeatable; OR among themselves)")
 	cmd.Flags().StringArray("payee", nil, "filter by payee (repeatable; not supported yet, no payees archive)")
 	cmd.Flags().String("min", "", "minimum amount, inclusive, on the absolute value")
 	cmd.Flags().String("max", "", "maximum amount, inclusive, on the absolute value")
@@ -47,6 +47,7 @@ func readFilterFlags(cmd *cobra.Command) (app.ListTxRequest, error) {
 	req.Accounts, _ = cmd.Flags().GetStringArray("account")
 	req.Categories, _ = cmd.Flags().GetStringArray("category")
 	req.Uncategorized, _ = cmd.Flags().GetBool("uncategorized")
+	req.Tags, _ = cmd.Flags().GetStringArray("tag")
 	req.Payees, _ = cmd.Flags().GetStringArray("payee")
 	req.MinAmount, _ = cmd.Flags().GetString("min")
 	req.MaxAmount, _ = cmd.Flags().GetString("max")
