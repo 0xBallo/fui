@@ -11,6 +11,12 @@ import (
 // OpKeep marks a Change that reports data a reset leaves in place.
 const OpKeep Op = "keep"
 
+// Entity names of the settings a reset lists next to the categories.
+const (
+	entityTag   = "tag"
+	entityPayee = "payee"
+)
+
 // ResetRequest says what the reset keeps.
 type ResetRequest struct {
 	KeepSettings bool
@@ -33,42 +39,59 @@ type ResetResult struct {
 	Created int
 }
 
-// PlanReset counts what a reset deletes and keeps; it touches nothing. An archive with no
-// accounts, transactions or categories counts as nonexistent (the store creates an empty file on
-// open), and the plan is then init's.
-func (s *Service) PlanReset(ctx context.Context, req ResetRequest) (ResetPlan, error) {
-	var (
-		accounts []domain.Account
-		txs      []domain.Transaction
-		cats     []domain.Category
-		fx       []domain.FXRate
-		batches  []ImportBatch
-	)
+type resetData struct {
+	accounts []domain.Account
+	txs      []domain.Transaction
+	cats     []domain.Category
+	tags     []domain.Tag
+	payees   []domain.Payee
+	fx       []domain.FXRate
+	batches  []ImportBatch
+}
+
+// readResetData lists everything a reset counts.
+func (s *Service) readResetData(ctx context.Context) (resetData, error) {
+	var d resetData
 	err := s.store.Read(ctx, func(r Repos) (err error) {
-		if accounts, err = r.Accounts().List(ctx); err != nil {
+		if d.accounts, err = r.Accounts().List(ctx); err != nil {
 			return fmt.Errorf("list accounts: %w", err)
 		}
 		all, err := domain.NewTxFilter(domain.TxFilterSpec{Desc: true})
 		if err != nil {
 			return fmt.Errorf("transaction filter: %w", err)
 		}
-		if txs, err = r.Transactions().List(ctx, all, nil, 0); err != nil {
+		if d.txs, err = r.Transactions().List(ctx, all, nil, 0); err != nil {
 			return fmt.Errorf("list transactions: %w", err)
 		}
-		if cats, err = r.Categories().List(ctx); err != nil {
+		if d.cats, err = r.Categories().List(ctx); err != nil {
 			return fmt.Errorf("list categories: %w", err)
 		}
-		if fx, err = r.FXRates().List(ctx, domain.Currency{}); err != nil {
+		if d.tags, err = r.Tags().List(ctx); err != nil {
+			return fmt.Errorf("list tags: %w", err)
+		}
+		if d.payees, err = r.Payees().List(ctx); err != nil {
+			return fmt.Errorf("list payees: %w", err)
+		}
+		if d.fx, err = r.FXRates().List(ctx, domain.Currency{}); err != nil {
 			return fmt.Errorf("list fx rates: %w", err)
 		}
-		if batches, err = r.Imports().Batches(ctx); err != nil {
+		if d.batches, err = r.Imports().Batches(ctx); err != nil {
 			return fmt.Errorf("list import batches: %w", err)
 		}
 		return nil
 	})
+	return d, err
+}
+
+// PlanReset counts what a reset deletes and keeps; it touches nothing. An archive with no
+// accounts, transactions or categories counts as nonexistent (the store creates an empty file on
+// open), and the plan is then init's.
+func (s *Service) PlanReset(ctx context.Context, req ResetRequest) (ResetPlan, error) {
+	d, err := s.readResetData(ctx)
 	if err != nil {
 		return ResetPlan{}, err
 	}
+	accounts, txs, cats, tags, payees, fx, batches := d.accounts, d.txs, d.cats, d.tags, d.payees, d.fx, d.batches
 
 	if len(accounts)+len(txs)+len(cats) == 0 {
 		initPlan, err := s.PlanInit(ctx)
@@ -85,8 +108,12 @@ func (s *Service) PlanReset(ctx context.Context, req ResetRequest) (ResetPlan, e
 	plan.add(OpDelete, "import_batch", "import batches", len(batches))
 	if req.KeepSettings {
 		plan.add(OpKeep, EntityCategory, "categories", len(cats))
+		plan.add(OpKeep, entityTag, "tags", len(tags))
+		plan.add(OpKeep, entityPayee, "payees", len(payees))
 	} else {
 		plan.add(OpDelete, EntityCategory, "categories", len(cats))
+		plan.add(OpDelete, entityTag, "tags", len(tags))
+		plan.add(OpDelete, entityPayee, "payees", len(payees))
 		defaults := len(domain.DefaultCategories())
 		plan.Changes = append(plan.Changes, Change{
 			Op: OpCreate, Entity: EntityCategory,

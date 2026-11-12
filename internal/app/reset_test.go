@@ -43,6 +43,13 @@ func seedReset(t *testing.T, e env) {
 	}())
 	e.category(t, "Custom", "expense")
 	e.account(t, "Checking", "checking", "EUR", "100")
+	wantNoErr(t, e.store.WithTx(ctx, func(r app.Repos) error {
+		if _, err := r.Tags().Insert(ctx, domain.Tag{Name: "trip"}); err != nil {
+			return err
+		}
+		_, err := r.Payees().Insert(ctx, domain.Payee{Name: "Coop"})
+		return err
+	}))
 }
 
 func TestPlanResetCounts(t *testing.T) {
@@ -60,7 +67,7 @@ func TestPlanResetCounts(t *testing.T) {
 		sums = append(sums, string(c.Op)+" "+c.Summary)
 	}
 	got := strings.Join(sums, "|")
-	for _, want := range []string{"delete 1 accounts", "delete 21 categories", "create 20 default categories"} {
+	for _, want := range []string{"delete 1 accounts", "delete 1 tags", "delete 1 payees", "delete 21 categories", "create 20 default categories"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("plan %q lacks %q", got, want)
 		}
@@ -77,6 +84,17 @@ func TestPlanResetCounts(t *testing.T) {
 	}
 	if !kept {
 		t.Errorf("keep plan lacks the kept categories: %+v", keep.Changes)
+	}
+	var keptTags, keptPayees bool
+	for _, c := range keep.Changes {
+		keptTags = keptTags || (c.Op == app.OpKeep && c.Summary == "keep 1 tags")
+		keptPayees = keptPayees || (c.Op == app.OpKeep && c.Summary == "keep 1 payees")
+		if c.Op == app.OpDelete && (c.Entity == "tag" || c.Entity == "payee") {
+			t.Errorf("keep-settings plan deletes %s: %+v", c.Entity, c)
+		}
+	}
+	if !keptTags || !keptPayees {
+		t.Errorf("keep plan lacks kept tags/payees: %+v", keep.Changes)
 	}
 }
 
