@@ -131,3 +131,58 @@ func TestAccountsArchiveWithConfirm(t *testing.T) {
 		t.Fatalf("expected the archived account hidden by default, got %+v", accts)
 	}
 }
+
+func TestAccountsReconcileClosesAtZeroDifference(t *testing.T) {
+	fx, scr := newFixture(t)
+	fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "100", OpenedOn: "2026-01-01"})
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-10", Description: "Store", Date: "2026-06-01", Status: "booked"})
+	scr = run(t, scr, scr.Init())
+
+	scr, _ = sendRunes(scr, "r")
+	if !strings.Contains(scr.View(), "Reconcile account") {
+		t.Fatalf("expected reconcile form, got:\n%s", scr.View())
+	}
+
+	scr, _ = sendRunes(scr, "90")
+	scr, _ = sendKey(scr, tea.KeyEnter) // balance -> date
+	scr, cmd := sendKey(scr, tea.KeyEnter)
+	scr = run(t, scr, cmd)
+
+	view := scr.View()
+	if !strings.Contains(view, "Reconcile preview") || !strings.Contains(view, "Difference: 0.00") {
+		t.Fatalf("expected zero-difference preview, got:\n%s", view)
+	}
+
+	scr, cmd = sendKey(scr, tea.KeyEnter)
+	scr = run(t, scr, cmd)
+	if strings.Contains(scr.View(), "Reconcile preview") {
+		t.Fatalf("expected reconciliation to close and return to list, got:\n%s", scr.View())
+	}
+
+	page, err := fx.Service.ListTx(context.Background(), app.ListTxRequest{Accounts: []string{"Checking"}})
+	if err != nil {
+		t.Fatalf("ListTx: %v", err)
+	}
+	if len(page.Items) != 1 || page.Items[0].Transaction.Status != domain.StatusReconciled {
+		t.Fatalf("expected transaction status reconciled, got %+v", page.Items)
+	}
+}
+
+func TestAccountsReconcileNonZeroStaysPreview(t *testing.T) {
+	fx, scr := newFixture(t)
+	fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "100", OpenedOn: "2026-01-01"})
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-10", Description: "Store", Date: "2026-06-01", Status: "booked"})
+	scr = run(t, scr, scr.Init())
+
+	scr, _ = sendRunes(scr, "r")
+	scr, _ = sendRunes(scr, "95")
+	scr, _ = sendKey(scr, tea.KeyEnter)
+	scr, cmd := sendKey(scr, tea.KeyEnter)
+	scr = run(t, scr, cmd)
+
+	scr, _ = sendKey(scr, tea.KeyEnter)
+	view := scr.View()
+	if !strings.Contains(view, "Difference must be zero") {
+		t.Fatalf("expected close guard on non-zero difference, got:\n%s", view)
+	}
+}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 )
 
 // UseCases is the subset of app.Service this screen needs, received by interface so tests can
@@ -19,4 +20,6 @@ type UseCases interface {
 	ApplyAddAccount(ctx context.Context, p app.AddAccountPlan) (domain.Account, error)
 	PlanArchiveAccount(ctx context.Context, ref string) (app.ArchiveAccountPlan, error)
 	ApplyArchiveAccount(ctx context.Context, p app.ArchiveAccountPlan) (domain.Account, error)
+	PlanReconcile(ctx context.Context, enabled module.Set, req app.ReconcileRequest) (app.ReconcilePlan, error)
+	ApplyReconcile(ctx context.Context, enabled module.Set, p app.ReconcilePlan) error
 }
