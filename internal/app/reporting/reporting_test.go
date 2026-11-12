@@ -287,8 +287,60 @@ func TestRunwayFailsWhenFXRateMissing(t *testing.T) {
 		MonthStartDay: 1,
 		BaseCurrency:  cur(t, "EUR"),
 	})
-	if err == nil || !strings.Contains(err.Error(), "fx rate") {
-		t.Fatalf("err = %v", err)
+	var de *domain.Error
+	if !errors.As(err, &de) {
+		t.Fatalf("err = %v, want domain.Error", err)
+	}
+	if de.Code != "rate_missing" {
+		t.Fatalf("code = %q, want rate_missing", de.Code)
+	}
+	if got := fmt.Sprint(de.Details["currencies"]); got != "[USD]" {
+		t.Fatalf("currencies = %s, want [USD]", got)
+	}
+	if got := fmt.Sprint(de.Details["date"]); got != "2026-11-15" {
+		t.Fatalf("date = %s, want 2026-11-15", got)
+	}
+	want := "missing exchange rate for USD on 2026-11-15 (set one with: fui fx set USD <rate> --date 2026-11-15)"
+	if de.Message != want {
+		t.Fatalf("message = %q, want %q", de.Message, want)
+	}
+}
+
+func TestRunwayCollectsAllMissingFXCurrencies(t *testing.T) {
+	useCase, err := NewRunway(&fakeSource{
+		accounts: []domain.Account{
+			account(t, 1, "USD wallet", domain.AccountCash, "USD", false),
+			account(t, 2, "JPY wallet", domain.AccountCash, "JPY", false),
+		},
+		balances: map[domain.AccountID]domain.Money{
+			1: money(t, 10_000, "USD"),
+			2: money(t, 100_000, "JPY"),
+		},
+		transactions: []domain.Transaction{
+			makeTx(t, 1, date(t, 2026, 8, 1), -10_000, "USD", domain.KindPayment, 0),
+			makeTx(t, 1, date(t, 2026, 9, 1), -10_000, "USD", domain.KindPayment, 0),
+			makeTx(t, 1, date(t, 2026, 10, 1), -10_000, "USD", domain.KindPayment, 0),
+			makeTx(t, 2, date(t, 2026, 8, 1), -10_000, "JPY", domain.KindPayment, 0),
+			makeTx(t, 2, date(t, 2026, 9, 1), -10_000, "JPY", domain.KindPayment, 0),
+			makeTx(t, 2, date(t, 2026, 10, 1), -10_000, "JPY", domain.KindPayment, 0),
+		},
+	}, fixedClock{now: time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = useCase.Run(context.Background(), RunwayParams{
+		MonthStartDay: 1,
+		BaseCurrency:  cur(t, "EUR"),
+	})
+	var de *domain.Error
+	if !errors.As(err, &de) {
+		t.Fatalf("err = %v, want domain.Error", err)
+	}
+	if de.Code != "rate_missing" {
+		t.Fatalf("code = %q, want rate_missing", de.Code)
+	}
+	if got := fmt.Sprint(de.Details["currencies"]); got != "[JPY USD]" {
+		t.Fatalf("currencies = %s, want [JPY USD]", got)
 	}
 }
 
@@ -406,7 +458,7 @@ func (source *fakeSource) FXRateOnOrBefore(_ context.Context, from domain.Curren
 		}
 	}
 	if !bestSet {
-		return 0, errors.New("rate not found")
+		return 0, fmt.Errorf("fx %s->%s on %s: %w", from, to, at, domain.ErrNotFound)
 	}
 	return best, nil
 }
