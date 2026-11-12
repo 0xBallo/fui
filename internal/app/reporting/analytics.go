@@ -21,20 +21,23 @@ type Config struct {
 	MonthStartDay int             // 1..31; default 1
 	BudgetMode    domain.BudgetMode
 	HorizonDays   int            // forecast.horizon in days; default 90
+	MinBalance    string         // forecast minimum balance, typed amount; empty = none
 	Location      *time.Location // zone that defines "today"; default time.Local
 	Modules       module.Set     // enabled modules; analytics must be among them
 }
 
 // Analytics runs the analytics module use cases (forecast, reports, saved reports) over a Store.
 type Analytics struct {
-	store app.Store
-	clock app.Clock
-	cfg   Config
+	store  app.Store
+	clock  app.Clock
+	source Source // feeds the MVP spending and cash-flow reports; may be nil when they are not run
+	cfg    Config
 }
 
-// NewAnalytics builds an Analytics, defaulting Locale, MonthStartDay, BudgetMode, HorizonDays
+// NewAnalytics builds an Analytics over store; source (the SQLite store implements it) feeds the
+// MVP reports saved reports can wrap, defaulting Locale, MonthStartDay, BudgetMode, HorizonDays
 // and Location when unset.
-func NewAnalytics(store app.Store, clock app.Clock, cfg Config) *Analytics {
+func NewAnalytics(store app.Store, clock app.Clock, source Source, cfg Config) *Analytics {
 	if cfg.Locale == "" {
 		cfg.Locale = domain.LocaleENUS
 	}
@@ -50,7 +53,7 @@ func NewAnalytics(store app.Store, clock app.Clock, cfg Config) *Analytics {
 	if cfg.Location == nil {
 		cfg.Location = time.Local
 	}
-	return &Analytics{store: store, clock: clock, cfg: cfg}
+	return &Analytics{store: store, clock: clock, source: source, cfg: cfg}
 }
 
 // gate fails with module_disabled unless analytics and every extra module are enabled.

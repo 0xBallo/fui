@@ -23,9 +23,11 @@ const (
 	KindNetWorth = "net-worth"
 	KindPayees   = "top-payees"
 	KindForecast = "forecast"
+	KindSpending = "spending"
+	KindCashFlow = "cash-flow"
 )
 
-var reportKinds = []string{KindBalance, KindBudget, KindDebt, KindInterest, KindNetWorth, KindPayees, KindForecast}
+var reportKinds = []string{KindBalance, KindBudget, KindDebt, KindInterest, KindNetWorth, KindPayees, KindForecast, KindSpending, KindCashFlow}
 
 // SavedSpec is the stored definition of a saved report; Period is relative (see ResolveRelative)
 // so the report stays current. The forecast ignores Period.
@@ -34,6 +36,8 @@ type SavedSpec struct {
 	Account string `json:"account,omitempty"`
 	Loan    string `json:"loan,omitempty"`
 	Limit   int    `json:"limit,omitempty"`
+	// MinBalance is the forecast's minimum balance.
+	MinBalance string `json:"min_balance,omitempty"`
 }
 
 // SavePlan is the plan to store a saved report.
@@ -197,7 +201,9 @@ func (a *Analytics) Run(ctx context.Context, ref string) (SavedResult, error) {
 	case KindPayees:
 		out.Data, err = a.TopPayees(ctx, req)
 	case KindForecast:
-		out.Data, err = a.Forecast(ctx, 0)
+		out.Data, err = a.Forecast(ctx, ForecastRequest{MinBalance: spec.MinBalance})
+	case KindSpending, KindCashFlow:
+		out.Data, err = a.mvp(ctx, sr.Kind, req)
 	default:
 		err = invalid("kind", fmt.Sprintf("unknown report kind %q", sr.Kind))
 	}
@@ -206,4 +212,35 @@ func (a *Analytics) Run(ctx context.Context, ref string) (SavedResult, error) {
 
 func invalid(field, msg string) error {
 	return &domain.Error{Code: domain.CodeInvalidValue, Message: msg, Details: map[string]any{"field": field}}
+}
+
+// mvp runs the spending or cash-flow report over the Source, for the account named in req.
+func (a *Analytics) mvp(ctx context.Context, kind string, req ReportRequest) (any, error) {
+	var ids []domain.AccountID
+	if req.Account != "" {
+		err := a.store.Read(ctx, func(r app.Repos) error {
+			accts, err := r.Accounts().List(ctx)
+			if err != nil {
+				return fmt.Errorf("list accounts: %w", err)
+			}
+			acct, err := pickAccount(accts, req.Account)
+			ids = []domain.AccountID{acct.ID}
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	if kind == KindSpending {
+		uc, err := NewSpending(a.source, a.clock)
+		if err != nil {
+			return nil, err
+		}
+		return uc.Run(ctx, SpendingParams{Period: req.Period, MonthStartDay: a.cfg.MonthStartDay, AccountIDs: ids, BaseCurrency: a.cfg.BaseCurrency})
+	}
+	uc, err := NewCashFlow(a.source, a.clock)
+	if err != nil {
+		return nil, err
+	}
+	return uc.Run(ctx, CashFlowParams{Period: req.Period, MonthStartDay: a.cfg.MonthStartDay, AccountIDs: ids, BaseCurrency: a.cfg.BaseCurrency})
 }

@@ -1,13 +1,16 @@
 package reporting
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/lending"
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/module"
 )
@@ -21,6 +24,7 @@ type AccountProjection struct {
 	Currency       string  `json:"currency"`
 	Series         []Point `json:"series"`
 	FirstBelowZero string  `json:"first_below_zero,omitempty"`
+	FirstBelowMin  string  `json:"first_below_minimum,omitempty"`
 }
 
 // ForecastResult is the cash-flow forecast: per-account daily balances and their total in the
@@ -31,21 +35,28 @@ type ForecastResult struct {
 	Accounts       []AccountProjection `json:"accounts"`
 	Total          []Point             `json:"total"`
 	FirstBelowZero string              `json:"first_below_zero,omitempty"`
+	FirstBelowMin  string              `json:"first_below_minimum,omitempty"`
 }
 
-// Forecast projects the balance of every active liquidity account for horizonDays from today
-// (Config.HorizonDays when zero). It starts from today's balances and adds future-dated
+// ForecastRequest are the forecast parameters. HorizonDays defaults to Config.HorizonDays and
+// MinBalance, a typed amount in each account's currency (the base currency for the total),
+// to Config.MinBalance; empty means no minimum.
+type ForecastRequest struct {
+	HorizonDays int
+	MinBalance  string
+}
+
+// Forecast projects the balance of every active liquidity account for req.HorizonDays from today. It starts from today's balances and adds future-dated
 // transactions, the occurrences of recurrences not yet generated, the installments of loans
 // (when the loans module is on) that have no transaction yet, and the estimated variable
 // spending: the cap budgets (when the budget module is on) and, for what they do not cover, the
 // average of the last three complete months. Spending is spread evenly over each month.
-func (a *Analytics) Forecast(ctx context.Context, horizonDays int) (ForecastResult, error) {
+func (a *Analytics) Forecast(ctx context.Context, req ForecastRequest) (ForecastResult, error) {
 	if err := a.gate(); err != nil {
 		return ForecastResult{}, err
 	}
-	if horizonDays == 0 {
-		horizonDays = a.cfg.HorizonDays
-	}
+	horizonDays := cmp.Or(req.HorizonDays, a.cfg.HorizonDays)
+	minimum := cmp.Or(req.MinBalance, a.cfg.MinBalance)
 	start, err := a.today()
 	if err != nil {
 		return ForecastResult{}, err
@@ -73,17 +84,21 @@ func (a *Analytics) Forecast(ctx context.Context, horizonDays int) (ForecastResu
 		if err != nil {
 			return err
 		}
-		proj, err := domain.Forecast(start, horizonDays, openings, flows, nil)
+		thresholds, err := a.thresholds(minimum, accts)
+		if err != nil {
+			return err
+		}
+		proj, err := domain.Forecast(start, horizonDays, openings, flows, thresholds)
 		if err != nil {
 			return fmt.Errorf("forecast: %w", err)
 		}
-		out, err = a.assemble(ctx, r, accts, proj, start, horizonDays)
+		out, err = a.assemble(ctx, r, accts, proj, start, horizonDays, minimum)
 		return err
 	})
 	return out, err
 }
 
-func (a *Analytics) assemble(ctx context.Context, r app.Repos, accts []domain.Account, proj []domain.AccountForecast, start domain.Date, days int) (ForecastResult, error) {
+func (a *Analytics) assemble(ctx context.Context, r app.Repos, accts []domain.Account, proj []domain.AccountForecast, start domain.Date, days int, minimum string) (ForecastResult, error) {
 	out := ForecastResult{Start: start.String(), Days: days, Accounts: []AccountProjection{}, Total: []Point{}}
 	totals := make([]domain.Money, days+1)
 	for i := range totals {
@@ -99,6 +114,9 @@ func (a *Analytics) assemble(ctx context.Context, r app.Repos, accts []domain.Ac
 		if pr.HasFirstBelowZero {
 			ap.FirstBelowZero = pr.FirstBelowZero.String()
 		}
+		if pr.HasFirstBelowMinimum {
+			ap.FirstBelowMin = pr.FirstBelowThreshold.String()
+		}
 		for i, pt := range pr.Series {
 			ap.Series[i] = Point{Date: pt.Date.String(), Amount: amountOf(pt.Balance)}
 			// The total uses the rate in force on the start date for the whole horizon.
@@ -112,15 +130,49 @@ func (a *Analytics) assemble(ctx context.Context, r app.Repos, accts []domain.Ac
 		}
 		out.Accounts = append(out.Accounts, ap)
 	}
+	if err := a.totalSeries(&out, totals, start, minimum); err != nil {
+		return ForecastResult{}, err
+	}
+	return out, nil
+}
+
+// totalSeries fills the total series of out and its first days below zero and below minimum.
+func (a *Analytics) totalSeries(out *ForecastResult, totals []domain.Money, start domain.Date, minimum string) error {
+	var floor domain.Money
+	if minimum != "" {
+		var err error
+		if floor, err = domain.ParseAmount(minimum, a.cfg.Locale, a.cfg.BaseCurrency); err != nil {
+			return fmt.Errorf("minimum balance: %w", err)
+		}
+	}
 	for i, t := range totals {
 		d, err := start.AddDays(i)
 		if err != nil {
-			return ForecastResult{}, err
+			return err
 		}
 		out.Total = append(out.Total, Point{Date: d.String(), Amount: amountOf(t)})
 		if out.FirstBelowZero == "" && t.Sign() < 0 {
 			out.FirstBelowZero = d.String()
 		}
+		if below, _ := t.Cmp(floor); minimum != "" && out.FirstBelowMin == "" && below < 0 {
+			out.FirstBelowMin = d.String()
+		}
+	}
+	return nil
+}
+
+// thresholds parses the minimum balance in the currency of each account; empty means none.
+func (a *Analytics) thresholds(minimum string, accts []domain.Account) ([]domain.ForecastThreshold, error) {
+	if minimum == "" {
+		return nil, nil
+	}
+	out := make([]domain.ForecastThreshold, len(accts))
+	for i, ac := range accts {
+		m, err := domain.ParseAmount(minimum, a.cfg.Locale, ac.Currency)
+		if err != nil {
+			return nil, fmt.Errorf("minimum balance: %w", err)
+		}
+		out[i] = domain.ForecastThreshold{AccountID: ac.ID, Minimum: m}
 	}
 	return out, nil
 }
@@ -352,11 +404,13 @@ func (a *Analytics) history(ctx context.Context, r app.Repos, accts []domain.Acc
 	if err != nil {
 		return nil, fmt.Errorf("list history: %w", err)
 	}
+	loanInterest, err := loanInterestCategory(ctx, r)
+	if err != nil {
+		return nil, err
+	}
 	out := map[spendKey]int64{}
 	for _, t := range txs {
-		switch {
-		case t.RecurrenceID != 0, t.Status == domain.StatusPending,
-			t.Kind == domain.KindTransfer, t.Kind == domain.KindExchange, t.Kind == domain.KindInvestment:
+		if skipFromHistory(t, loanInterest) {
 			continue
 		}
 		if _, err := r.Loans().InstallmentOfTransaction(ctx, t.ID); err == nil {
@@ -377,6 +431,33 @@ func (a *Analytics) history(ctx context.Context, r app.Repos, accts []domain.Acc
 		}
 	}
 	return out, nil
+}
+
+// loanInterestCategory is the ID of the category lending books interest and fees under, or zero.
+func loanInterestCategory(ctx context.Context, r app.Repos) (domain.CategoryID, error) {
+	cats, err := r.Categories().List(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list categories: %w", err)
+	}
+	for _, c := range cats {
+		if strings.EqualFold(c.Name, lending.InterestCategory) {
+			return c.ID, nil
+		}
+	}
+	return 0, nil
+}
+
+// skipFromHistory reports whether t is not variable spending. Installments are scheduled flows
+// already: neither the transaction of an installment nor the interest and fees expense booked
+// when one is confirmed may count again.
+func skipFromHistory(t domain.Transaction, loanInterest domain.CategoryID) bool {
+	switch {
+	case t.RecurrenceID != 0, t.Status == domain.StatusPending,
+		t.Kind == domain.KindTransfer, t.Kind == domain.KindExchange, t.Kind == domain.KindInvestment,
+		t.Kind == domain.KindInterest:
+		return true
+	}
+	return loanInterest != 0 && t.CategoryID == loanInterest
 }
 
 func accountIDs(accts []domain.Account) []domain.AccountID {

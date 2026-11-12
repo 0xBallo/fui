@@ -7,6 +7,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -52,7 +53,7 @@ func newFx(t testing.TB, mods ...module.ID) *fx {
 	ctx := context.Background()
 	set := must(module.Validate(append([]module.ID{module.Core, module.Recurring, module.Analytics}, mods...)))
 	f := &fx{store: memstore.New(), cfg: reporting.Config{BaseCurrency: eur(), Location: time.UTC, Modules: set}}
-	f.svc = reporting.NewAnalytics(f.store, clock.NewFixed(date("2026-03-15").In(time.UTC)), f.cfg)
+	f.svc = reporting.NewAnalytics(f.store, clock.NewFixed(date("2026-03-15").In(time.UTC)), memSource{f.store}, f.cfg)
 	err := f.store.WithTx(ctx, func(r app.Repos) (err error) {
 		f.main, err = r.Accounts().Insert(ctx, domain.Account{Name: "Main", Kind: domain.AccountChecking, Currency: eur(), OpeningBalance: money(100_000), OpenedOn: date("2025-12-01")})
 		if err != nil {
@@ -218,7 +219,7 @@ func TestForecastGolden(t *testing.T) {
 	if _, err := ls.ApplyAdd(ctx, plan); err != nil {
 		t.Fatal(err)
 	}
-	res, err := f.svc.Forecast(ctx, 30)
+	res, err := f.svc.Forecast(ctx, reporting.ForecastRequest{HorizonDays: 30})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +244,7 @@ func TestForecastBudgetReplacesAverage(t *testing.T) {
 	f := newFx(t, module.Budget)
 	seedHistory(t, f)
 	ctx := context.Background()
-	base, err := f.svc.Forecast(ctx, 31)
+	base, err := f.svc.Forecast(ctx, reporting.ForecastRequest{HorizonDays: 31})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +262,7 @@ func TestForecastBudgetReplacesAverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	with, err := f.svc.Forecast(ctx, 31)
+	with, err := f.svc.Forecast(ctx, reporting.ForecastRequest{HorizonDays: 31})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,8 +283,8 @@ func TestModuleGates(t *testing.T) {
 			t.Errorf("%s err = %v, want module_disabled", name, err)
 		}
 	}
-	off := reporting.NewAnalytics(f.store, clock.NewFixed(date("2026-03-15").In(time.UTC)), reporting.Config{BaseCurrency: eur()})
-	if _, err := off.Forecast(ctx, 0); !errors.Is(err, app.ErrModuleDisabled) {
+	off := reporting.NewAnalytics(f.store, clock.NewFixed(date("2026-03-15").In(time.UTC)), nil, reporting.Config{BaseCurrency: eur()})
+	if _, err := off.Forecast(ctx, reporting.ForecastRequest{}); !errors.Is(err, app.ErrModuleDisabled) {
 		t.Errorf("forecast without analytics err = %v", err)
 	}
 }
@@ -481,7 +482,9 @@ func TestSavedRunEveryKind(t *testing.T) {
 		reporting.KindInterest: {Period: "this-year"},
 		reporting.KindNetWorth: {},
 		reporting.KindPayees:   {},
-		reporting.KindForecast: {},
+		reporting.KindForecast: {MinBalance: "1000"},
+		reporting.KindSpending: {Period: "this-month", Account: "Main"},
+		reporting.KindCashFlow: {Period: "last-3-months"},
 	} {
 		p, err := f.svc.PlanSave(ctx, kind, kind, spec)
 		if err != nil {
@@ -501,5 +504,162 @@ func TestSavedRunEveryKind(t *testing.T) {
 	// Only the installments due up to today (Jan 1.. Mar 15) count: Feb 1 and Mar 1 under the new rate, plus none else.
 	if len(interest.Rows) != 1 || interest.Rows[0].Year != 2026 || interest.Rows[0].Interest.Minor <= 0 {
 		t.Fatalf("interest = %+v", interest)
+	}
+}
+
+// memSource implements reporting.Source over a memstore, as the SQLite store does.
+type memSource struct{ st *memstore.Store }
+
+func (m memSource) read(fn func(app.Repos) error) error {
+	return m.st.Read(context.Background(), fn)
+}
+
+func (m memSource) ListAccounts(_ context.Context, f reporting.AccountFilter) ([]domain.Account, error) {
+	var out []domain.Account
+	err := m.read(func(r app.Repos) error {
+		all, err := r.Accounts().List(context.Background())
+		for _, a := range all {
+			if (f.IncludeArchived || !a.Archived) && (len(f.AccountIDs) == 0 || slices.Contains(f.AccountIDs, a.ID)) {
+				out = append(out, a)
+			}
+		}
+		return err
+	})
+	return out, err
+}
+
+func (m memSource) ListCategories(_ context.Context, ids []domain.CategoryID) ([]domain.Category, error) {
+	var out []domain.Category
+	err := m.read(func(r app.Repos) error {
+		all, err := r.Categories().List(context.Background())
+		for _, c := range all {
+			if slices.Contains(ids, c.ID) {
+				out = append(out, c)
+			}
+		}
+		return err
+	})
+	return out, err
+}
+
+func (m memSource) ListTransactions(_ context.Context, f reporting.TransactionFilter) ([]domain.Transaction, error) {
+	var out []domain.Transaction
+	err := m.read(func(r app.Repos) error {
+		tf, err := domain.NewTxFilter(domain.TxFilterSpec{From: f.Period.From(), To: f.Period.To(), AccountIDs: f.AccountIDs})
+		if err != nil {
+			return err
+		}
+		out, err = r.Transactions().List(context.Background(), tf, nil, 0)
+		return err
+	})
+	return out, err
+}
+
+func (m memSource) BalanceAt(context.Context, domain.AccountID, domain.Date) (domain.Money, error) {
+	return domain.Money{}, errors.New("unused")
+}
+
+func (m memSource) FXRateOnOrBefore(context.Context, domain.Currency, domain.Currency, domain.Date) (domain.Rate, error) {
+	return 0, domain.ErrNotFound
+}
+
+func TestSavedMVPReports(t *testing.T) {
+	f := newFx(t)
+	seedHistory(t, f)
+	ctx := context.Background()
+	for kind, spec := range map[string]reporting.SavedSpec{
+		reporting.KindSpending: {Period: "this-month", Account: "Main"},
+		reporting.KindCashFlow: {Period: "last-3-months"},
+	} {
+		p, err := f.svc.PlanSave(ctx, kind, kind, spec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.svc.ApplySave(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sp, err := f.svc.Run(ctx, reporting.KindSpending)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sp.Data.(reporting.SpendingResult).Total.Minor(); got != 2_000 {
+		t.Fatalf("spending total = %d, want 2000", got)
+	}
+	cf, err := f.svc.Run(ctx, reporting.KindCashFlow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(cf.Data.(reporting.CashFlowResult).Months); got != 3 {
+		t.Fatalf("cash-flow months = %d, want 3", got)
+	}
+	noSrc := reporting.NewAnalytics(f.store, clock.NewFixed(date("2026-03-15").In(time.UTC)), nil, f.cfg)
+	if _, err := noSrc.Run(ctx, reporting.KindSpending); !errors.Is(err, domain.ErrMissingField) {
+		t.Fatalf("run without source err = %v", err)
+	}
+}
+
+func TestForecastIgnoresLoanInterestHistory(t *testing.T) {
+	f := newFx(t)
+	seedHistory(t, f)
+	ctx := context.Background()
+	base, err := f.svc.Forecast(ctx, reporting.ForecastRequest{HorizonDays: 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cat domain.Category
+	err = f.store.WithTx(ctx, func(r app.Repos) (err error) {
+		cat, err = r.Categories().Insert(ctx, domain.Category{Name: lending.InterestCategory, Kind: domain.CategoryExpense})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An interest expense booked when an installment was confirmed, and a stray one by category only.
+	f.tx(t, f.main, "2026-02-20", -4_000, func(x *domain.Transaction) { x.Kind = domain.KindInterest; x.CategoryID = cat.ID })
+	f.tx(t, f.main, "2026-01-20", -2_000, func(x *domain.Transaction) { x.CategoryID = cat.ID })
+	with, err := f.svc.Forecast(ctx, reporting.ForecastRequest{HorizonDays: 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The history gained 6000 of expenses, but they must not move the projection; the opening
+	// balance did move by -6000 (both rows are in the past), so compare the daily slope.
+	slope := func(r reporting.ForecastResult) int64 { return r.Total[0].Amount.Minor - r.Total[30].Amount.Minor }
+	if slope(base) != slope(with) {
+		t.Fatalf("loan interest leaked into the variable estimate: %d vs %d", slope(base), slope(with))
+	}
+}
+
+func TestForecastMinimumBalance(t *testing.T) {
+	f := newFx(t)
+	seedHistory(t, f)
+	ctx := context.Background()
+	// Main holds 289000, spends ~1000/month on average; 288990 is crossed on the first days.
+	res, err := f.svc.Forecast(ctx, reporting.ForecastRequest{HorizonDays: 30, MinBalance: "2889.50"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Accounts[0].FirstBelowMin == "" || res.Accounts[0].FirstBelowZero != "" {
+		t.Fatalf("main = %+v", res.Accounts[0])
+	}
+	if res.Accounts[1].FirstBelowMin == "" { // Savings 500.00 < 2889.50 from day zero
+		t.Fatalf("savings = %+v", res.Accounts[1])
+	}
+	hi, err := f.svc.Forecast(ctx, reporting.ForecastRequest{HorizonDays: 30, MinBalance: "4000"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hi.FirstBelowMin != "2026-03-15" || hi.FirstBelowZero != "" {
+		t.Fatalf("total below min = %q, below zero = %q", hi.FirstBelowMin, hi.FirstBelowZero)
+	}
+	none, err := f.svc.Forecast(ctx, reporting.ForecastRequest{HorizonDays: 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if none.FirstBelowMin != "" || none.Accounts[0].FirstBelowMin != "" {
+		t.Fatalf("minimum reported without being set: %+v", none)
+	}
+	if _, err := f.svc.Forecast(ctx, reporting.ForecastRequest{MinBalance: "abc"}); err == nil {
+		t.Fatal("bad minimum accepted")
 	}
 }
