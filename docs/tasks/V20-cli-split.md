@@ -1,0 +1,6 @@
+# V20 — CLI: tag, payee, split, -t filter
+Branch `feat/v-cli-split`. Owned: `internal/cli/{tag,payee,tx_split}*.go` (new), `filterflags.go` (add `-t/--tag`), render files for them.
+
+Protocol: `docs/tasks/_PROTOCOL.md` (binding). CLI layer: thin cobra commands (≤ 60 lines each, no business logic) following the existing ones in `internal/cli` (Deps, runtime flags, Plan/Apply with `--dry-run`/`--yes`, agent mode `confirmation_required`, `--json` output with stable DTOs in `internal/cli/render`, locale-aware amounts/dates via the existing parsers). Each command carries the `module` annotation (see `module_gate.go`/root table). **Do not edit `root.go` registration or `help.json` golden**: expose `newXxxCmd(deps)` and test it directly in `internal/cli` with memstore; V32 registers commands and updates `help --json`. Wire any new app service into `Deps` (deps.go) and `cmd/fui` composition if needed (one small commit). `internal/cli` coverage ≥ 80%. Spec: funzionali.md CLI table + the feature section.
+
+Module core. `fui tag add/list/rename/rm/merge`, `fui tx tag/untag <id> <tag>...`, `fui payee add/list/alias/rename/merge`, `fui tx split <id> --row "cat=amount[:note]"... ` / `fui tx unsplit <id>`. Add `-t/--tag` (repeatable) to the shared filter flags and the TUI-independent `ListTxRequest`.
