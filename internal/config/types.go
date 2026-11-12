@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/0xballo/fui/internal/module"
 )
 
 // Supported locales.
@@ -103,6 +105,11 @@ type ImportConfig struct {
 	Profiles map[string]CSVProfile `toml:"profiles"`
 }
 
+// ModulesConfig holds enabled module ids.
+type ModulesConfig struct {
+	Enabled []module.ID `toml:"enabled"`
+}
+
 // Config represents the complete configuration and runtime environment of FUI.
 type Config struct {
 	// Resolved paths and operational options (not written to TOML).
@@ -123,6 +130,7 @@ type Config struct {
 	MonthStartDay int              `toml:"month_start_day"`
 	WeekStart     string           `toml:"week_start"`
 	Theme         string           `toml:"theme"`
+	Modules       ModulesConfig    `toml:"modules"`
 	Backup        BackupConfig     `toml:"backup"`
 	Connectors    ConnectorsConfig `toml:"connectors"`
 	Import        ImportConfig     `toml:"import"`

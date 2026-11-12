@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+
+	"github.com/0xballo/fui/internal/module"
 )
 
 // Validate checks whether all configuration values satisfy required constraints.
@@ -22,6 +24,9 @@ func (c *Config) Validate() error {
 		return err
 	}
 	if err := validateTheme(c.Theme); err != nil {
+		return err
+	}
+	if err := validateModulesEnabled(c.Modules.Enabled); err != nil {
 		return err
 	}
 	if err := validateBackupKeep(c.Backup.Keep); err != nil {
@@ -89,6 +94,13 @@ func validateBackupKeep(keep int) error {
 func validateTimeout(d Duration) error {
 	if d.Duration() <= 0 {
 		return fmt.Errorf("invalid value for key %q: must be positive duration", "connectors.timeout")
+	}
+	return nil
+}
+
+func validateModulesEnabled(ids []module.ID) error {
+	if _, err := module.Validate(ids); err != nil {
+		return fmt.Errorf("invalid value for key %q: %w", "modules.enabled", err)
 	}
 	return nil
 }

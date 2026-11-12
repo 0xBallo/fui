@@ -10,6 +10,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/0xballo/fui/internal/config"
+	"github.com/0xballo/fui/internal/module"
 )
 
 func TestDefaults(t *testing.T) {
@@ -47,6 +48,9 @@ func TestDefaults(t *testing.T) {
 	}
 	if len(cfg.Import.Profiles) != 0 {
 		t.Errorf("expected empty profiles, got %d", len(cfg.Import.Profiles))
+	}
+	if diff := cmp.Diff(module.Default().IDs(), cfg.Modules.Enabled); diff != "" {
+		t.Errorf("modules.enabled mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -251,6 +255,21 @@ func TestInvalidValues(t *testing.T) {
 			wantErr: `"connectors.timeout"`,
 		},
 		{
+			name:    "modules missing core",
+			toml:    `[modules]` + "\n" + `enabled = ["budget"]`,
+			wantErr: `"modules.enabled"`,
+		},
+		{
+			name:    "modules missing dependency",
+			toml:    `[modules]` + "\n" + `enabled = ["core", "crypto"]`,
+			wantErr: `"modules.enabled"`,
+		},
+		{
+			name:    "modules unknown id",
+			toml:    `[modules]` + "\n" + `enabled = ["core", "unknown"]`,
+			wantErr: `"modules.enabled"`,
+		},
+		{
 			name: "profile missing date_column",
 			toml: `
 [import.profiles.test]
@@ -433,6 +452,10 @@ func TestGetSetAndPersistence(t *testing.T) {
 	if err != nil || val != "10" {
 		t.Fatalf("Get(backup.keep) = %q, err %v", val, err)
 	}
+	val, err = cfg.Get("modules.enabled")
+	if err != nil || val != "analytics,budget,core,recurring" {
+		t.Fatalf("Get(modules.enabled) = %q, err %v", val, err)
+	}
 
 	// Set valid keys and verify persistence
 	if err := cfg.Set("currency", "USD"); err != nil {
@@ -455,6 +478,9 @@ func TestGetSetAndPersistence(t *testing.T) {
 	}
 	if err := cfg.Set("connectors.timeout", "45s"); err != nil {
 		t.Fatalf("Set(connectors.timeout) failed: %v", err)
+	}
+	if err := cfg.Set("modules.enabled", "core,budget,recurring,simulations,ai"); err != nil {
+		t.Fatalf("Set(modules.enabled) failed: %v", err)
 	}
 
 	// Set profile fields
@@ -517,6 +543,12 @@ func TestGetSetAndPersistence(t *testing.T) {
 	}
 	if reloaded.MonthStartDay != 25 {
 		t.Errorf("reloaded month_start_day = %d, want 25", reloaded.MonthStartDay)
+	}
+	if diff := cmp.Diff(
+		[]module.ID{module.AI, module.Budget, module.Core, module.Recurring, module.Simulations},
+		reloaded.Modules.Enabled,
+	); diff != "" {
+		t.Errorf("reloaded modules.enabled mismatch (-want +got):\n%s", diff)
 	}
 	if reloaded.WeekStart != "sunday" {
 		t.Errorf("reloaded week_start = %q, want sunday", reloaded.WeekStart)
@@ -697,6 +729,9 @@ func TestResolveErrorsAndEdgeCases(t *testing.T) {
 	if err := cfg.Set("connectors.timeout", "bad_dur"); err == nil {
 		t.Error("expected error for invalid connectors.timeout, got nil")
 	}
+	if err := cfg.Set("modules.enabled", "budget"); err == nil {
+		t.Error("expected error for invalid modules.enabled, got nil")
+	}
 }
 
 func TestSetDoesNotPersistEnvOverrides(t *testing.T) {
@@ -735,6 +770,27 @@ func TestSetDoesNotPersistEnvOverrides(t *testing.T) {
 	fileContent := string(data)
 	if strings.Contains(fileContent, "USD") {
 		t.Errorf("config file persisted env override USD:\n%s", fileContent)
+	}
+}
+
+func TestSetModulesEnabled(t *testing.T) {
+	tmp := t.TempDir()
+	cfg, _, err := config.Resolve(config.ResolveOptions{HomeDir: tmp})
+	if err != nil {
+		t.Fatalf("Resolve failed: %v", err)
+	}
+
+	want := []module.ID{module.Budget, module.Core, module.Recurring}
+	if err := cfg.SetModulesEnabled(t.Context(), want); err != nil {
+		t.Fatalf("SetModulesEnabled failed: %v", err)
+	}
+
+	got, err := cfg.ModulesEnabled()
+	if err != nil {
+		t.Fatalf("ModulesEnabled failed: %v", err)
+	}
+	if diff := cmp.Diff(want, got.IDs()); diff != "" {
+		t.Fatalf("ModulesEnabled mismatch (-want +got):\n%s", diff)
 	}
 }
 

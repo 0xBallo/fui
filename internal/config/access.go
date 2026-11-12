@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
+
+	"github.com/0xballo/fui/internal/module"
 )
 
 // Get returns the string representation of the configuration value for a dotted key.
@@ -25,6 +28,8 @@ func (c *Config) Get(key string) (string, error) {
 		return c.WeekStart, nil
 	case "theme":
 		return c.Theme, nil
+	case "modules.enabled":
+		return joinModuleIDs(c.Modules.Enabled), nil
 	case "backup.keep":
 		return strconv.Itoa(c.Backup.Keep), nil
 	case "connectors.timeout":
@@ -226,6 +231,20 @@ func (c *Config) setComplexField(key, value string) (bool, error) {
 		}
 		c.Connectors.Timeout = d
 		return true, nil
+	case "modules.enabled":
+		ids, err := parseModuleIDs(value)
+		if err != nil {
+			return true, err
+		}
+		validated, err := module.Validate(ids)
+		if err != nil {
+			return true, fmt.Errorf("invalid value for key %q: %w", "modules.enabled", err)
+		}
+		if err := validateModulesEnabled(validated.IDs()); err != nil {
+			return true, err
+		}
+		c.Modules.Enabled = validated.IDs()
+		return true, nil
 	default:
 		return false, nil
 	}
@@ -314,6 +333,48 @@ func setProfileFormat(p *CSVProfile, key, field, value string) (bool, error) {
 	default:
 		return false, nil
 	}
+}
+
+func parseModuleIDs(value string) ([]module.ID, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, fmt.Errorf("invalid value for key %q: empty list", "modules.enabled")
+	}
+	parts := strings.Split(value, ",")
+	out := make([]module.ID, 0, len(parts))
+	for _, p := range parts {
+		id := module.ID(strings.TrimSpace(p))
+		if id == "" {
+			return nil, fmt.Errorf("invalid value for key %q: empty module id", "modules.enabled")
+		}
+		out = append(out, id)
+	}
+	return out, nil
+}
+
+func joinModuleIDs(ids []module.ID) string {
+	if len(ids) == 0 {
+		return ""
+	}
+	parts := make([]string, len(ids))
+	for i, id := range ids {
+		parts[i] = string(id)
+	}
+	return strings.Join(parts, ",")
+}
+
+// ModulesEnabled returns the validated module set from config.
+func (c *Config) ModulesEnabled() (module.Set, error) {
+	return module.Validate(c.Modules.Enabled)
+}
+
+// SetModulesEnabled persists modules.enabled and updates this config in-memory.
+func (c *Config) SetModulesEnabled(_ context.Context, ids []module.ID) error {
+	validated, err := module.Validate(ids)
+	if err != nil {
+		return fmt.Errorf("invalid value for key %q: %w", "modules.enabled", err)
+	}
+	return c.Set("modules.enabled", joinModuleIDs(validated.IDs()))
 }
 
 // SaveToFile serializes the persistent configuration as TOML to path,

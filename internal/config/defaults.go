@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/0xballo/fui/internal/module"
+)
 
 // Default values for standard FUI configuration.
 const (
@@ -16,6 +20,7 @@ const (
 
 // Defaults returns a new Config instance initialized with code-defined defaults.
 func Defaults() Config {
+	defaultModules := module.Default()
 	return Config{
 		LogLevel:      DefaultLogLevel,
 		Currency:      DefaultCurrency,
@@ -23,6 +28,9 @@ func Defaults() Config {
 		MonthStartDay: DefaultMonthStartDay,
 		WeekStart:     DefaultWeekStart,
 		Theme:         DefaultTheme,
+		Modules: ModulesConfig{
+			Enabled: defaultModules.IDs(),
+		},
 		Backup: BackupConfig{
 			Keep: DefaultBackupKeep,
 		},
