@@ -31,8 +31,8 @@ func TestRestore(t *testing.T) {
 		t.Fatal("planning must not touch the archive")
 	}
 	wantNoErr(t, e.svc.ApplyRestore(t.Context(), p))
-	if !reflect.DeepEqual(e.backup.reasons, []string{app.BackupReasonRestore}) || !reflect.DeepEqual(e.backup.restored, []string{"/b/old.db"}) {
-		t.Errorf("reasons = %v, restored = %v; want a restore backup first, then the restore", e.backup.reasons, e.backup.restored)
+	if len(e.backup.reasons) != 0 || !reflect.DeepEqual(e.backup.restored, []string{"/b/old.db"}) {
+		t.Errorf("reasons = %v, restored = %v; want only restore(path), backup handled by store", e.backup.reasons, e.backup.restored)
 	}
 }
 

@@ -43,11 +43,9 @@ func (s *Service) PlanRestore(req RestoreRequest) (RestorePlan, error) {
 	return RestorePlan{Plan: Plan{Changes: []Change{ch}, Bulk: true}, Path: req.Path}, nil
 }
 
-// ApplyRestore backs up the current archive (reason "restore"), then restores the backup.
+// ApplyRestore restores the archive from the selected backup.
+// The underlying store performs the pre-restore backup under its own lock.
 func (s *Service) ApplyRestore(ctx context.Context, p RestorePlan) error {
-	if _, err := s.backup.Backup(ctx, BackupReasonRestore); err != nil {
-		return fmt.Errorf("backup before restore: %w", err)
-	}
 	if err := s.backup.Restore(ctx, p.Path); err != nil {
 		return fmt.Errorf("restore %q: %w", p.Path, err)
 	}
