@@ -115,6 +115,10 @@ func counterparty(iban string) func(*fuiproto.TransactionRecord) {
 	return func(t *fuiproto.TransactionRecord) { t.CounterpartyIBAN = iban }
 }
 
+func pending() func(*fuiproto.TransactionRecord) {
+	return func(t *fuiproto.TransactionRecord) { t.Status = fuiproto.TransactionStatusPending }
+}
+
 func balanceAfter(n int64) func(*fuiproto.TransactionRecord) {
 	return func(t *fuiproto.TransactionRecord) { t.BalanceAfter = &n }
 }

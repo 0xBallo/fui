@@ -84,9 +84,11 @@ func orDefault(s, def string) string {
 	return s
 }
 
-// notePoint remembers the balance_after of the row for the coherence check.
+// notePoint remembers the balance_after of the row for the coherence check. A pending row is
+// skipped: banks typically report a running balance that excludes still-pending movements, so a
+// pending row's balance_after neither advances the chain nor is checked against it.
 func (b *builder) notePoint(rec *fuiproto.TransactionRecord, line int, tx domain.Transaction) {
-	if rec.BalanceAfter == nil {
+	if rec.BalanceAfter == nil || tx.Status == domain.StatusPending {
 		return
 	}
 	b.bal[rec.Account] = append(b.bal[rec.Account],

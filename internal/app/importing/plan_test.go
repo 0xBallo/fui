@@ -216,6 +216,25 @@ func TestPlanBalanceDiscrepancies(t *testing.T) {
 	}
 }
 
+// TestPlanBalanceDiscrepanciesSkipsPending covers the bank-balance convention (e.g. Revolut's
+// Balance column): a pending movement's balance_after does not reflect it, so it must neither
+// advance the chain nor be checked against it.
+func TestPlanBalanceDiscrepanciesSkipsPending(t *testing.T) {
+	e := newEnv(nil)
+	src := stream("bank", "",
+		account("r1", "Bank R1", "EUR"),
+		txRec("r1", "a", "2026-10-01", -100, "a", balanceAfter(1000)),
+		// A pending incoming transfer: the bank balance excludes it, so it stays at 1000 even
+		// though the movement itself is +200.
+		txRec("r1", "p", "2026-10-02", 200, "pending transfer", balanceAfter(1000), pending()),
+		txRec("r1", "b", "2026-10-03", -300, "b", balanceAfter(700)),
+	)
+	plan := e.plan(t, src, createAccounts)
+	if len(plan.Discrepancies) != 0 {
+		t.Fatalf("discrepancies = %+v, want none (the pending row must be skipped)", plan.Discrepancies)
+	}
+}
+
 func TestPlanCategories(t *testing.T) {
 	e := newEnv(nil)
 	err := e.store.WithTx(context.Background(), func(r app.Repos) error {
