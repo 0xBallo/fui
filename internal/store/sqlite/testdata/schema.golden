@@ -11,6 +11,9 @@ index|idx_loan_installments_transaction|loan_installments|CREATE INDEX idx_loan_
     ON loan_installments (transaction_id)
 index|idx_loan_schedules_loan_valid_from|loan_schedules|CREATE INDEX idx_loan_schedules_loan_valid_from
     ON loan_schedules (loan_id, valid_from)
+index|idx_loans_liability_account|loans|CREATE UNIQUE INDEX idx_loans_liability_account
+    ON loans (liability_account_id) WHERE liability_account_id IS NOT NULL
+index|idx_loans_name|loans|CREATE UNIQUE INDEX idx_loans_name ON loans (name COLLATE NOCASE)
 index|idx_reconciliations_account_closed_date|reconciliations|CREATE INDEX idx_reconciliations_account_closed_date
     ON reconciliations (account_id, closed_at, date DESC, id DESC)
 index|idx_recurrences_account_next_date|recurrences|CREATE INDEX idx_recurrences_account_next_date ON recurrences (account_id, next_date, id)
@@ -169,7 +172,7 @@ table|loans|loans|CREATE TABLE loans (
     debit_account_id INTEGER NOT NULL REFERENCES accounts (id) ON DELETE RESTRICT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-) STRICT
+, name TEXT NOT NULL DEFAULT '', liability_account_id INTEGER REFERENCES accounts (id) ON DELETE RESTRICT) STRICT
 table|payee_aliases|payee_aliases|CREATE TABLE payee_aliases (
     id INTEGER PRIMARY KEY,
     payee_id INTEGER NOT NULL REFERENCES payees (id) ON DELETE CASCADE,

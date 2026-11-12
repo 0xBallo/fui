@@ -126,8 +126,15 @@ CREATE TABLE loans (
     rate_type TEXT NOT NULL CHECK (rate_type IN ('fixed', 'variable', 'mixed')),
     debit_account_id INTEGER NOT NULL REFERENCES accounts (id) ON DELETE RESTRICT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    name TEXT NOT NULL DEFAULT '',
+    liability_account_id INTEGER REFERENCES accounts (id) ON DELETE RESTRICT
 ) STRICT;
+
+CREATE UNIQUE INDEX idx_loans_name ON loans (name COLLATE NOCASE);
+
+CREATE UNIQUE INDEX idx_loans_liability_account
+    ON loans (liability_account_id) WHERE liability_account_id IS NOT NULL;
 
 CREATE TABLE loan_schedules (
     id INTEGER PRIMARY KEY,

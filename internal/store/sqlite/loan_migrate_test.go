@@ -99,3 +99,67 @@ func TestMigrateFromV5AddsLoanTables(t *testing.T) {
 		t.Fatalf("loan_installments.transaction_id = %v, want 1", linkedTx)
 	}
 }
+
+func TestMigrateFromV10BackfillsLoanIdentity(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "data", "fui.db")
+	ctx := context.Background()
+
+	db := mustOpenRawDB(t, dbPath)
+	migrationsFS, err := fs.Sub(migrationFS, "migrations")
+	if err != nil {
+		t.Fatalf("fs.Sub: %v", err)
+	}
+	provider, err := goose.NewProvider(goose.DialectSQLite3, db, migrationsFS)
+	if err != nil {
+		t.Fatalf("goose.NewProvider: %v", err)
+	}
+	if _, err := provider.UpTo(ctx, 10); err != nil {
+		t.Fatalf("migrate to v10: %v", err)
+	}
+	mustExec(t, db, `INSERT INTO accounts (name, kind, currency, opening_balance_minor, opened_on)
+		VALUES ('Checking', 'checking', 'EUR', 0, '2026-01-01')`)
+	mustExec(t, db, `INSERT INTO loans
+		(kind, principal_minor, currency, disbursed_on, term_months, rate_type, debit_account_id)
+		VALUES ('mortgage', 100000, 'EUR', '2026-01-01', 24, 'fixed', 1),
+		       ('loan', 5000, 'EUR', '2026-02-01', 6, 'fixed', 1)`)
+	mustClose(t, db)
+
+	store, err := Open(ctx, Options{
+		Path: dbPath, BackupDir: filepath.Join(root, "data", "backups"), BackupKeep: 10,
+		Clock: clock.NewFixed(time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC)),
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	rows, err := store.writeDB.QueryContext(ctx, `SELECT l.name, a.name, a.kind, a.opening_balance_minor, a.opened_on
+		FROM loans AS l JOIN accounts AS a ON a.id = l.liability_account_id ORDER BY l.id`)
+	if err != nil {
+		t.Fatalf("query loans: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	want := [][5]any{
+		{"Loan 1", "Loan 1", "loan", int64(-100000), "2026-01-01"},
+		{"Loan 2", "Loan 2", "loan", int64(-5000), "2026-02-01"},
+	}
+	for i := 0; rows.Next(); i++ {
+		var got [5]any
+		var n1, n2, kind, opened string
+		var bal int64
+		if err := rows.Scan(&n1, &n2, &kind, &bal, &opened); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		got = [5]any{n1, n2, kind, bal, opened}
+		if i >= len(want) || got != want[i] {
+			t.Fatalf("loan %d = %v, want %v", i, got, want)
+		}
+	}
+	if _, err := store.writeDB.ExecContext(ctx, `UPDATE loans SET name = 'loan 1' WHERE id = 2`); err == nil {
+		t.Fatal("duplicate loan name accepted, want unique violation")
+	}
+	if _, err := store.writeDB.ExecContext(ctx, `UPDATE loans SET liability_account_id = 2 WHERE id = 2`); err == nil {
+		t.Fatal("liability account shared by two loans, want unique violation")
+	}
+}
