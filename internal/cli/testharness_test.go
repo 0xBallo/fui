@@ -3,6 +3,7 @@ package cli_test
 import (
 	"bytes"
 	"context"
+	"io"
 	"path/filepath"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/0xballo/fui/internal/cli"
 	"github.com/0xballo/fui/internal/config"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 	"github.com/0xballo/fui/internal/testutil/memstore"
 	"github.com/0xballo/fui/pkg/fuiproto"
 )
@@ -63,6 +65,7 @@ func newHarness(t *testing.T) *harness {
 	connect := &fakeConnectors{csvFixtures: map[string][]fuiproto.Record{}}
 	cfg := &config.Config{
 		Currency: "EUR", Locale: config.LocaleUS, MonthStartDay: 1,
+		Modules:    config.ModulesConfig{Enabled: module.Default().IDs()},
 		ConfigFile: filepath.Join(t.TempDir(), "config.toml"),
 	}
 	return &harness{
@@ -113,12 +116,24 @@ func currency(t *testing.T, code string) domain.Currency {
 func (h *harness) run(args ...string) (stdout, stderr string, code int) {
 	h.t.Helper()
 	var out, errw bytes.Buffer
-	deps := &cli.Deps{
-		Service: h.svc, Importing: h.importing, Reporting: h.reporting, Config: h.cfg,
-		Stdin: h.stdin, Stdout: &out, Stderr: &errw, IsTerminal: h.term, Version: "test",
-	}
+	deps := h.deps(&out, &errw)
 	code = cli.Execute(context.Background(), deps, args)
 	return out.String(), errw.String(), code
+}
+
+func (h *harness) deps(stdout, stderr *bytes.Buffer) *cli.Deps {
+	out := io.Writer(stdout)
+	if stdout == nil {
+		out = io.Discard
+	}
+	errw := io.Writer(stderr)
+	if stderr == nil {
+		errw = io.Discard
+	}
+	return &cli.Deps{
+		Service: h.svc, Importing: h.importing, Reporting: h.reporting, Config: h.cfg,
+		Stdin: h.stdin, Stdout: out, Stderr: errw, IsTerminal: h.term, Version: "test",
+	}
 }
 
 // mustRun runs args and fails the test unless it exits 0.

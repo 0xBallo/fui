@@ -1,8 +1,17 @@
 package cli_test
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/0xballo/fui/internal/cli"
+	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 )
 
 // TestTxShowEditRemove exercises the whole lifecycle of one transaction through the CLI.
@@ -244,5 +253,233 @@ func TestInit(t *testing.T) {
 	cur, _ := h.mustRun("config", "get", "currency")
 	if strings.TrimSpace(cur) != "USD" {
 		t.Errorf("currency after init --currency USD = %q, want USD", cur)
+	}
+}
+
+func TestInitPresetFullSetsModules(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("init", "--preset", "full", "--json")
+
+	enabled, err := h.cfg.ModulesEnabled()
+	if err != nil {
+		t.Fatalf("ModulesEnabled: %v", err)
+	}
+	full, err := module.Preset("full")
+	if err != nil {
+		t.Fatalf("Preset(full): %v", err)
+	}
+	if !slices.Equal(enabled.IDs(), full.IDs()) {
+		t.Errorf("modules.enabled = %v, want full preset %v", enabled.IDs(), full.IDs())
+	}
+}
+
+func TestInitCustomRequiresModules(t *testing.T) {
+	h := newHarness(t)
+	_, stderr, code := h.run("init", "--preset", "custom", "--json")
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stderr, "--preset custom requires --modules") {
+		t.Errorf("stderr = %q, want custom modules requirement", stderr)
+	}
+}
+
+func TestModuleListJSON(t *testing.T) {
+	h := newHarness(t)
+	out, _ := h.mustRun("module", "list", "--json")
+
+	var got []map[string]any
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("module list json: %v", err)
+	}
+	if len(got) != len(module.Definitions()) {
+		t.Fatalf("len(module list) = %d, want %d", len(got), len(module.Definitions()))
+	}
+}
+
+func TestModuleListText(t *testing.T) {
+	h := newHarness(t)
+	out, _ := h.mustRun("module", "list")
+	if !strings.Contains(out, "ID") || !strings.Contains(out, "ENABLED") || !strings.Contains(out, "core") {
+		t.Errorf("module list text output = %q, want table header and core row", out)
+	}
+}
+
+func TestModuleEnableAndDisable(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("module", "enable", "ai", "--yes", "--json")
+	enabled, err := h.cfg.ModulesEnabled()
+	if err != nil {
+		t.Fatalf("ModulesEnabled after enable: %v", err)
+	}
+	if !enabled.Has(module.AI) || !enabled.Has(module.Simulations) {
+		t.Fatalf("enabled set after module enable ai = %v, want ai and simulations", enabled.IDs())
+	}
+
+	h.mustRun("module", "disable", "recurring", "--yes", "--json")
+	enabled, err = h.cfg.ModulesEnabled()
+	if err != nil {
+		t.Fatalf("ModulesEnabled after disable: %v", err)
+	}
+	if enabled.Has(module.Recurring) || enabled.Has(module.Simulations) || enabled.Has(module.AI) {
+		t.Fatalf("enabled set after module disable recurring = %v, want recurring/simulations/ai disabled", enabled.IDs())
+	}
+}
+
+func TestModuleEnableDryRunTextAndJSON(t *testing.T) {
+	h := newHarness(t)
+	textOut, _ := h.mustRun("module", "enable", "ai", "--dry-run")
+	if !strings.Contains(textOut, "Would enable modules") || !strings.Contains(textOut, "Warning: enabling") {
+		t.Errorf("enable dry-run text = %q, want plan and dependency warning", textOut)
+	}
+	before, err := h.cfg.ModulesEnabled()
+	if err != nil {
+		t.Fatalf("ModulesEnabled before json dry-run: %v", err)
+	}
+
+	jsonOut, _ := h.mustRun("module", "enable", "ai", "--dry-run", "--json")
+	if !strings.Contains(jsonOut, `"target":"ai"`) || !strings.Contains(jsonOut, `"simulations"`) {
+		t.Errorf("enable dry-run json = %q, want target and dependency closure", jsonOut)
+	}
+	after, err := h.cfg.ModulesEnabled()
+	if err != nil {
+		t.Fatalf("ModulesEnabled after json dry-run: %v", err)
+	}
+	if !slices.Equal(before.IDs(), after.IDs()) {
+		t.Fatalf("dry-run changed modules.enabled: before=%v after=%v", before.IDs(), after.IDs())
+	}
+}
+
+func TestModuleDisableDryRunJSON(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("module", "enable", "ai", "--yes", "--json")
+	before, err := h.cfg.ModulesEnabled()
+	if err != nil {
+		t.Fatalf("ModulesEnabled before disable dry-run: %v", err)
+	}
+
+	out, _ := h.mustRun("module", "disable", "recurring", "--dry-run", "--json")
+	if !strings.Contains(out, `"target":"recurring"`) || !strings.Contains(out, `"dependents_disabled":["ai","simulations"]`) {
+		t.Errorf("disable dry-run json = %q, want target and dependents", out)
+	}
+	after, err := h.cfg.ModulesEnabled()
+	if err != nil {
+		t.Fatalf("ModulesEnabled after disable dry-run: %v", err)
+	}
+	if !slices.Equal(before.IDs(), after.IDs()) {
+		t.Fatalf("dry-run changed modules.enabled: before=%v after=%v", before.IDs(), after.IDs())
+	}
+}
+
+func TestModuleDisableAgentModeRequiresYes(t *testing.T) {
+	h := newHarness(t)
+	h.cfg.AgentMode = true
+	h.mustRun("module", "enable", "ai", "--yes", "--json")
+
+	_, stderr, code := h.run("module", "disable", "recurring")
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stderr, "confirmation_required") {
+		t.Errorf("stderr = %q, want confirmation_required", stderr)
+	}
+}
+
+func TestModuleEnableUnknownFails(t *testing.T) {
+	h := newHarness(t)
+	_, stderr, code := h.run("module", "enable", "unknown", "--json")
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stderr, "invalid_value") {
+		t.Errorf("stderr = %q, want invalid_value", stderr)
+	}
+}
+
+func TestDisabledModuleCommandReturnsModuleDisabled(t *testing.T) {
+	h := newHarness(t)
+	var out, errw bytes.Buffer
+	root := cli.NewRoot(h.deps(&out, &errw))
+	accountCmd, _, err := root.Find([]string{"account", "list"})
+	if err != nil {
+		t.Fatalf("find account command: %v", err)
+	}
+	if accountCmd.Annotations == nil {
+		accountCmd.Annotations = map[string]string{}
+	}
+	accountCmd.Annotations["module"] = "assets"
+
+	root.SetArgs([]string{"account", "list", "--json"})
+	root.SetOut(&out)
+	root.SetErr(&errw)
+	root.SetIn(h.stdin)
+	runErr := root.ExecuteContext(context.Background())
+	if runErr == nil {
+		t.Fatal("expected module-disabled error, got nil")
+	}
+	var derr *domain.Error
+	if !errors.As(runErr, &derr) || derr.Code != "module_disabled" {
+		t.Fatalf("error = %v, want domain module_disabled", runErr)
+	}
+	if !strings.Contains(runErr.Error(), "fui module enable assets") || !strings.Contains(runErr.Error(), "disabled") {
+		t.Fatalf("error = %v, want disabled-module activation hint", runErr)
+	}
+}
+
+func TestInitModulesImpliesCustomPreset(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("init", "--modules", "core,recurring", "--json")
+	enabled, err := h.cfg.ModulesEnabled()
+	if err != nil {
+		t.Fatalf("ModulesEnabled: %v", err)
+	}
+	want, err := module.Validate([]module.ID{module.Core, module.Recurring})
+	if err != nil {
+		t.Fatalf("Validate want set: %v", err)
+	}
+	if !slices.Equal(enabled.IDs(), want.IDs()) {
+		t.Errorf("modules.enabled = %v, want %v", enabled.IDs(), want.IDs())
+	}
+}
+
+func TestInitModulesRequiresCustomPresetWhenPresetProvided(t *testing.T) {
+	h := newHarness(t)
+	_, stderr, code := h.run("init", "--preset", "expense", "--modules", "core,budget", "--json")
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1; stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stderr, "--modules requires --preset custom") {
+		t.Errorf("stderr = %q, want modules/custom validation error", stderr)
+	}
+}
+
+func TestInitWithoutPresetOrModulesUsesDefaultInNonTTY(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("init", "--json")
+	enabled, err := h.cfg.ModulesEnabled()
+	if err != nil {
+		t.Fatalf("ModulesEnabled: %v", err)
+	}
+	if !slices.Equal(enabled.IDs(), module.Default().IDs()) {
+		t.Errorf("modules.enabled = %v, want default %v", enabled.IDs(), module.Default().IDs())
+	}
+}
+
+func TestInitInteractiveCustomPresetPromptsForModules(t *testing.T) {
+	h := newHarness(t)
+	h.term = true
+	h.stdin.WriteString("3\n0\n")
+
+	out, _ := h.mustRun("init")
+	if !strings.Contains(out, "Choose additional modules (core is always enabled)") {
+		t.Errorf("init output = %q, want interactive module multi-select prompt", out)
+	}
+
+	enabled, err := h.cfg.ModulesEnabled()
+	if err != nil {
+		t.Fatalf("ModulesEnabled: %v", err)
+	}
+	if !slices.Equal(enabled.IDs(), []module.ID{module.Core}) {
+		t.Fatalf("modules.enabled = %v, want core-only custom selection", enabled.IDs())
 	}
 }

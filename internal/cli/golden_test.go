@@ -64,6 +64,13 @@ func TestGoldenHelpJSON(t *testing.T) {
 	checkGolden(t, "help.json", []byte(out))
 }
 
+// TestGoldenModuleListJSON freezes the stable machine-readable module list.
+func TestGoldenModuleListJSON(t *testing.T) {
+	h := newHarness(t)
+	out, _ := h.mustRun("module", "list", "--json")
+	checkGolden(t, "module_list.json", []byte(out))
+}
+
 // TestGoldenReportRunCategories covers the --json renderer of report run categories.
 func TestGoldenReportRunCategories(t *testing.T) {
 	h := newHarness(t)
