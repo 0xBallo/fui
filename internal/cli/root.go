@@ -63,6 +63,9 @@ func NewRoot(deps *Deps) *cobra.Command {
 		{command: newConnectorCmd(deps), module: module.Core},
 		{command: newSkillCmd(deps), module: module.Core},
 	})
+	if err := configureDynamicCompletions(root, deps); err != nil {
+		root.PersistentPreRunE = func(*cobra.Command, []string) error { return err }
+	}
 	if err := configureModuleCommands(root, deps); err != nil {
 		root.PersistentPreRunE = func(*cobra.Command, []string) error { return err }
 	}
