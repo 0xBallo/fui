@@ -12,20 +12,24 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/mattn/go-isatty"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/cli"
 	"github.com/0xballo/fui/internal/cli/render"
 	"github.com/0xballo/fui/internal/clock"
 	"github.com/0xballo/fui/internal/config"
+	"github.com/0xballo/fui/internal/connector"
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/logging"
 	"github.com/0xballo/fui/internal/store/sqlite"
+	"github.com/0xballo/fui/internal/tui"
 )
 
 // version is the fui release version, printed by --version and embedded in the agent skill.
@@ -62,7 +66,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		Config: cfg, Stdin: stdin, Stdout: stdout, Stderr: stderr,
 		IsTerminal: isTerminal(stdout), Version: version,
 		RunTUI: func(context.Context) error {
-			return errors.New("fui: the TUI is not available in this build yet; run `fui help` for the CLI commands")
+			return errors.New("fui: the TUI needs the archive open; this path should be unreachable")
 		},
 	}
 
@@ -108,9 +112,9 @@ func bootstrap(args []string) (*config.Config, *slog.Logger, io.Closer, error) {
 	return cfg, logger, closeLog, nil
 }
 
-// wireStore opens the SQLite archive and builds the app and reporting use cases over it,
-// filling deps.Service and deps.Reporting. It returns a closer for the store, left to the
-// caller so the store stays open for the whole command.
+// wireStore opens the SQLite archive and builds the app, reporting and importing use cases over
+// it, filling deps.Service, deps.Reporting, deps.Importing and deps.RunTUI. It returns a closer
+// for the store, left to the caller so the store stays open for the whole command.
 func wireStore(ctx context.Context, cfg *config.Config, appClock app.Clock, deps *cli.Deps) (func() error, error) {
 	store, err := sqlite.Open(ctx, sqlite.Options{
 		Path: cfg.DBPath, BackupDir: cfg.BackupDir, BackupKeep: cfg.Backup.Keep, Clock: appClock,
@@ -132,7 +136,40 @@ func wireStore(ctx context.Context, cfg *config.Config, appClock app.Clock, deps
 		return nil, fmt.Errorf("build reporting use cases: %w", err)
 	}
 	deps.Reporting = rep
+	deps.Importing = importing.New(store, appClock, store, connector.Registry{
+		Dir:      filepath.Join(cfg.ConfigDir, "connectors"),
+		Timeout:  cfg.Connectors.Timeout.Duration(),
+		Profiles: cfg.Import.Profiles,
+		Currency: cfg.Currency,
+	})
+	deps.RunTUI = func(ctx context.Context) error {
+		return tui.Run(ctx, newTUIUseCases(deps.Service, rep), tui.Config{
+			Locale: domain.Locale(cfg.Locale), Theme: cfg.Theme, MonthStartDay: cfg.MonthStartDay,
+		})
+	}
 	return store.Close, nil
+}
+
+// tuiUseCases adapts app.Service and the reporting use cases to internal/tui.UseCases: Service
+// already implements every account/transaction method the TUI screens need, so only the two
+// report-running methods (spending, runway) need a thin forwarding method.
+type tuiUseCases struct {
+	*app.Service
+	reporting cli.Reporting
+}
+
+func newTUIUseCases(svc *app.Service, rep cli.Reporting) tuiUseCases {
+	return tuiUseCases{Service: svc, reporting: rep}
+}
+
+// Spending runs the dashboard's spending-by-category report.
+func (u tuiUseCases) Spending(ctx context.Context, params reporting.SpendingParams) (reporting.SpendingResult, error) {
+	return u.reporting.Spending.Run(ctx, params)
+}
+
+// Runway runs the dashboard's runway KPI.
+func (u tuiUseCases) Runway(ctx context.Context, params reporting.RunwayParams) (reporting.RunwayResult, error) {
+	return u.reporting.Runway.Run(ctx, params)
 }
 
 // newReporting builds the read-only reporting and KPI use cases over source.
