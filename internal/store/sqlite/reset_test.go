@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -67,11 +68,39 @@ func seed(t tb, s *Store, accounts int) {
 	exec(`INSERT INTO fx_rates (currency, date, rate_scaled) VALUES ('USD', '2026-01-01', 1000000)`)
 	exec(`INSERT INTO import_batches (connector, source, source_sha256, imported_at) VALUES ('c', 's', 'x', '2026-01-01T00:00:00Z')`)
 	exec(`INSERT INTO transfer_groups (fee_minor) VALUES (0)`)
+	exec(`INSERT OR IGNORE INTO tags (name) VALUES ('trip')`)
+	exec(`INSERT OR IGNORE INTO payees (name) VALUES ('Esselunga')`)
+	exec(`INSERT OR IGNORE INTO payee_aliases (payee_id, alias) SELECT id, 'ESSELUNGA SPA' FROM payees WHERE name = 'Esselunga'`)
+	exec(`INSERT INTO transaction_tags (transaction_id, tag_id) SELECT t.id, g.id FROM transactions t, tags g WHERE g.name = 'trip' LIMIT 1`)
+	exec(`INSERT INTO transaction_splits (transaction_id, category_id, amount_minor) SELECT t.id, c.id, -500 FROM transactions t, categories c LIMIT 1`)
+}
+
+func settingsDump(t tb, s *Store) []string {
+	t.Helper()
+	var out []string
+	err := s.Read(context.Background(), func(r app.Repos) error {
+		tags, err := r.Tags().List(context.Background())
+		if err != nil {
+			return err
+		}
+		for _, tag := range tags {
+			out = append(out, "tag:"+tag.Name)
+		}
+		payees, err := r.Payees().List(context.Background())
+		for _, p := range payees {
+			out = append(out, "payee:"+p.Name+"="+strings.Join(p.Aliases, "|"))
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatalf("list settings: %v", err)
+	}
+	return out
 }
 
 func assertEmptyExceptCategories(t tb, s *Store) {
 	t.Helper()
-	for _, table := range []string{"accounts", "transactions", "transfer_groups", "import_batches", "fx_rates", "connector_account_refs"} {
+	for _, table := range []string{"accounts", "transactions", "transfer_groups", "import_batches", "fx_rates", "connector_account_refs", "transaction_tags", "transaction_splits"} {
 		if n := count(t, s, table); n != 0 {
 			t.Errorf("table %s has %d rows after reset, want 0", table, n)
 		}
@@ -94,6 +123,11 @@ func TestResetFull(t *testing.T) {
 	}
 
 	assertEmptyExceptCategories(t, s)
+	for _, table := range []string{"tags", "payees", "payee_aliases"} {
+		if n := count(t, s, table); n != 0 {
+			t.Errorf("table %s has %d rows after full reset, want 0", table, n)
+		}
+	}
 	var want []string
 	for _, c := range domain.DefaultCategories() {
 		want = append(want, string(c.Kind)+":"+c.Name)
@@ -159,6 +193,7 @@ func TestResetKeepSettingsProperty(t *testing.T) {
 		}
 		seed(rt, s, rapid.IntRange(0, 4).Draw(rt, "accounts"))
 		before := categoryNames(rt, s)
+		beforeSettings := settingsDump(rt, s)
 
 		if err := s.Reset(ctx, app.ResetOptions{KeepSettings: true}); err != nil {
 			rt.Fatalf("Reset: %v", err)
@@ -167,6 +202,9 @@ func TestResetKeepSettingsProperty(t *testing.T) {
 		assertEmptyExceptCategories(rt, s)
 		if diff := cmp.Diff(before, categoryNames(rt, s)); diff != "" {
 			rt.Fatalf("categories changed (-before +after):\n%s", diff)
+		}
+		if diff := cmp.Diff(beforeSettings, settingsDump(rt, s)); diff != "" {
+			rt.Fatalf("tags/payees changed (-before +after):\n%s", diff)
 		}
 	})
 }

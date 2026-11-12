@@ -89,13 +89,15 @@ func (s *Store) populateFresh(ctx context.Context, tempPath string, opts app.Res
 		}
 	}()
 
+	var kept keptSettings
 	var cats []domain.Category
 	if opts.KeepSettings {
-		// Tags, rules and import profiles do not exist yet; connector-account associations
+		// Rules and import profiles do not exist yet; connector-account associations
 		// reference accounts, which a reset always deletes.
-		if err := s.readCategories(ctx, &cats); err != nil {
+		if err := s.readSettings(ctx, &kept); err != nil {
 			return err
 		}
+		cats = kept.categories
 	} else {
 		cats = domain.DefaultCategories()
 	}
@@ -105,21 +107,43 @@ func (s *Store) populateFresh(ctx context.Context, tempPath string, opts app.Res
 				return fmt.Errorf("reset: create category %q: %w", c.Name, err)
 			}
 		}
+		for _, tag := range kept.tags {
+			if _, err := r.Tags().Insert(ctx, domain.Tag{Name: tag.Name}); err != nil {
+				return fmt.Errorf("reset: create tag %q: %w", tag.Name, err)
+			}
+		}
+		for _, p := range kept.payees {
+			if _, err := r.Payees().Insert(ctx, domain.Payee{Name: p.Name, Aliases: p.Aliases}); err != nil {
+				return fmt.Errorf("reset: create payee %q: %w", p.Name, err)
+			}
+		}
 		return nil
 	})
 }
 
-// readCategories lists the current categories without taking s.mu (Reset already holds it).
-func (s *Store) readCategories(ctx context.Context, out *[]domain.Category) error {
+// keptSettings is what a --keep-settings reset carries over.
+type keptSettings struct {
+	categories []domain.Category
+	tags       []domain.Tag
+	payees     []domain.Payee
+}
+
+// readSettings lists the settings without taking s.mu (Reset already holds it).
+func (s *Store) readSettings(ctx context.Context, out *keptSettings) error {
 	tx, err := s.readDB.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("reset: begin read: %w", mapSQLError(err))
 	}
 	defer func() { _ = tx.Rollback() }()
-	cats, err := newRepos(tx, true).Categories().List(ctx)
-	if err != nil {
+	r := newRepos(tx, true)
+	if out.categories, err = r.Categories().List(ctx); err != nil {
 		return fmt.Errorf("reset: list categories: %w", err)
 	}
-	*out = cats
+	if out.tags, err = r.Tags().List(ctx); err != nil {
+		return fmt.Errorf("reset: list tags: %w", err)
+	}
+	if out.payees, err = r.Payees().List(ctx); err != nil {
+		return fmt.Errorf("reset: list payees: %w", err)
+	}
 	return nil
 }
