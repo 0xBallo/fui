@@ -2,7 +2,6 @@ package tui_test
 
 import (
 	"bytes"
-	"io"
 	"testing"
 	"time"
 
@@ -49,26 +48,17 @@ func snapshot(t *testing.T, keys, wait string) {
 
 	// WaitFor reads (and so drains) tm.Output(); tee every byte it reads into captured so the
 	// assertion below still has the full stream once the wait condition is satisfied.
-	var captured bytes.Buffer
-	teatest.WaitFor(t, io.TeeReader(tm.Output(), &captured), func(b []byte) bool {
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		return bytes.Contains(b, []byte(wait))
 	}, teatest.WithDuration(3*time.Second))
 
 	if err := tm.Quit(); err != nil {
 		t.Fatalf("Quit: %v", err)
 	}
-	tm.WaitFinished(t, teatest.WithFinalTimeout(time.Second))
-	rest, err := io.ReadAll(tm.Output())
-	if err != nil {
-		t.Fatalf("read remaining output: %v", err)
-	}
-	captured.Write(rest)
-
-	// Compare only the rendered text, not the raw escape stream: cursor-movement/clear
-	// trailers that the terminal libraries emit on quit vary across patch versions of
-	// bubbletea/colorprofile and are not part of what the screen actually renders, so
-	// pinning to them would make the goldens brittle to unrelated dependency bumps.
-	golden.RequireEqual(t, []byte(ansi.Strip(captured.String())))
+	// Snapshot the final view, not the output stream: the renderer coalesces frames on a timer,
+	// so which intermediate frames reach the stream varies run to run.
+	final := tm.FinalModel(t, teatest.WithFinalTimeout(3*time.Second))
+	golden.RequireEqual(t, []byte(ansi.Strip(final.View())))
 }
 
 func TestDashboardSnapshot(t *testing.T) {

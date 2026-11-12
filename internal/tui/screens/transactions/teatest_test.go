@@ -2,7 +2,6 @@ package transactions_test
 
 import (
 	"bytes"
-	"io"
 	"testing"
 	"time"
 
@@ -44,27 +43,23 @@ func snapshot(t *testing.T, model tea.Model, ready, keys, wait string) {
 	t.Helper()
 	tm := teatest.NewTestModel(t, model, teatest.WithInitialTermSize(100, 30))
 
-	var captured bytes.Buffer
-	teatest.WaitFor(t, io.TeeReader(tm.Output(), &captured), func(b []byte) bool {
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		return bytes.Contains(b, []byte(ready))
 	}, teatest.WithDuration(3*time.Second))
 	if keys != "" {
 		tm.Type(keys)
 	}
-	teatest.WaitFor(t, io.TeeReader(tm.Output(), &captured), func(b []byte) bool {
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		return bytes.Contains(b, []byte(wait))
 	}, teatest.WithDuration(3*time.Second))
 
 	if err := tm.Quit(); err != nil {
 		t.Fatalf("Quit: %v", err)
 	}
-	tm.WaitFinished(t, teatest.WithFinalTimeout(time.Second))
-	rest, err := io.ReadAll(tm.Output())
-	if err != nil {
-		t.Fatalf("read remaining output: %v", err)
-	}
-	captured.Write(rest)
-	golden.RequireEqual(t, []byte(ansi.Strip(captured.String())))
+	// Snapshot the final view, not the output stream: the renderer coalesces frames on a timer,
+	// so which intermediate frames reach the stream varies run to run.
+	final := tm.FinalModel(t, teatest.WithFinalTimeout(3*time.Second))
+	golden.RequireEqual(t, []byte(ansi.Strip(final.View())))
 }
 
 func TestTransactionsSplitSnapshot(t *testing.T) {

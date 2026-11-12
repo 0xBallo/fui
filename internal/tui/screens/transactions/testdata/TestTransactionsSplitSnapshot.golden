@@ -1,8 +1,4 @@
-Transactions
-
-Date       Account          Description              Category       Status             Amount
-06/10/2026 Checking         Store                                   booked             -30.00
-1 transaction   -30.00 EURSplit transaction
+Split transaction
 
 Row 1 category:  
 ╭───────────╮
@@ -14,4 +10,4 @@ Row 2 category:
 Row 2 amount: e.g. -12.34
 
 Remaining: 0.00 EUR
-ctrl+n add row · ctrl+x remove row · enter save · esc cancel
+ctrl+n add row · ctrl+x remove row · enter save · esc cancel

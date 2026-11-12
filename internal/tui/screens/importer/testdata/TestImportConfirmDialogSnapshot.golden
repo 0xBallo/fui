@@ -1,18 +1,4 @@
-Import
-
-n new import
-
-Connector: csv/fui/revolut...
-╭─────╮
-│> csv│
-│  fui│
-╰─────╯
-File: statement.csv
-CSV profile: mybank (import.profiles.<name>, csv only)
-Account ref/name: optional (csv connector)
-Since: optional, YYYY-MM-DD
-
-enter next/plan · tab/shift+tab move between fields · esc cancelImport preview
+Import preview
 connector=fui source=statement.fui.jsonl
 new=1 duplicate=0 doubtful=0 errors=0 included=1
 
@@ -21,14 +7,6 @@ new=1 duplicate=0 doubtful=0 errors=0 included=1
 line 3
 
 space/i include/exclude · enter confirm · esc new import
-
-
-
-
-
-
-
-
 
 ╭────────────────────────────────────────────────────────────────────╮
 │                                                                    │
@@ -39,4 +17,4 @@ space/i include/exclude · enter confirm · esc new import
 │                                                                    │
 │  [y] Yes   [n] No                                                  │
 │                                                                    │
-╰────────────────────────────────────────────────────────────────────╯
+╰────────────────────────────────────────────────────────────────────╯

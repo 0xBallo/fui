@@ -1,9 +1,9 @@
-[?25l[?2004h1 Dashboard  2 Transactions  3 Accounts  4 Budget  5 Reports  6 Import  7 Settin
-[K
-Transactions[K
-[K
-Date       Account          Description              Category       Status      
-06/10/2026 Checking         Supermarket              Groceries      booked      
-1 transaction   -42.50 EUR[K
-[K
-? help · q quit[K
+1 Dashboard  2 Transactions  3 Accounts  4 Budget  5 Reports  6 Import  7 Settings
+
+Transactions
+
+Date       Account          Description              Category       Status             Amount
+06/10/2026 Checking         Supermarket              Groceries      booked             -42.50
+1 transaction   -42.50 EUR
+
+? help · q quit

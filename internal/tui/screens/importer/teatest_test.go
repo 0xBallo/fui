@@ -3,7 +3,6 @@ package importer_test
 import (
 	"bytes"
 	"context"
-	"io"
 	"testing"
 	"time"
 
@@ -44,31 +43,27 @@ func snapshot(t *testing.T, model tea.Model, ready, wait string, act func(*teate
 	t.Helper()
 	tm := teatest.NewTestModel(t, model, teatest.WithInitialTermSize(100, 30))
 
-	var captured bytes.Buffer
-	teatest.WaitFor(t, io.TeeReader(tm.Output(), &captured), func(b []byte) bool {
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		return bytes.Contains(b, []byte("n new import"))
 	}, teatest.WithDuration(3*time.Second))
 	typeRunes(tm, "n") // open the source form from the idle page
-	teatest.WaitFor(t, io.TeeReader(tm.Output(), &captured), func(b []byte) bool {
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		return bytes.Contains(b, []byte(ready))
 	}, teatest.WithDuration(3*time.Second))
 	if act != nil {
 		act(tm)
 	}
-	teatest.WaitFor(t, io.TeeReader(tm.Output(), &captured), func(b []byte) bool {
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		return bytes.Contains(b, []byte(wait))
 	}, teatest.WithDuration(3*time.Second))
 
 	if err := tm.Quit(); err != nil {
 		t.Fatalf("Quit: %v", err)
 	}
-	tm.WaitFinished(t, teatest.WithFinalTimeout(time.Second))
-	rest, err := io.ReadAll(tm.Output())
-	if err != nil {
-		t.Fatalf("read remaining output: %v", err)
-	}
-	captured.Write(rest)
-	golden.RequireEqual(t, []byte(ansi.Strip(captured.String())))
+	// Snapshot the final view, not the output stream: the renderer coalesces frames on a timer,
+	// so which intermediate frames reach the stream varies run to run.
+	final := tm.FinalModel(t, teatest.WithFinalTimeout(3*time.Second))
+	golden.RequireEqual(t, []byte(ansi.Strip(final.View())))
 }
 
 func typeRunes(tm *teatest.TestModel, s string) {
@@ -120,10 +115,9 @@ func TestImportConfirmDialogSnapshot(t *testing.T) {
 	model := &screenModel{scr: scr, width: 100, height: 30}
 	tm := teatest.NewTestModel(t, model, teatest.WithInitialTermSize(100, 30))
 
-	var captured bytes.Buffer
 	waitForText := func(text string) {
 		t.Helper()
-		teatest.WaitFor(t, io.TeeReader(tm.Output(), &captured), func(b []byte) bool {
+		teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 			return bytes.Contains(b, []byte(text))
 		}, teatest.WithDuration(3*time.Second))
 	}
@@ -146,18 +140,15 @@ func TestImportConfirmDialogSnapshot(t *testing.T) {
 	waitForText("Import preview")
 	tm.Send(tea.KeyMsg{Type: tea.KeyEnter}) // open the confirm dialog
 
-	teatest.WaitFor(t, io.TeeReader(tm.Output(), &captured), func(b []byte) bool {
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		return bytes.Contains(b, []byte("Confirm import"))
 	}, teatest.WithDuration(3*time.Second))
 
 	if err := tm.Quit(); err != nil {
 		t.Fatalf("Quit: %v", err)
 	}
-	tm.WaitFinished(t, teatest.WithFinalTimeout(time.Second))
-	rest, err := io.ReadAll(tm.Output())
-	if err != nil {
-		t.Fatalf("read remaining output: %v", err)
-	}
-	captured.Write(rest)
-	golden.RequireEqual(t, []byte(ansi.Strip(captured.String())))
+	// Snapshot the final view, not the output stream: the renderer coalesces frames on a timer,
+	// so which intermediate frames reach the stream varies run to run.
+	final := tm.FinalModel(t, teatest.WithFinalTimeout(3*time.Second))
+	golden.RequireEqual(t, []byte(ansi.Strip(final.View())))
 }
