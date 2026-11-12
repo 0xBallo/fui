@@ -48,9 +48,14 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	}
 	defer func() { _ = closeLog.Close() }()
 
+	// A failure before cli.Execute parses flags has no plan/report command context yet, so the
+	// error format falls back to agent mode or an explicit --json/--agent token on the command
+	// line (the same detection bootstrap's own failure path uses).
+	asJSON := cfg.AgentMode || earlyJSON(args)
+
 	appClock, err := resolveClock(os.Getenv)
 	if err != nil {
-		return bail(stderr, cfg.AgentMode, err)
+		return bail(stderr, asJSON, err)
 	}
 
 	deps := &cli.Deps{
@@ -64,7 +69,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	if requiresStore(args) {
 		closeStore, err := wireStore(ctx, cfg, appClock, deps)
 		if err != nil {
-			return bail(stderr, cfg.AgentMode, err)
+			return bail(stderr, asJSON, err)
 		}
 		defer func() { _ = closeStore() }()
 	}
