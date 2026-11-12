@@ -119,6 +119,11 @@ type ImportConfig struct {
 	Profiles map[string]CSVProfile `toml:"profiles"`
 }
 
+// ForecastConfig holds forecast settings.
+type ForecastConfig struct {
+	Horizon int `toml:"horizon"`
+}
+
 // ModulesConfig holds enabled module ids.
 type ModulesConfig struct {
 	Enabled []module.ID `toml:"enabled"`
@@ -156,5 +161,6 @@ type Config struct {
 	Budget        BudgetConfig     `toml:"budget"`
 	Backup        BackupConfig     `toml:"backup"`
 	Connectors    ConnectorsConfig `toml:"connectors"`
+	Forecast      ForecastConfig   `toml:"forecast"`
 	Import        ImportConfig     `toml:"import"`
 }

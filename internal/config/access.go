@@ -40,6 +40,8 @@ func (c *Config) Get(key string) (string, error) {
 		return strconv.Itoa(c.Backup.Keep), nil
 	case "connectors.timeout":
 		return c.Connectors.Timeout.String(), nil
+	case "forecast.horizon":
+		return strconv.Itoa(c.Forecast.Horizon), nil
 	default:
 		if strings.HasPrefix(key, "import.profiles.") {
 			return c.getProfileField(key)
@@ -235,13 +237,13 @@ func (c *Config) setThemeField(key, value string) (bool, error) {
 }
 
 func (c *Config) setComplexField(key, value string) (bool, error) {
+	if key == "budget.mode" {
+		return c.setBudgetMode(value)
+	}
+	if key == "forecast.horizon" {
+		return c.setForecastHorizon(key, value)
+	}
 	switch key {
-	case "budget.mode":
-		if err := validateBudgetMode(value); err != nil {
-			return true, err
-		}
-		c.Budget.Mode = value
-		return true, nil
 	case "backup.keep":
 		keep, err := strconv.Atoi(value)
 		if err != nil {
@@ -279,6 +281,26 @@ func (c *Config) setComplexField(key, value string) (bool, error) {
 	default:
 		return false, nil
 	}
+}
+
+func (c *Config) setBudgetMode(value string) (bool, error) {
+	if err := validateBudgetMode(value); err != nil {
+		return true, err
+	}
+	c.Budget.Mode = value
+	return true, nil
+}
+
+func (c *Config) setForecastHorizon(key, value string) (bool, error) {
+	horizon, err := strconv.Atoi(value)
+	if err != nil {
+		return true, fmt.Errorf("invalid value for key %q: %q (expected integer)", key, value)
+	}
+	if err := validateForecastHorizon(horizon); err != nil {
+		return true, err
+	}
+	c.Forecast.Horizon = horizon
+	return true, nil
 }
 
 func (c *Config) setProfileField(key, value string) error {

@@ -44,6 +44,9 @@ func (c *Config) Validate() error {
 	if err := validateTimeout(c.Connectors.Timeout); err != nil {
 		return err
 	}
+	if err := validateForecastHorizon(c.Forecast.Horizon); err != nil {
+		return err
+	}
 	return validateProfiles(c.Import.Profiles)
 }
 
@@ -125,6 +128,13 @@ func validateBackupKeep(keep int) error {
 func validateTimeout(d Duration) error {
 	if d.Duration() <= 0 {
 		return fmt.Errorf("invalid value for key %q: must be positive duration", "connectors.timeout")
+	}
+	return nil
+}
+
+func validateForecastHorizon(days int) error {
+	if days <= 0 {
+		return fmt.Errorf("invalid value for key %q: %d (must be greater than 0)", "forecast.horizon", days)
 	}
 	return nil
 }

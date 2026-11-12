@@ -17,6 +17,7 @@ const (
 	DefaultThemeDark     = ThemeMocha
 	DefaultBackupKeep    = 10
 	DefaultTimeout       = 120 * time.Second
+	DefaultForecastDays  = 90
 	DefaultLogLevel      = "warn"
 	DefaultBudgetMode    = BudgetModeCap
 )
@@ -44,6 +45,9 @@ func Defaults() Config {
 		},
 		Connectors: ConnectorsConfig{
 			Timeout: Duration(DefaultTimeout),
+		},
+		Forecast: ForecastConfig{
+			Horizon: DefaultForecastDays,
 		},
 		Import: ImportConfig{
 			Profiles: make(map[string]CSVProfile),

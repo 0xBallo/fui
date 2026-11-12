@@ -55,6 +55,9 @@ func TestDefaults(t *testing.T) {
 	if cfg.Connectors.Timeout.Duration() != 120*time.Second {
 		t.Errorf("connectors.timeout = %v, want 120s", cfg.Connectors.Timeout)
 	}
+	if cfg.Forecast.Horizon != 90 {
+		t.Errorf("forecast.horizon = %d, want 90", cfg.Forecast.Horizon)
+	}
 	if len(cfg.Import.Profiles) != 0 {
 		t.Errorf("expected empty profiles, got %d", len(cfg.Import.Profiles))
 	}
@@ -484,6 +487,10 @@ func TestGetSetAndPersistence(t *testing.T) {
 	if err != nil || val != "analytics,budget,core,recurring" {
 		t.Fatalf("Get(modules.enabled) = %q, err %v", val, err)
 	}
+	val, err = cfg.Get("forecast.horizon")
+	if err != nil || val != "90" {
+		t.Fatalf("Get(forecast.horizon) = %q, err %v", val, err)
+	}
 
 	// Set valid keys and verify persistence
 	if err := cfg.Set("currency", "USD"); err != nil {
@@ -518,6 +525,9 @@ func TestGetSetAndPersistence(t *testing.T) {
 	}
 	if err := cfg.Set("modules.enabled", "core,budget,recurring,simulations,ai"); err != nil {
 		t.Fatalf("Set(modules.enabled) failed: %v", err)
+	}
+	if err := cfg.Set("forecast.horizon", "120"); err != nil {
+		t.Fatalf("Set(forecast.horizon) failed: %v", err)
 	}
 
 	// Set profile fields
@@ -607,6 +617,9 @@ func TestGetSetAndPersistence(t *testing.T) {
 	}
 	if reloaded.Connectors.Timeout.Duration() != 45*time.Second {
 		t.Errorf("reloaded timeout = %v, want 45s", reloaded.Connectors.Timeout)
+	}
+	if reloaded.Forecast.Horizon != 120 {
+		t.Errorf("reloaded forecast.horizon = %d, want 120", reloaded.Forecast.Horizon)
 	}
 	p := reloaded.Import.Profiles["bank"]
 	if p.DateColumn != "Date" || p.AmountColumn != "Amount" || p.Delimiter != ";" {
@@ -777,6 +790,9 @@ func TestResolveErrorsAndEdgeCases(t *testing.T) {
 	}
 	if err := cfg.Set("modules.enabled", "budget"); err == nil {
 		t.Error("expected error for invalid modules.enabled, got nil")
+	}
+	if err := cfg.Set("forecast.horizon", "0"); err == nil {
+		t.Error("expected error for invalid forecast.horizon, got nil")
 	}
 }
 
