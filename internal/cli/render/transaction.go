@@ -1,7 +1,9 @@
 package render
 
 import (
+	"fmt"
 	"io"
+	"slices"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -77,4 +79,117 @@ func WriteTx(w io.Writer, f Format, loc domain.Locale, color bool, v app.TxView)
 		return WriteJSON(w, transactionDTO(v))
 	}
 	return WriteTxList(w, f, loc, color, []app.TxView{v})
+}
+
+// TxTotalDTO is one currency's summed amount in a TxSummaryDTO, in minor units like
+// TransactionDTO.Amount.
+type TxTotalDTO struct {
+	Currency string `json:"currency"`
+	Amount   int64  `json:"amount"`
+}
+
+// TxSummaryDTO is the row count and the per-currency sum of a transaction page, per the technical
+// spec's "Ricerca e filtri": the table ends with these, and --json carries them next to the rows.
+type TxSummaryDTO struct {
+	Count  int          `json:"count"`
+	Totals []TxTotalDTO `json:"totals"`
+}
+
+// TxCursorDTO is the --json shape of a pagination cursor.
+type TxCursorDTO struct {
+	Date string `json:"date"`
+	ID   int64  `json:"id"`
+}
+
+// TxPageDTO is the --json shape of "tx list" and "tx search": the page's rows, the summary and
+// the cursor for the next page (null on the last page).
+type TxPageDTO struct {
+	Items   []TransactionDTO `json:"items"`
+	Summary TxSummaryDTO     `json:"summary"`
+	Next    *TxCursorDTO     `json:"next"`
+}
+
+// txTotals sums items.Amount per currency, in currency-code order (deterministic, independent of
+// map iteration), and reports the row count alongside.
+func txTotals(items []app.TxView) (count int, totals []domain.Money, err error) {
+	var codes []string
+	sums := map[string]domain.Money{}
+	for _, v := range items {
+		m := v.Transaction.Amount
+		code := m.Currency().Code()
+		cur, ok := sums[code]
+		if !ok {
+			codes = append(codes, code)
+			sums[code] = m
+			continue
+		}
+		sum, err := cur.Add(m)
+		if err != nil {
+			return 0, nil, fmt.Errorf("sum %s totals: %w", code, err)
+		}
+		sums[code] = sum
+	}
+	slices.Sort(codes)
+	totals = make([]domain.Money, len(codes))
+	for i, code := range codes {
+		totals[i] = sums[code]
+	}
+	return len(items), totals, nil
+}
+
+func txSummaryDTO(count int, totals []domain.Money) TxSummaryDTO {
+	dtos := make([]TxTotalDTO, len(totals))
+	for i, m := range totals {
+		dtos[i] = TxTotalDTO{Currency: m.Currency().Code(), Amount: m.Minor()}
+	}
+	return TxSummaryDTO{Count: count, Totals: dtos}
+}
+
+func txCursorDTO(c *app.TxCursor) *TxCursorDTO {
+	if c == nil {
+		return nil
+	}
+	return &TxCursorDTO{Date: c.Date.String(), ID: int64(c.ID)}
+}
+
+// writeTxSummaryLine prints the table-format summary: the row count and one "total" per
+// currency, each formatted per locale like the rows above it.
+func writeTxSummaryLine(w io.Writer, count int, totals []domain.Money, loc domain.Locale) error {
+	noun := "transactions"
+	if count == 1 {
+		noun = "transaction"
+	}
+	line := fmt.Sprintf("%d %s", count, noun)
+	for _, m := range totals {
+		line += fmt.Sprintf(", total %s %s", m.Currency().Code(), FormatMoney(m, loc))
+	}
+	if _, err := fmt.Fprintln(w, line); err != nil {
+		return fmt.Errorf("write tx summary: %w", err)
+	}
+	return nil
+}
+
+// WriteTxPage renders one page of a transaction listing with its summary: a table ends with the
+// row count and the sum of amounts per currency; --json carries the same summary next to the
+// items and the pagination cursor. --csv is the plain rows, unchanged, since a summary line would
+// not be valid CSV data.
+func WriteTxPage(w io.Writer, f Format, loc domain.Locale, color bool, page app.TxPage) error {
+	count, totals, err := txTotals(page.Items)
+	if err != nil {
+		return err
+	}
+	if f == JSON {
+		dtos := make([]TransactionDTO, len(page.Items))
+		for i, v := range page.Items {
+			dtos[i] = transactionDTO(v)
+		}
+		return WriteJSON(w, TxPageDTO{Items: dtos, Summary: txSummaryDTO(count, totals), Next: txCursorDTO(page.Next)})
+	}
+	if f == CSV {
+		return WriteCSV(w, transactionCSVRows(page.Items))
+	}
+	if err := WriteTable(w, transactionTableRows(page.Items, loc), color); err != nil {
+		return err
+	}
+	return writeTxSummaryLine(w, count, totals, loc)
 }
