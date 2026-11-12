@@ -93,6 +93,25 @@ func seed(t tb, s *Store, accounts, salt int) {
 	exec(`INSERT INTO transaction_splits (transaction_id, category_id, amount_minor) SELECT t.id, c.id, -500 FROM transactions t, categories c LIMIT 1`)
 	exec(`INSERT INTO rules (name, priority, enabled, conditions, actions)
 		VALUES (?, 10, 1, '{}', '{"category_id":1}')`, fmt.Sprintf("Rule%d", salt))
+	if accounts > 0 {
+		exec(`INSERT INTO recurrences (
+			account_id, category_id, description, amount_minor, currency, every, unit, day_of_month, start_date, next_date
+		) VALUES (
+			1,
+			(SELECT id FROM categories ORDER BY id LIMIT 1),
+			'Rent',
+			-50000,
+			'EUR',
+			1,
+			'months',
+			0,
+			'2026-01-01',
+			'2026-02-01'
+		)`)
+		exec(`UPDATE transactions
+			SET recurrence_id = (SELECT id FROM recurrences LIMIT 1), due_date = '2026-01-05'
+			WHERE id = (SELECT id FROM transactions ORDER BY id LIMIT 1)`)
+	}
 }
 
 func settingsDump(t tb, s *Store) []string {
@@ -122,7 +141,7 @@ func assertEmptyExceptCategories(t tb, s *Store) {
 	t.Helper()
 	for _, table := range []string{
 		"accounts", "transactions", "transfer_groups", "import_batches", "fx_rates",
-		"connector_account_refs", "transaction_tags", "transaction_splits", "rules",
+		"connector_account_refs", "transaction_tags", "transaction_splits", "rules", "recurrences",
 	} {
 		if n := count(t, s, table); n != 0 {
 			t.Errorf("table %s has %d rows after reset, want 0", table, n)

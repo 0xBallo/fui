@@ -278,3 +278,91 @@ func TestMigrateFromV3KeepsTransactions(t *testing.T) {
 		t.Error("payee_id referencing a missing payee was accepted, want foreign key failure")
 	}
 }
+
+// TestMigrateFromV4AddsRecurrenceColumns migrates a populated v4 archive to 0007: existing
+// transactions survive, recurrence columns are added, and FTS triggers keep working.
+func TestMigrateFromV4AddsRecurrenceColumns(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "data", "fui.db")
+	ctx := context.Background()
+
+	db := mustOpenRawDB(t, dbPath)
+	migrationsFS, err := fs.Sub(migrationFS, "migrations")
+	if err != nil {
+		t.Fatalf("fs.Sub: %v", err)
+	}
+	provider, err := goose.NewProvider(goose.DialectSQLite3, db, migrationsFS)
+	if err != nil {
+		t.Fatalf("goose.NewProvider: %v", err)
+	}
+	if _, err := provider.UpTo(ctx, 4); err != nil {
+		t.Fatalf("migrate to v4: %v", err)
+	}
+	mustExec(t, db, `INSERT INTO accounts (name, kind, currency, opening_balance_minor, opened_on)
+		VALUES ('Checking', 'checking', 'EUR', 0, '2026-01-01')`)
+	mustExec(t, db, `INSERT INTO categories (name, kind) VALUES ('Rent', 'expense')`)
+	mustExec(t, db, `INSERT INTO transactions (id, account_id, date, amount_minor, currency, description, status, kind, category_id, search_text)
+		VALUES (7, 1, '2026-01-05', -50000, 'EUR', 'Rent', 'pending', 'payment', 1, 'rent')`)
+	mustClose(t, db)
+
+	store, err := Open(ctx, Options{
+		Path:       dbPath,
+		BackupDir:  filepath.Join(root, "data", "backups"),
+		BackupKeep: 10,
+		Clock:      clock.NewFixed(time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC)),
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	var gotID, gotMinor int64
+	var recID sql.NullInt64
+	var dueDate sql.NullString
+	if err := store.writeDB.QueryRowContext(ctx,
+		"SELECT id, amount_minor, recurrence_id, due_date FROM transactions WHERE id = 7").
+		Scan(&gotID, &gotMinor, &recID, &dueDate); err != nil {
+		t.Fatalf("scan migrated transaction: %v", err)
+	}
+	if gotID != 7 || gotMinor != -50000 || recID.Valid || dueDate.Valid {
+		t.Fatalf("migrated row = (%d, %d, %v, %v), want (7, -50000, NULL, NULL)", gotID, gotMinor, recID, dueDate)
+	}
+
+	var hits int
+	if err := store.writeDB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM transactions WHERE id IN (SELECT rowid FROM transactions_fts WHERE search_text MATCH '"rent"')`).Scan(&hits); err != nil || hits != 1 {
+		t.Fatalf("fts before update = %d, err %v; want 1", hits, err)
+	}
+	if _, err := store.writeDB.ExecContext(ctx, "UPDATE transactions SET search_text = 'rent monthly' WHERE id = 7"); err != nil {
+		t.Fatalf("update search_text: %v", err)
+	}
+	if err := store.writeDB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM transactions WHERE id IN (SELECT rowid FROM transactions_fts WHERE search_text MATCH '"monthly"')`).Scan(&hits); err != nil || hits != 1 {
+		t.Fatalf("fts after update = %d, err %v; want 1", hits, err)
+	}
+
+	res, err := store.writeDB.ExecContext(ctx, `INSERT INTO recurrences (
+		account_id, category_id, description, amount_minor, currency, every, unit, day_of_month, start_date, next_date
+	) VALUES (1, 1, 'Rent', -50000, 'EUR', 1, 'months', 0, '2026-01-01', '2026-02-01')`)
+	if err != nil {
+		t.Fatalf("insert recurrence: %v", err)
+	}
+	rid, err := res.LastInsertId()
+	if err != nil {
+		t.Fatalf("LastInsertId: %v", err)
+	}
+	if _, err := store.writeDB.ExecContext(ctx,
+		"UPDATE transactions SET recurrence_id = ?, due_date = '2026-02-01' WHERE id = 7", rid); err != nil {
+		t.Fatalf("set recurrence_id/due_date: %v", err)
+	}
+	if _, err := store.writeDB.ExecContext(ctx, "DELETE FROM recurrences WHERE id = ?", rid); err != nil {
+		t.Fatalf("delete recurrence: %v", err)
+	}
+	if err := store.writeDB.QueryRowContext(ctx,
+		"SELECT recurrence_id, due_date FROM transactions WHERE id = 7").Scan(&recID, &dueDate); err != nil {
+		t.Fatalf("scan after recurrence delete: %v", err)
+	}
+	if recID.Valid || !dueDate.Valid || dueDate.String != "2026-02-01" {
+		t.Fatalf("after recurrence delete = (recurrence_id=%v due_date=%v), want (NULL, 2026-02-01)", recID, dueDate)
+	}
+}

@@ -109,6 +109,23 @@ type PayeeAlias struct {
 	Alias   string
 }
 
+type Recurrence struct {
+	ID          int64
+	AccountID   int64
+	CategoryID  sql.NullInt64
+	Description string
+	AmountMinor int64
+	Currency    string
+	Every       int64
+	Unit        string
+	DayOfMonth  int64
+	StartDate   string
+	EndDate     sql.NullString
+	NextDate    string
+	CreatedAt   string
+	UpdatedAt   string
+}
+
 type Rule struct {
 	ID         int64
 	Name       string
@@ -148,6 +165,8 @@ type Transaction struct {
 	CreatedAt       string
 	UpdatedAt       string
 	SearchText      string
+	RecurrenceID    sql.NullInt64
+	DueDate         sql.NullString
 }
 
 type TransactionSplit struct {

@@ -3,6 +3,8 @@ index|idx_budget_targets_budget|budget_targets|CREATE INDEX idx_budget_targets_b
 index|idx_budget_targets_category|budget_targets|CREATE UNIQUE INDEX idx_budget_targets_category ON budget_targets (category_id) WHERE category_id IS NOT NULL
 index|idx_import_batches_sha_imported_at|import_batches|CREATE INDEX idx_import_batches_sha_imported_at
     ON import_batches (source_sha256, imported_at DESC, id DESC)
+index|idx_recurrences_account_next_date|recurrences|CREATE INDEX idx_recurrences_account_next_date ON recurrences (account_id, next_date, id)
+index|idx_recurrences_next_date_id|recurrences|CREATE INDEX idx_recurrences_next_date_id ON recurrences (next_date, id)
 index|idx_rules_enabled_priority_name|rules|CREATE INDEX idx_rules_enabled_priority_name
     ON rules (enabled, priority, name)
 index|idx_transaction_splits_category|transaction_splits|CREATE INDEX idx_transaction_splits_category ON transaction_splits (category_id)
@@ -18,6 +20,8 @@ index|idx_transactions_fingerprint|transactions|CREATE INDEX idx_transactions_fi
     ON transactions (fingerprint)
 index|idx_transactions_payee|transactions|CREATE INDEX idx_transactions_payee
     ON transactions (payee_id)
+index|idx_transactions_recurrence_status_due_date|transactions|CREATE INDEX idx_transactions_recurrence_status_due_date
+    ON transactions (recurrence_id, status, due_date, id)
 table|accounts|accounts|CREATE TABLE accounts (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -119,6 +123,22 @@ table|payees|payees|CREATE TABLE payees (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 ) STRICT
+table|recurrences|recurrences|CREATE TABLE recurrences (
+    id INTEGER PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES accounts (id) ON DELETE RESTRICT,
+    category_id INTEGER REFERENCES categories (id) ON DELETE RESTRICT,
+    description TEXT NOT NULL DEFAULT '',
+    amount_minor INTEGER NOT NULL,
+    currency TEXT NOT NULL CHECK (length(currency) = 3),
+    every INTEGER NOT NULL CHECK (every > 0),
+    unit TEXT NOT NULL CHECK (unit IN ('days', 'weeks', 'months')),
+    day_of_month INTEGER NOT NULL DEFAULT 0 CHECK (day_of_month >= 0 AND day_of_month <= 31),
+    start_date TEXT NOT NULL CHECK (length(start_date) = 10),
+    end_date TEXT CHECK (end_date IS NULL OR length(end_date) = 10),
+    next_date TEXT NOT NULL CHECK (length(next_date) = 10),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+) STRICT
 table|rules|rules|CREATE TABLE rules (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -167,7 +187,7 @@ table|transactions|transactions|CREATE TABLE transactions (
     transfer_group_id INTEGER,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    search_text TEXT NOT NULL DEFAULT '',
+    search_text TEXT NOT NULL DEFAULT '', recurrence_id INTEGER REFERENCES recurrences (id) ON DELETE SET NULL, due_date TEXT CHECK (due_date IS NULL OR length(due_date) = 10),
     UNIQUE (account_id, external_id)
 ) STRICT
 table|transactions_fts|transactions_fts|CREATE VIRTUAL TABLE transactions_fts USING fts5 (

@@ -41,6 +41,7 @@ type state struct {
 	Splits     map[domain.TransactionID][]domain.Split
 	Budgets    map[domain.BudgetID]domain.Budget
 	Moves      []domain.BudgetMove
+	Recurs     map[app.RecurrenceID]app.Recurrence
 	LastID     map[string]int64
 }
 
@@ -59,6 +60,7 @@ func newState() *state {
 		Payees:     map[domain.PayeeID]domain.Payee{},
 		Splits:     map[domain.TransactionID][]domain.Split{},
 		Budgets:    map[domain.BudgetID]domain.Budget{},
+		Recurs:     map[app.RecurrenceID]app.Recurrence{},
 		LastID:     map[string]int64{},
 	}
 }
@@ -70,6 +72,7 @@ func (s *state) clone() *state {
 		Refs: maps.Clone(s.Refs), LastID: maps.Clone(s.LastID),
 		Tags: maps.Clone(s.Tags), TxTags: maps.Clone(s.TxTags), Payees: maps.Clone(s.Payees), Splits: maps.Clone(s.Splits),
 		Budgets: maps.Clone(s.Budgets), Moves: slices.Clone(s.Moves),
+		Recurs: maps.Clone(s.Recurs),
 	}
 }
 
@@ -138,6 +141,7 @@ func (r *repos) Tags() app.TagRepo                 { return tags{r} }
 func (r *repos) Payees() app.PayeeRepo             { return payees{r} }
 func (r *repos) Splits() app.SplitRepo             { return splits{r} }
 func (r *repos) Budgets() app.BudgetRepo           { return budgets{r} }
+func (r *repos) Recurrences() app.RecurrenceRepo   { return recurrences{r} }
 
 func (r *repos) writable() error {
 	if r.readOnly {

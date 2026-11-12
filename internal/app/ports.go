@@ -69,6 +69,7 @@ type Repos interface {
 	Payees() PayeeRepo
 	Splits() SplitRepo
 	Budgets() BudgetRepo
+	Recurrences() RecurrenceRepo
 }
 
 // AccountRepo stores accounts. Names are unique case-insensitively.
@@ -240,4 +241,34 @@ type BudgetRepo interface {
 	Moves(ctx context.Context, from, to domain.Date) ([]domain.BudgetMove, error)
 	// AddMove appends an envelope move to the ledger; a non-zero From or To must be an existing budget.
 	AddMove(ctx context.Context, m domain.BudgetMove) error
+}
+
+// RecurrenceID identifies a recurrence row.
+type RecurrenceID int64
+
+// Recurrence is one recurrence row persisted by RecurrenceRepo.
+type Recurrence struct {
+	ID          RecurrenceID
+	AccountID   domain.AccountID
+	CategoryID  domain.CategoryID
+	Description string
+	Amount      domain.Money
+	Rule        domain.RecurrenceRule
+	Start       domain.Date
+	End         domain.Date // zero means no end
+	NextDate    domain.Date
+}
+
+// RecurrenceRepo stores recurrence templates and lists pending transactions created from them.
+type RecurrenceRepo interface {
+	Insert(ctx context.Context, r Recurrence) (Recurrence, error)
+	Update(ctx context.Context, r Recurrence) error
+	Delete(ctx context.Context, id RecurrenceID) error
+	Get(ctx context.Context, id RecurrenceID) (Recurrence, error)
+	// List returns every recurrence ordered by ID.
+	List(ctx context.Context) ([]Recurrence, error)
+	// Due returns recurrences whose next date is on or before until, ordered by next date then ID.
+	Due(ctx context.Context, until domain.Date) ([]Recurrence, error)
+	// PendingOf returns pending transactions linked to recurrence id ordered by due_date/date then ID.
+	PendingOf(ctx context.Context, id RecurrenceID) ([]domain.Transaction, error)
 }
