@@ -31,6 +31,7 @@ var wantExit = map[domain.Code]int{
 	app.CodeRateMissing:            cli.ExitUserError,
 	app.CodeAlreadyExists:          cli.ExitUserError,
 	app.CodeInUse:                  cli.ExitUserError,
+	app.CodeModuleDisabled:         cli.ExitUserError,
 	importing.CodeUnmappedAccounts: cli.ExitUserError,
 	importing.CodeInvalidStream:    cli.ExitDataError,
 	importing.CodeConnectorFailed:  cli.ExitDataError,

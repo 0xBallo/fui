@@ -7,7 +7,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/0xballo/fui/internal/cli/render"
+	"github.com/0xballo/fui/internal/module"
 )
+
+type topLevelModuleCommand struct {
+	command *cobra.Command
+	module  module.ID
+}
 
 // NewRoot builds the fui command tree. With no subcommand it starts the TUI via deps.RunTUI.
 func NewRoot(deps *Deps) *cobra.Command {
@@ -34,14 +40,40 @@ func NewRoot(deps *Deps) *cobra.Command {
 	}
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return newUsageError(err) })
 	registerPersistentFlags(root)
-	root.AddCommand(
-		newInitCmd(deps), newAddCmd(deps), newTxCmd(deps), newTransferCmd(deps),
-		newAccountCmd(deps), newCategoryCmd(deps), newFXCmd(deps),
-		newBackupCmd(deps), newRestoreCmd(deps), newResetCmd(deps), newConfigCmd(deps), newHelpJSONCmd(deps),
-		newReportCmd(deps), newKPICmd(deps), newCompletionCmd(),
-		newImportCmd(deps), newExportCmd(deps), newConnectorCmd(deps), newSkillCmd(deps),
-	)
+	root.PersistentPreRunE = moduleGate(deps)
+	addTopLevelModuleCommands(root, []topLevelModuleCommand{
+		{command: newInitCmd(deps), module: module.Core},
+		{command: newModuleCmd(deps), module: module.Core},
+		{command: newAddCmd(deps), module: module.Core},
+		{command: newTxCmd(deps), module: module.Core},
+		{command: newTransferCmd(deps), module: module.Core},
+		{command: newAccountCmd(deps), module: module.Core},
+		{command: newCategoryCmd(deps), module: module.Core},
+		{command: newFXCmd(deps), module: module.Core},
+		{command: newBackupCmd(deps), module: module.Core},
+		{command: newRestoreCmd(deps), module: module.Core},
+		{command: newResetCmd(deps), module: module.Core},
+		{command: newConfigCmd(deps), module: module.Core},
+		{command: newHelpJSONCmd(deps), module: module.Core},
+		{command: newReportCmd(deps), module: module.Core},
+		{command: newKPICmd(deps), module: module.Core},
+		{command: newCompletionCmd(), module: module.Core},
+		{command: newImportCmd(deps), module: module.Core},
+		{command: newExportCmd(deps), module: module.Core},
+		{command: newConnectorCmd(deps), module: module.Core},
+		{command: newSkillCmd(deps), module: module.Core},
+	})
+	if err := configureModuleCommands(root, deps); err != nil {
+		root.PersistentPreRunE = func(*cobra.Command, []string) error { return err }
+	}
 	return root
+}
+
+func addTopLevelModuleCommands(root *cobra.Command, entries []topLevelModuleCommand) {
+	for _, entry := range entries {
+		annotateModule(entry.command, entry.module)
+		root.AddCommand(entry.command)
+	}
 }
 
 // exactArgs wraps cobra.ExactArgs(n) so a wrong argument count is a usageError, classified as

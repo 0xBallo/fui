@@ -39,6 +39,7 @@ var userInputCodes = map[domain.Code]bool{
 	app.CodeRateMissing:            true,
 	app.CodeAlreadyExists:          true,
 	app.CodeInUse:                  true,
+	app.CodeModuleDisabled:         true,
 	importing.CodeUnmappedAccounts: true,
 }
 
