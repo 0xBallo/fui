@@ -99,7 +99,7 @@ func (r recurrenceRepo) Due(ctx context.Context, until domain.Date) ([]app.Recur
 	if until.IsZero() {
 		return nil, fmt.Errorf("due recurrences: %w", domain.ErrMissingField)
 	}
-	rows, err := r.repos.queries.DueRecurrences(ctx, until.String())
+	rows, err := r.repos.queries.DueRecurrences(ctx, toNullDate(until))
 	if err != nil {
 		return nil, mapSQLError(err)
 	}
@@ -155,7 +155,7 @@ func toInsertRecurrenceParams(in app.Recurrence) gen.InsertRecurrenceParams {
 		DayOfMonth:  int64(in.Rule.DayOfMonth),
 		StartDate:   in.Start.String(),
 		EndDate:     toNullDate(in.End),
-		NextDate:    in.NextDate.String(),
+		NextDate:    toNullDate(in.NextDate),
 	}
 }
 
@@ -190,10 +190,6 @@ func toRecurrence(row gen.Recurrence) (app.Recurrence, error) {
 	if err != nil {
 		return app.Recurrence{}, fmt.Errorf("parse recurrence start_date %q: %w", row.StartDate, err)
 	}
-	nextDate, err := domain.ParseDate(row.NextDate)
-	if err != nil {
-		return app.Recurrence{}, fmt.Errorf("parse recurrence next_date %q: %w", row.NextDate, err)
-	}
 	rule, err := domain.NewRecurrenceRule(int(row.Every), domain.RecurrenceUnit(row.Unit), int(row.DayOfMonth))
 	if err != nil {
 		return app.Recurrence{}, fmt.Errorf("parse recurrence rule: %w", err)
@@ -206,7 +202,12 @@ func toRecurrence(row gen.Recurrence) (app.Recurrence, error) {
 		Amount:      amount,
 		Rule:        rule,
 		Start:       start,
-		NextDate:    nextDate,
+	}
+	if row.NextDate.Valid {
+		out.NextDate, err = domain.ParseDate(row.NextDate.String)
+		if err != nil {
+			return app.Recurrence{}, fmt.Errorf("parse recurrence next_date %q: %w", row.NextDate.String, err)
+		}
 	}
 	if row.EndDate.Valid {
 		out.End, err = domain.ParseDate(row.EndDate.String)

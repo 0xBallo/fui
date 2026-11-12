@@ -182,7 +182,7 @@ type Recurrence struct {
 	DayOfMonth  int64
 	StartDate   string
 	EndDate     sql.NullString
-	NextDate    string
+	NextDate    sql.NullString
 	CreatedAt   string
 	UpdatedAt   string
 }

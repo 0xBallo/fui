@@ -13,8 +13,10 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/pressly/goose/v3"
 
+	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/backup"
 	"github.com/0xballo/fui/internal/clock"
+	"github.com/0xballo/fui/internal/domain"
 )
 
 func TestOpenMigratesEmptyDatabase(t *testing.T) {
@@ -364,5 +366,99 @@ func TestMigrateFromV4AddsRecurrenceColumns(t *testing.T) {
 	}
 	if recID.Valid || !dueDate.Valid || dueDate.String != "2026-02-01" {
 		t.Fatalf("after recurrence delete = (recurrence_id=%v due_date=%v), want (NULL, 2026-02-01)", recID, dueDate)
+	}
+}
+
+func TestMigrateFromV9AllowsExhaustedRecurrence(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "data", "fui.db")
+	ctx := context.Background()
+
+	db := mustOpenRawDB(t, dbPath)
+	migrationsFS, err := fs.Sub(migrationFS, "migrations")
+	if err != nil {
+		t.Fatalf("fs.Sub: %v", err)
+	}
+	provider, err := goose.NewProvider(goose.DialectSQLite3, db, migrationsFS)
+	if err != nil {
+		t.Fatalf("goose.NewProvider: %v", err)
+	}
+	if _, err := provider.UpTo(ctx, 9); err != nil {
+		t.Fatalf("migrate to v9: %v", err)
+	}
+	mustExec(t, db, `INSERT INTO accounts (name, kind, currency, opening_balance_minor, opened_on)
+		VALUES ('Checking', 'checking', 'EUR', 0, '2026-01-01')`)
+	// Under the pre-v10 schema, next_date is NOT NULL: a live recurrence must
+	// carry a real date.
+	mustExec(t, db, `INSERT INTO recurrences (
+		id, account_id, description, amount_minor, currency, every, unit, day_of_month, start_date, end_date, next_date
+	) VALUES (1, 1, 'Rent', -50000, 'EUR', 1, 'months', 0, '2026-01-01', '2026-02-01', '2026-02-01')`)
+	mustExec(t, db, `INSERT INTO transactions (account_id, date, amount_minor, currency, status, kind, recurrence_id, due_date)
+		VALUES (1, '2026-01-01', -50000, 'EUR', 'booked', 'payment', 1, '2026-01-01')`)
+	mustClose(t, db)
+
+	store, err := Open(ctx, Options{
+		Path:       dbPath,
+		BackupDir:  filepath.Join(root, "data", "backups"),
+		BackupKeep: 10,
+		Clock:      clock.NewFixed(time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC)),
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	version, err := pragmaUserVersion(ctx, store.writeDB)
+	if err != nil {
+		t.Fatalf("pragmaUserVersion: %v", err)
+	}
+	if version != currentSchemaVersion {
+		t.Fatalf("user_version = %d, want %d", version, currentSchemaVersion)
+	}
+
+	// The migrated recurrence must round-trip through the app layer, and its
+	// next_date column must now accept NULL to represent it being exhausted.
+	var got app.Recurrence
+	if err := store.WithTx(ctx, func(r app.Repos) (err error) {
+		got, err = r.Recurrences().Get(ctx, 1)
+		return err
+	}); err != nil {
+		t.Fatalf("Get migrated recurrence: %v", err)
+	}
+	if got.NextDate.String() != "2026-02-01" {
+		t.Fatalf("migrated next_date = %v, want 2026-02-01", got.NextDate)
+	}
+	got.NextDate = domain.Date{}
+	if err := store.WithTx(ctx, func(r app.Repos) error {
+		return r.Recurrences().Update(ctx, got)
+	}); err != nil {
+		t.Fatalf("Update to exhausted (zero next_date): %v", err)
+	}
+	var exhausted app.Recurrence
+	if err := store.WithTx(ctx, func(r app.Repos) (err error) {
+		exhausted, err = r.Recurrences().Get(ctx, 1)
+		return err
+	}); err != nil {
+		t.Fatalf("Get exhausted recurrence: %v", err)
+	}
+	if !exhausted.NextDate.IsZero() {
+		t.Fatalf("exhausted next_date = %v, want zero", exhausted.NextDate)
+	}
+
+	// The transaction's recurrence_id foreign key must still resolve after
+	// the recurrences table rebuild.
+	var linkedID int64
+	if err := store.writeDB.QueryRowContext(ctx,
+		"SELECT recurrence_id FROM transactions WHERE account_id = 1 AND recurrence_id IS NOT NULL").
+		Scan(&linkedID); err != nil {
+		t.Fatalf("scan linked transaction: %v", err)
+	}
+	if linkedID != 1 {
+		t.Fatalf("linked recurrence_id = %d, want 1", linkedID)
+	}
+	if _, err := store.writeDB.ExecContext(ctx, `INSERT INTO transactions
+		(account_id, date, amount_minor, currency, status, kind, recurrence_id)
+		VALUES (1, '2026-03-01', -50000, 'EUR', 'pending', 'payment', 1)`); err != nil {
+		t.Fatalf("insert new transaction referencing recurrence: %v", err)
 	}
 }

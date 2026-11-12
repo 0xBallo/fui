@@ -111,7 +111,7 @@ func (r recurrences) Due(_ context.Context, until domain.Date) ([]app.Recurrence
 	}
 	out := make([]app.Recurrence, 0, len(r.st.Recurs))
 	for _, rec := range r.st.Recurs {
-		if !rec.NextDate.After(until) {
+		if !rec.NextDate.IsZero() && !rec.NextDate.After(until) {
 			out = append(out, rec)
 		}
 	}

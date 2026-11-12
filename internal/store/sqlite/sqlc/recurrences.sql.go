@@ -31,7 +31,7 @@ WHERE next_date <= ?1
 ORDER BY next_date, id
 `
 
-func (q *Queries) DueRecurrences(ctx context.Context, untilDate string) ([]Recurrence, error) {
+func (q *Queries) DueRecurrences(ctx context.Context, untilDate sql.NullString) ([]Recurrence, error) {
 	rows, err := q.db.QueryContext(ctx, dueRecurrences, untilDate)
 	if err != nil {
 		return nil, err
@@ -140,7 +140,7 @@ type InsertRecurrenceParams struct {
 	DayOfMonth  int64
 	StartDate   string
 	EndDate     sql.NullString
-	NextDate    string
+	NextDate    sql.NullString
 }
 
 func (q *Queries) InsertRecurrence(ctx context.Context, arg InsertRecurrenceParams) (Recurrence, error) {
@@ -306,7 +306,7 @@ type UpdateRecurrenceParams struct {
 	DayOfMonth  int64
 	StartDate   string
 	EndDate     sql.NullString
-	NextDate    string
+	NextDate    sql.NullString
 	ID          int64
 }
 

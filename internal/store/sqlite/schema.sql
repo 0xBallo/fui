@@ -108,7 +108,7 @@ CREATE TABLE recurrences (
     day_of_month INTEGER NOT NULL DEFAULT 0 CHECK (day_of_month >= 0 AND day_of_month <= 31),
     start_date TEXT NOT NULL CHECK (length(start_date) = 10),
     end_date TEXT CHECK (end_date IS NULL OR length(end_date) = 10),
-    next_date TEXT NOT NULL CHECK (length(next_date) = 10),
+    next_date TEXT CHECK (next_date IS NULL OR length(next_date) = 10),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 ) STRICT;
