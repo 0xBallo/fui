@@ -130,6 +130,22 @@ func (b *builder) proposeTransfers(ctx context.Context) error {
 	return nil
 }
 
+// transferWindow is the filter of the movements within two days of [from, to].
+func transferWindow(from, to domain.Date) (domain.TxFilter, error) {
+	from, err := from.AddDays(-2)
+	if err != nil {
+		return domain.TxFilter{}, fmt.Errorf("transfer window: %w", err)
+	}
+	if to, err = to.AddDays(2); err != nil {
+		return domain.TxFilter{}, fmt.Errorf("transfer window: %w", err)
+	}
+	f, err := domain.NewTxFilter(domain.TxFilterSpec{From: from, To: to, Desc: true})
+	if err != nil {
+		return domain.TxFilter{}, fmt.Errorf("transfer window: %w", err)
+	}
+	return f, nil
+}
+
 // archivedCandidates lists the unlinked, unreconciled transfer movements near the dates of the
 // rows, other than the ones a row was found to duplicate.
 func (b *builder) archivedCandidates(ctx context.Context) ([]domain.TransferCandidate, error) {
@@ -146,16 +162,9 @@ func (b *builder) archivedCandidates(ctx context.Context) ([]domain.TransferCand
 			to = d
 		}
 	}
-	from, err := from.AddDays(-2)
+	window, err := transferWindow(from, to)
 	if err != nil {
-		return nil, fmt.Errorf("transfer window: %w", err)
-	}
-	if to, err = to.AddDays(2); err != nil {
-		return nil, fmt.Errorf("transfer window: %w", err)
-	}
-	window, err := domain.NewTxFilter(domain.TxFilterSpec{From: from, To: to, Desc: true})
-	if err != nil {
-		return nil, fmt.Errorf("transfer window: %w", err)
+		return nil, err
 	}
 	near, err := b.r.Transactions().List(ctx, window, nil, 0)
 	if err != nil {
