@@ -84,8 +84,14 @@ func (w *writer) run(ctx context.Context, res *ImportResult) error {
 		if !row.Include {
 			continue
 		}
-		if _, err := w.r.Transactions().Insert(ctx, w.txs[i]); err != nil {
+		t, err := w.r.Transactions().Insert(ctx, w.txs[i])
+		if err != nil {
 			return fmt.Errorf("create transaction of line %d: %w", row.Line, err)
+		}
+		if len(row.Rules.TagIDs) > 0 {
+			if err := w.r.Tags().SetTags(ctx, t.ID, row.Rules.TagIDs); err != nil {
+				return fmt.Errorf("set tags of line %d: %w", row.Line, err)
+			}
 		}
 		res.Transactions++
 	}

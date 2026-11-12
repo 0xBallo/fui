@@ -129,6 +129,9 @@ func (b *builder) build(ctx context.Context, plan *ImportPlan) error {
 		plan.Errors = append(plan.Errors, RowError{Line: e.Line, Message: fmt.Sprintf("%s: %s", e.Type, e.Message)})
 	}
 	slices.SortStableFunc(plan.Errors, func(x, y RowError) int { return cmp.Compare(x.Line, y.Line) })
+	if err := b.applyRules(ctx); err != nil {
+		return err
+	}
 	if err := b.finishAccounts(balances); err != nil {
 		return err
 	}

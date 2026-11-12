@@ -43,6 +43,7 @@ type Row struct {
 	Category   string // category name to apply, created when missing
 	Transfer   string // transfer label shared by the two legs, as written in the stream
 	Matched    []domain.TransactionID
+	Rules      RuleEffect // what the categorization rules set on this row
 }
 
 // RowError is a row that could not be converted or that the source reported as invalid.
