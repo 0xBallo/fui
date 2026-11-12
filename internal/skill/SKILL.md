@@ -28,11 +28,15 @@ either it prints a table for a human. `fui help --json` returns the full, curren
 with every flag and output schema — run it once per session instead of trusting this table
 blindly, since it reflects the exact binary installed.
 
+For agent runs, call `fui module list --json` first so you only propose commands from active
+modules.
+
 | Command | Purpose |
 | --- | --- |
 | `fui init` | Create the default categories (safe to run again) |
 | `fui add AMOUNT DESC... -c CATEGORY -a ACCOUNT` | Add one transaction, default date today |
-| `fui tx list / show / edit / rm` | List and change transactions, with filters |
+| `fui tx list / show / edit / rm` | List and change transactions |
+| `fui tx search TEXT` | Search transactions by case/accent-insensitive partial text |
 | `fui transfer AMOUNT --from A --to B` | Move money between two accounts |
 | `fui account add / list / show / edit / archive` | Manage accounts and see balances |
 | `fui category add / list / rename / merge / rm` | Manage categories |
@@ -44,6 +48,12 @@ blindly, since it reflects the exact binary installed.
 | `fui backup` / `fui restore PATH --yes` | Back up or restore the archive |
 | `fui config get/set KEY [VALUE]` | Read or change configuration |
 | `fui skill show` / `fui skill install` | Print or install this skill document |
+
+`fui tx list`, `fui tx search`, and `fui export` share the same filter flags:
+`--from`, `--to`, `--month`, `--year`, `-a/--account`, `-c/--category`, `--uncategorized`,
+`--payee`, `--min`, `--max`, `--income`, `--expense`, `--status`, `--kind`, `--batch`, `--sort`,
+`--desc`, `--limit`. Keyset paging flags (`--after-date`, `--after-id`) apply only to
+`fui tx list`.
 
 Accounts, categories and connector names are matched by case-insensitive partial name; an
 ambiguous match lists the candidates and exits with an error instead of guessing.
@@ -84,9 +94,9 @@ aggregated reports to dumping every transaction into the conversation.
    what it would change before doing anything.
 2. **Confirm, then `--yes`.** Only run the command for real, adding `--yes`, after the user has
    seen the preview and agreed.
-3. **Never delete or restore without an explicit request.** Do not run `fui tx rm`,
-   `fui category rm`, or `fui restore`, and do not edit a reconciled transaction, unless the user
-   asked for exactly that.
+3. **Never delete, reset, or restore without an explicit request.** Do not run `fui tx rm`,
+   `fui category rm`, `fui reset`, or `fui restore`, and do not edit a reconciled transaction,
+   unless the user asked for exactly that.
 4. **Prefer aggregates to raw rows.** Use reports and totals rather than listing every
    transaction, to keep the user's financial detail out of the model's context when a summary
    answers the question.
