@@ -1,4 +1,4 @@
-{"type":"meta","protocol":"fui/1","connector":"widiba","version":"0.1.0","source":{"file":"widiba-sample.xlsx","sha256":"c22cb060c91db6c69179b4f1316d97896237ecf7ad3db96b28effa8791e1038f"}}
+{"type":"meta","protocol":"fui/1","connector":"widiba","version":"0.1.0","source":{"file":"widiba-sample.xlsx","sha256":"<fixture-sha256>"}}
 {"type":"account","ref":"widiba-3456","name":"Widiba 3456","currency":"EUR","kind":"checking","iban":"IT60X0542811101000000123456"}
 {"type":"account","ref":"widiba-linea-libera","name":"Widiba Linea Libera","currency":"EUR","kind":"savings"}
 {"type":"transaction","account":"widiba-3456","id":"widiba-op-abc123","date":"2025-04-10","value_date":"2025-04-10","amount":50000,"currency":"EUR","description":"Bon. Sepa. ABC123 A Favore ACME IT11A1234567890123456789012","payee":"ACME","counterparty_iban":"IT11A1234567890123456789012","status":"booked","kind":"transfer","raw":{"amount":"500,00","causale":"Bonifico In Entrata","date":"45757","description":"Bon. Sepa. ABC123 A Favore ACME IT11A1234567890123456789012","value_date":"45757"}}
