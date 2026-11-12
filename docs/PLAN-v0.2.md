@@ -183,3 +183,20 @@ Open questions (product decision):
 6. Rule conditions scope: regex allowed, or only contains/equals (safer for performance and testing)?
 7. Net worth report granularity and whether archived accounts count in historical series.
 8. Dynamic completion reading the archive: acceptable when the archive is locked or missing (fall back to no suggestions)?
+
+## Outcome (2026-11-12)
+
+All tasks V01–V32 plus V33 (fui/1 split rows, added during review) merged on `main` after coordinator review.
+Migrations added: 0004–0011 (0010 makes `recurrences.next_date` nullable, 0011 adds loan name and liability
+account). Coverage gate: total 84.5%, `internal/domain` 91.1%. Agents: Copilot (claude-sonnet-5 / gpt-5.3-codex,
+effort medium) for most tasks, Claude Code sonnet medium for V02, V07, V14, V15, V17, V19, V32; Antigravity ran out
+of quota (Gemini and the user-selected model) and V04 was finished by Copilot.
+
+Defaults taken for the open questions (change if the product decision differs): envelope liquidity = checking,
+savings, cash; tag budgets reported separately; `recurring run` on demand only; variable-rate loans propose a rate;
+rules without regex; net worth monthly, archived accounts included in history; dynamic completion silent when the
+archive is missing or locked.
+
+Known gaps: TUI Import has no interactive CSV column mapper (profile name only, like the CLI); budget copy only
+from the previous month; no budget-creation form in the TUI (CLI only); transfer proposals cannot be accepted
+from the import preview; settings sub-view async results arriving after a section switch are dropped.
