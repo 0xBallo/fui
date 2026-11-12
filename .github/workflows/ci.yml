@@ -1,0 +1,148 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A re-push to the same PR cancels the previous run instead of queuing behind it.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GO_LATEST: "1.27"
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_LATEST }}
+          cache: true
+      - name: gofumpt
+        run: |
+          go install mvdan.cc/gofumpt@latest
+          out=$(gofumpt -l .)
+          if [ -n "$out" ]; then echo "not gofumpt-formatted:"; echo "$out"; exit 1; fi
+      - name: go mod tidy (no diff)
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+      - name: generated code (no diff)
+        run: |
+          make generate
+          git diff --exit-code --stat -- . ':!go.sum'
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+      - name: commit message format
+        if: github.event_name == 'pull_request'
+        run: ./.github/workflows/scripts/check-commits.sh "origin/${{ github.base_ref }}..HEAD"
+
+  test:
+    name: test (${{ matrix.os }}, go${{ matrix.go }}, ${{ matrix.tz }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        go: ["1.26", "1.27"]
+        tz: ["UTC", "Pacific/Kiritimati"]
+    env:
+      TZ: ${{ matrix.tz }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+      - run: make test
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_LATEST }}
+          cache: true
+      # TestE2E (cmd/fui) re-execs this test binary as the real fui command, so it already runs
+      # the composition root's run() against the testdata/e2e testscripts; it is also part of
+      # plain `make test` and is re-run here as its own required check per the CI/CD spec. The
+      # connector conformance suite (internal/connector) runs under the same `make test`; a
+      # cross-binary `fui import` e2e script (UC-03) is deferred until the import CLI commands
+      # land on main (see .task-report.md).
+      - run: go test -race -count=1 -run TestE2E ./cmd/fui/...
+
+  fuzz-short:
+    name: fuzz-short
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_LATEST }}
+          cache: true
+      - name: run every fuzz target for 30s
+        run: |
+          set -e
+          fail=0
+          for f in $(grep -rl '^func Fuzz' --include='*_test.go' . | sort -u); do
+            dir=$(dirname "$f")
+            for name in $(grep -oh '^func Fuzz[A-Za-z0-9_]*' "$f" | awk '{print $2}'); do
+              echo "::group::fuzz $dir $name"
+              go test -run '^$' -fuzz "^${name}\$" -fuzztime=30s "$dir" || fail=1
+              echo "::endgroup::"
+            done
+          done
+          exit $fail
+
+  security:
+    name: security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_LATEST }}
+          cache: true
+      - run: go mod verify
+      - run: go test -race -count=1 ./cmd/fui/... -run TestNoNetworkDependency
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_LATEST }}
+          cache: true
+      - run: make build
+
+  build-windows:
+    name: build (windows, non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_LATEST }}
+          cache: true
+      - run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o dist/ ./cmd/...
