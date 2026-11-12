@@ -5,9 +5,11 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/config"
 	"github.com/0xballo/fui/internal/domain"
@@ -19,6 +21,9 @@ import (
 type Deps struct {
 	// Service runs the account, transaction, transfer, category, fx and backup use cases.
 	Service *app.Service
+	// Importing runs the import, export and connector use cases; nil in builds that have not
+	// wired a connector registry yet (requireImporting fails cleanly instead of panicking).
+	Importing *importing.Service
 	// Reporting runs the read-only report and KPI use cases.
 	Reporting Reporting
 	// Config is the resolved configuration; AgentMode reflects FUI_AGENT, Locale and Currency
@@ -57,4 +62,12 @@ func (d *Deps) Locale() domain.Locale {
 // multi-currency amounts.
 func (d *Deps) BaseCurrency() (domain.Currency, error) {
 	return domain.ParseCurrency(d.Config.Currency)
+}
+
+// requireImporting returns d.Importing, or a data error when this build has none configured.
+func requireImporting(d *Deps) (*importing.Service, error) {
+	if d.Importing == nil {
+		return nil, fmt.Errorf("fui: no connector registry configured")
+	}
+	return d.Importing, nil
 }
