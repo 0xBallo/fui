@@ -31,3 +31,37 @@ func splitLeadingPositional(cmd *cobra.Command, args []string) (first string, re
 	}
 	return first, cmd.Flags().Args(), false, nil
 }
+
+// splitOptionalLeadingPositional works like splitLeadingPositional, but the leading positional is
+// optional: fui transfer accepts its amount either as "fui transfer 500 --from ... --to ..." or
+// as "--amount 500", so args[0] is only consumed as the amount when it looks like one (an
+// optional sign followed by a digit); anything else, including every flag, is left to normal
+// flag parsing. hasAmount tells the caller whether a positional amount was actually given.
+func splitOptionalLeadingPositional(cmd *cobra.Command, args []string) (amount string, hasAmount bool, rest []string, help bool, err error) {
+	if len(args) > 0 && (args[0] == "-h" || args[0] == "--help") {
+		return "", false, nil, true, nil
+	}
+	if len(args) > 0 && args[0] == "--" {
+		args = args[1:]
+		if len(args) > 0 {
+			amount, hasAmount, args = args[0], true, args[1:]
+		}
+	} else if len(args) > 0 && looksLikeAmount(args[0]) {
+		amount, hasAmount, args = args[0], true, args[1:]
+	}
+	if err := cmd.Flags().Parse(args); err != nil {
+		return "", false, nil, false, newUsageError(fmt.Errorf("parse flags: %w", err))
+	}
+	return amount, hasAmount, cmd.Flags().Args(), false, nil
+}
+
+// looksLikeAmount reports whether s could be the leading positional amount rather than a flag:
+// an optional "+"/"-" followed by a digit. This is what distinguishes "500" or "-12,50" (an
+// amount) from "--from" or "-c" (a flag) once flag parsing is disabled.
+func looksLikeAmount(s string) bool {
+	i := 0
+	if i < len(s) && (s[i] == '-' || s[i] == '+') {
+		i++
+	}
+	return i < len(s) && s[i] >= '0' && s[i] <= '9'
+}

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/spf13/cobra"
 
@@ -9,19 +10,34 @@ import (
 	"github.com/0xballo/fui/internal/cli/render"
 )
 
-// newTransferCmd moves money between two of the user's accounts, in one or two currencies.
+// newTransferCmd moves money between two of the user's accounts, in one or two currencies. Like
+// fui add, it disables cobra's flag parsing so the amount can be given as a leading positional
+// argument (e.g. "fui transfer 500 --from Fineco --to Risparmio") without pflag mistaking a
+// signed amount for an unknown shorthand flag; see splitOptionalLeadingPositional.
 func newTransferCmd(deps *Deps) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "transfer",
-		Short:   "Transfer money between two accounts",
-		Example: "  fui transfer --from Checking --to Savings --amount 200",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runTransfer(cmd, deps)
+		Use:   "transfer [AMOUNT]",
+		Short: "Transfer money between two accounts",
+		Example: "  fui transfer 500 --from Fineco --to Risparmio\n" +
+			"  fui transfer --from Checking --to Savings --amount 200",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			amount, hasAmount, rest, help, err := splitOptionalLeadingPositional(cmd, args)
+			if help {
+				return cmd.Help()
+			}
+			if err != nil {
+				return err
+			}
+			if len(rest) > 0 {
+				return newUsageError(fmt.Errorf("unexpected argument %q", rest[0]))
+			}
+			return runTransfer(cmd, deps, amount, hasAmount)
 		},
 	}
 	cmd.Flags().String("from", "", "source account (required)")
 	cmd.Flags().String("to", "", "destination account (required)")
-	cmd.Flags().String("amount", "", "amount leaving the source account (required)")
+	cmd.Flags().String("amount", "", "amount leaving the source account (required unless given positionally)")
 	cmd.Flags().String("dest-amount", "", "amount arriving, when the accounts differ in currency")
 	cmd.Flags().String("fee", "", "fee charged on the source account")
 	cmd.Flags().String("date", "", "accounting date (default: today)")
@@ -30,12 +46,12 @@ func newTransferCmd(deps *Deps) *cobra.Command {
 	return cmd
 }
 
-func runTransfer(cmd *cobra.Command, deps *Deps) error {
+func runTransfer(cmd *cobra.Command, deps *Deps, posAmount string, hasPosAmount bool) error {
 	rt, err := runtimeOf(cmd, deps)
 	if err != nil {
 		return err
 	}
-	req, err := transferRequest(cmd, deps, rt)
+	req, err := transferRequest(cmd, deps, rt, posAmount, hasPosAmount)
 	if err != nil {
 		return err
 	}
@@ -53,7 +69,7 @@ func runTransfer(cmd *cobra.Command, deps *Deps) error {
 	})
 }
 
-func transferRequest(cmd *cobra.Command, deps *Deps, rt runtimeFlags) (app.TransferRequest, error) {
+func transferRequest(cmd *cobra.Command, deps *Deps, rt runtimeFlags, posAmount string, hasPosAmount bool) (app.TransferRequest, error) {
 	from, _ := cmd.Flags().GetString("from")
 	from, err := promptString(deps, rt, "from", "Source account", from)
 	if err != nil {
@@ -64,6 +80,13 @@ func transferRequest(cmd *cobra.Command, deps *Deps, rt runtimeFlags) (app.Trans
 		return app.TransferRequest{}, err
 	}
 	amount, _ := cmd.Flags().GetString("amount")
+	if hasPosAmount {
+		if amount != "" && amount != posAmount {
+			return app.TransferRequest{}, newUsageError(
+				fmt.Errorf("amount %q and --amount %q differ", posAmount, amount))
+		}
+		amount = posAmount
+	}
 	if amount, err = promptString(deps, rt, "amount", "Amount", amount); err != nil {
 		return app.TransferRequest{}, err
 	}
