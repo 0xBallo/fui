@@ -19,7 +19,9 @@ import (
 // - FUI_LOCALE: Regional formatting locale override.
 // - FUI_MONTH_START_DAY: Accounting month start day override (1..31).
 // - FUI_WEEK_START: First day of week override (monday/sunday).
-// - FUI_THEME: TUI theme override (terminal/high-contrast).
+// - FUI_THEME: TUI theme override (auto/latte/frappe/macchiato/mocha/terminal/high-contrast).
+// - FUI_THEME_LIGHT: Flavor auto picks on a light terminal background.
+// - FUI_THEME_DARK: Flavor auto picks on a dark terminal background.
 // - FUI_BACKUP_KEEP: Number of backups retained during rotation.
 // - FUI_CONNECTORS_TIMEOUT: Connector execution timeout duration.
 // - FUI_LOG: Logging severity level (debug, info, warn, error).
@@ -35,6 +37,8 @@ type Flags struct {
 	MonthStartDay     int
 	WeekStart         string
 	Theme             string
+	ThemeLight        string
+	ThemeDark         string
 	BackupKeep        int
 	ConnectorsTimeout string
 	LogLevel          string
@@ -182,6 +186,12 @@ func applyEnv(cfg *Config, env EnvLookup) error {
 	if v := env("FUI_THEME"); v != "" {
 		cfg.Theme = v
 	}
+	if v := env("FUI_THEME_LIGHT"); v != "" {
+		cfg.ThemeLight = v
+	}
+	if v := env("FUI_THEME_DARK"); v != "" {
+		cfg.ThemeDark = v
+	}
 	if v := env("FUI_BACKUP_KEEP"); v != "" {
 		keep, err := strconv.Atoi(v)
 		if err != nil {
@@ -230,6 +240,12 @@ func applyFlags(cfg *Config, flags Flags) error {
 	}
 	if flags.Theme != "" {
 		cfg.Theme = flags.Theme
+	}
+	if flags.ThemeLight != "" {
+		cfg.ThemeLight = flags.ThemeLight
+	}
+	if flags.ThemeDark != "" {
+		cfg.ThemeDark = flags.ThemeDark
 	}
 	if flags.BackupKeep != 0 {
 		cfg.Backup.Keep = flags.BackupKeep

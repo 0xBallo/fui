@@ -12,7 +12,9 @@ const (
 	DefaultLocale        = LocaleIT
 	DefaultMonthStartDay = 1
 	DefaultWeekStart     = WeekStartMonday
-	DefaultTheme         = ThemeTerminal
+	DefaultTheme         = ThemeAuto
+	DefaultThemeLight    = ThemeLatte
+	DefaultThemeDark     = ThemeMocha
 	DefaultBackupKeep    = 10
 	DefaultTimeout       = 120 * time.Second
 	DefaultLogLevel      = "warn"
@@ -28,6 +30,8 @@ func Defaults() Config {
 		MonthStartDay: DefaultMonthStartDay,
 		WeekStart:     DefaultWeekStart,
 		Theme:         DefaultTheme,
+		ThemeLight:    DefaultThemeLight,
+		ThemeDark:     DefaultThemeDark,
 		Modules: ModulesConfig{
 			Enabled: defaultModules.IDs(),
 		},

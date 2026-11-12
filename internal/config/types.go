@@ -23,9 +23,17 @@ const (
 
 // Supported themes.
 const (
+	ThemeAuto         = "auto"
+	ThemeLatte        = "latte"
+	ThemeFrappe       = "frappe"
+	ThemeMacchiato    = "macchiato"
+	ThemeMocha        = "mocha"
 	ThemeTerminal     = "terminal"
 	ThemeHighContrast = "high-contrast"
 )
+
+// themeFlavors lists the fixed Catppuccin flavors theme_light and theme_dark may select.
+var themeFlavors = []string{ThemeLatte, ThemeFrappe, ThemeMacchiato, ThemeMocha}
 
 // Supported week starts.
 const (
@@ -130,6 +138,8 @@ type Config struct {
 	MonthStartDay int              `toml:"month_start_day"`
 	WeekStart     string           `toml:"week_start"`
 	Theme         string           `toml:"theme"`
+	ThemeLight    string           `toml:"theme_light"`
+	ThemeDark     string           `toml:"theme_dark"`
 	Modules       ModulesConfig    `toml:"modules"`
 	Backup        BackupConfig     `toml:"backup"`
 	Connectors    ConnectorsConfig `toml:"connectors"`

@@ -37,8 +37,14 @@ func TestDefaults(t *testing.T) {
 	if cfg.WeekStart != "monday" {
 		t.Errorf("week_start = %q, want monday", cfg.WeekStart)
 	}
-	if cfg.Theme != "terminal" {
-		t.Errorf("theme = %q, want terminal", cfg.Theme)
+	if cfg.Theme != "auto" {
+		t.Errorf("theme = %q, want auto", cfg.Theme)
+	}
+	if cfg.ThemeLight != "latte" {
+		t.Errorf("theme_light = %q, want latte", cfg.ThemeLight)
+	}
+	if cfg.ThemeDark != "mocha" {
+		t.Errorf("theme_dark = %q, want mocha", cfg.ThemeDark)
 	}
 	if cfg.Backup.Keep != 10 {
 		t.Errorf("backup.keep = %d, want 10", cfg.Backup.Keep)
@@ -243,6 +249,16 @@ func TestInvalidValues(t *testing.T) {
 			name:    "invalid theme",
 			toml:    `theme = "solarized"`,
 			wantErr: `"theme"`,
+		},
+		{
+			name:    "invalid theme_light",
+			toml:    `theme_light = "terminal"`,
+			wantErr: `"theme_light"`,
+		},
+		{
+			name:    "invalid theme_dark",
+			toml:    `theme_dark = "auto"`,
+			wantErr: `"theme_dark"`,
 		},
 		{
 			name:    "invalid backup.keep zero",
@@ -473,6 +489,12 @@ func TestGetSetAndPersistence(t *testing.T) {
 	if err := cfg.Set("theme", "high-contrast"); err != nil {
 		t.Fatalf("Set(theme) failed: %v", err)
 	}
+	if err := cfg.Set("theme_light", "frappe"); err != nil {
+		t.Fatalf("Set(theme_light) failed: %v", err)
+	}
+	if err := cfg.Set("theme_dark", "macchiato"); err != nil {
+		t.Fatalf("Set(theme_dark) failed: %v", err)
+	}
 	if err := cfg.Set("backup.keep", "15"); err != nil {
 		t.Fatalf("Set(backup.keep) failed: %v", err)
 	}
@@ -555,6 +577,12 @@ func TestGetSetAndPersistence(t *testing.T) {
 	}
 	if reloaded.Theme != "high-contrast" {
 		t.Errorf("reloaded theme = %q, want high-contrast", reloaded.Theme)
+	}
+	if reloaded.ThemeLight != "frappe" {
+		t.Errorf("reloaded theme_light = %q, want frappe", reloaded.ThemeLight)
+	}
+	if reloaded.ThemeDark != "macchiato" {
+		t.Errorf("reloaded theme_dark = %q, want macchiato", reloaded.ThemeDark)
 	}
 	if reloaded.Backup.Keep != 15 {
 		t.Errorf("reloaded backup.keep = %d, want 15", reloaded.Backup.Keep)

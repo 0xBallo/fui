@@ -26,6 +26,12 @@ func (c *Config) Validate() error {
 	if err := validateTheme(c.Theme); err != nil {
 		return err
 	}
+	if err := validateThemeFlavor("theme_light", c.ThemeLight); err != nil {
+		return err
+	}
+	if err := validateThemeFlavor("theme_dark", c.ThemeDark); err != nil {
+		return err
+	}
 	if err := validateModulesEnabled(c.Modules.Enabled); err != nil {
 		return err
 	}
@@ -77,11 +83,24 @@ func validateWeekStart(ws string) error {
 
 func validateTheme(th string) error {
 	switch th {
-	case ThemeTerminal, ThemeHighContrast:
+	case ThemeAuto, ThemeLatte, ThemeFrappe, ThemeMacchiato, ThemeMocha, ThemeTerminal, ThemeHighContrast:
 		return nil
 	default:
-		return fmt.Errorf("invalid value for key %q: %q (allowed: %s, %s)", "theme", th, ThemeTerminal, ThemeHighContrast)
+		return fmt.Errorf("invalid value for key %q: %q (allowed: %s)", "theme", th, strings.Join(allThemes(), ", "))
 	}
+}
+
+func validateThemeFlavor(key, value string) error {
+	for _, f := range themeFlavors {
+		if value == f {
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid value for key %q: %q (allowed: %s)", key, value, strings.Join(themeFlavors, ", "))
+}
+
+func allThemes() []string {
+	return []string{ThemeAuto, ThemeLatte, ThemeFrappe, ThemeMacchiato, ThemeMocha, ThemeTerminal, ThemeHighContrast}
 }
 
 func validateBackupKeep(keep int) error {

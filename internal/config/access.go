@@ -28,6 +28,10 @@ func (c *Config) Get(key string) (string, error) {
 		return c.WeekStart, nil
 	case "theme":
 		return c.Theme, nil
+	case "theme_light":
+		return c.ThemeLight, nil
+	case "theme_dark":
+		return c.ThemeDark, nil
 	case "modules.enabled":
 		return joinModuleIDs(c.Modules.Enabled), nil
 	case "backup.keep":
@@ -198,15 +202,34 @@ func (c *Config) setScalarField(key, value string) (bool, error) {
 		}
 		c.WeekStart = strings.ToLower(value)
 		return true, nil
+	case "theme", "theme_light", "theme_dark":
+		return c.setThemeField(key, value)
+	default:
+		return false, nil
+	}
+}
+
+// setThemeField handles the "theme", "theme_light", and "theme_dark" keys, split out of
+// setScalarField to keep that switch's cyclomatic complexity within the project's gocyclo limit.
+func (c *Config) setThemeField(key, value string) (bool, error) {
+	switch key {
 	case "theme":
 		if err := validateTheme(value); err != nil {
 			return true, err
 		}
 		c.Theme = strings.ToLower(value)
-		return true, nil
-	default:
-		return false, nil
+	case "theme_light":
+		if err := validateThemeFlavor("theme_light", strings.ToLower(value)); err != nil {
+			return true, err
+		}
+		c.ThemeLight = strings.ToLower(value)
+	case "theme_dark":
+		if err := validateThemeFlavor("theme_dark", strings.ToLower(value)); err != nil {
+			return true, err
+		}
+		c.ThemeDark = strings.ToLower(value)
 	}
+	return true, nil
 }
 
 func (c *Config) setComplexField(key, value string) (bool, error) {
