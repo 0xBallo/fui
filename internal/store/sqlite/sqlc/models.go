@@ -97,16 +97,18 @@ type ImportBatch struct {
 }
 
 type Loan struct {
-	ID             int64
-	Kind           string
-	PrincipalMinor int64
-	Currency       string
-	DisbursedOn    string
-	TermMonths     int64
-	RateType       string
-	DebitAccountID int64
-	CreatedAt      string
-	UpdatedAt      string
+	ID                 int64
+	Kind               string
+	PrincipalMinor     int64
+	Currency           string
+	DisbursedOn        string
+	TermMonths         int64
+	RateType           string
+	DebitAccountID     int64
+	CreatedAt          string
+	UpdatedAt          string
+	Name               string
+	LiabilityAccountID sql.NullInt64
 }
 
 type LoanEvent struct {

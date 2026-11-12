@@ -11,15 +11,28 @@ import (
 
 func contractLoans(t *testing.T, f *fixture) {
 	debit := f.account(t, "Loan debit")
-	loanAcc := f.account(t, "Loan account")
-	loan := insertContractLoan(t, f, debit.ID)
+	loanAcc := f.loanAccount(t, "Loan account")
+	loan := insertContractLoan(t, f, debit.ID, loanAcc.ID)
 	schedule := makeContractSchedule(t, loan.ID)
 	linkContractInstallment(t, f, loan.ID, schedule, loanAcc.ID)
 	contractLoanEvents(t, f, loan.ID)
 	contractLoanUpdateDelete(t, f, loan, loanAcc.ID)
 }
 
-func insertContractLoan(t *testing.T, f *fixture, debitAccountID domain.AccountID) domain.Loan {
+func (f *fixture) loanAccount(t *testing.T, name string) domain.Account {
+	t.Helper()
+	var out domain.Account
+	f.do(t, func(r app.Repos) (err error) {
+		out, err = r.Accounts().Insert(context.Background(), domain.Account{
+			Name: name, Kind: domain.AccountLoan, Currency: mustEUR(t),
+			OpeningBalance: mustMoney(t, -100_000_00), OpenedOn: mustDate(t, "2026-01-01"),
+		})
+		return err
+	})
+	return out
+}
+
+func insertContractLoan(t *testing.T, f *fixture, debitAccountID, liabilityID domain.AccountID) domain.Loan {
 	t.Helper()
 	ctx := context.Background()
 	principal, err := domain.NewMoney(100_000_00, mustEUR(t))
@@ -29,12 +42,14 @@ func insertContractLoan(t *testing.T, f *fixture, debitAccountID domain.AccountI
 	var loan domain.Loan
 	f.do(t, func(r app.Repos) error {
 		loan, err = r.Loans().Insert(ctx, domain.Loan{
-			Kind:         domain.LoanKindMortgage,
-			Principal:    principal,
-			DisbursedOn:  mustDate(t, "2026-01-01"),
-			TermMonths:   24,
-			RateType:     domain.RateTypeFixed,
-			DebitAccount: debitAccountID,
+			Name:               "Mortgage",
+			LiabilityAccountID: liabilityID,
+			Kind:               domain.LoanKindMortgage,
+			Principal:          principal,
+			DisbursedOn:        mustDate(t, "2026-01-01"),
+			TermMonths:         24,
+			RateType:           domain.RateTypeFixed,
+			DebitAccount:       debitAccountID,
 		})
 		if err != nil {
 			return err
@@ -42,16 +57,30 @@ func insertContractLoan(t *testing.T, f *fixture, debitAccountID domain.AccountI
 		if _, err := r.Loans().Get(ctx, loan.ID); err != nil {
 			t.Errorf("Get inserted loan: %v", err)
 		}
-		_, err = r.Loans().Insert(ctx, domain.Loan{
-			Kind:         domain.LoanKindLoan,
-			Principal:    principal,
-			DisbursedOn:  mustDate(t, "2026-01-01"),
-			TermMonths:   12,
-			RateType:     domain.RateTypeFixed,
-			DebitAccount: 999,
-		})
-		if !errors.Is(err, domain.ErrNotFound) {
+		other := domain.Loan{
+			Name:               "Other",
+			LiabilityAccountID: liabilityID,
+			Kind:               domain.LoanKindLoan,
+			Principal:          principal,
+			DisbursedOn:        mustDate(t, "2026-01-01"),
+			TermMonths:         12,
+			RateType:           domain.RateTypeFixed,
+			DebitAccount:       999,
+		}
+		if _, err = r.Loans().Insert(ctx, other); !errors.Is(err, domain.ErrNotFound) {
 			t.Errorf("Insert missing debit account err = %v, want not_found", err)
+		}
+		other.DebitAccount = debitAccountID
+		if _, err = r.Loans().Insert(ctx, other); !errors.Is(err, app.ErrAlreadyExists) {
+			t.Errorf("Insert shared liability account err = %v, want already_exists", err)
+		}
+		other.LiabilityAccountID, other.Name = debitAccountID, "Other"
+		if _, err = r.Loans().Insert(ctx, other); !errors.Is(err, domain.ErrInvalidValue) {
+			t.Errorf("Insert non-loan liability account err = %v, want invalid_value", err)
+		}
+		other.LiabilityAccountID, other.Name = 999, "Other"
+		if _, err = r.Loans().Insert(ctx, other); !errors.Is(err, domain.ErrNotFound) {
+			t.Errorf("Insert missing liability account err = %v, want not_found", err)
 		}
 		return nil
 	})

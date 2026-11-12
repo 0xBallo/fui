@@ -1,5 +1,7 @@
 -- name: InsertLoan :one
 INSERT INTO loans (
+    name,
+    liability_account_id,
     kind,
     principal_minor,
     currency,
@@ -9,6 +11,8 @@ INSERT INTO loans (
     debit_account_id
 )
 VALUES (
+    @name,
+    @liability_account_id,
     @kind,
     @principal_minor,
     @currency,
@@ -22,6 +26,8 @@ RETURNING *;
 -- name: UpdateLoan :execrows
 UPDATE loans
 SET
+    name = @name,
+    liability_account_id = @liability_account_id,
     kind = @kind,
     principal_minor = @principal_minor,
     currency = @currency,

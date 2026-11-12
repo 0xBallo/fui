@@ -25,14 +25,19 @@ func (r loanRepo) Insert(ctx context.Context, loan domain.Loan) (domain.Loan, er
 	if _, err := r.repos.queries.GetAccount(ctx, int64(norm.DebitAccount)); err != nil {
 		return domain.Loan{}, mapNotFound(mapSQLError(err), "loan debit account")
 	}
+	if err := r.checkLiabilityAccount(ctx, norm); err != nil {
+		return domain.Loan{}, err
+	}
 	row, err := r.repos.queries.InsertLoan(ctx, gen.InsertLoanParams{
-		Kind:           string(norm.Kind),
-		PrincipalMinor: norm.Principal.Minor(),
-		Currency:       norm.Principal.Currency().Code(),
-		DisbursedOn:    norm.DisbursedOn.String(),
-		TermMonths:     int64(norm.TermMonths),
-		RateType:       string(norm.RateType),
-		DebitAccountID: int64(norm.DebitAccount),
+		Name:               norm.Name,
+		LiabilityAccountID: liabilityParam(norm.LiabilityAccountID),
+		Kind:               string(norm.Kind),
+		PrincipalMinor:     norm.Principal.Minor(),
+		Currency:           norm.Principal.Currency().Code(),
+		DisbursedOn:        norm.DisbursedOn.String(),
+		TermMonths:         int64(norm.TermMonths),
+		RateType:           string(norm.RateType),
+		DebitAccountID:     int64(norm.DebitAccount),
 	})
 	if err != nil {
 		return domain.Loan{}, mapConstraint(err)
@@ -48,21 +53,46 @@ func (r loanRepo) Update(ctx context.Context, loan domain.Loan) error {
 	if err != nil {
 		return err
 	}
+	if err := r.checkLiabilityAccount(ctx, norm); err != nil {
+		return err
+	}
 	changed, err := r.repos.queries.UpdateLoan(ctx, gen.UpdateLoanParams{
-		ID:             int64(norm.ID),
-		Kind:           string(norm.Kind),
-		PrincipalMinor: norm.Principal.Minor(),
-		Currency:       norm.Principal.Currency().Code(),
-		DisbursedOn:    norm.DisbursedOn.String(),
-		TermMonths:     int64(norm.TermMonths),
-		RateType:       string(norm.RateType),
-		DebitAccountID: int64(norm.DebitAccount),
+		ID:                 int64(norm.ID),
+		Name:               norm.Name,
+		LiabilityAccountID: liabilityParam(norm.LiabilityAccountID),
+		Kind:               string(norm.Kind),
+		PrincipalMinor:     norm.Principal.Minor(),
+		Currency:           norm.Principal.Currency().Code(),
+		DisbursedOn:        norm.DisbursedOn.String(),
+		TermMonths:         int64(norm.TermMonths),
+		RateType:           string(norm.RateType),
+		DebitAccountID:     int64(norm.DebitAccount),
 	})
 	if err != nil {
 		return mapConstraint(err)
 	}
 	if changed == 0 {
 		return fmt.Errorf("loan %d: %w", norm.ID, domain.ErrNotFound)
+	}
+	return nil
+}
+
+// liabilityParam stores an unset liability account as NULL.
+func liabilityParam(id domain.AccountID) sql.NullInt64 {
+	return sql.NullInt64{Int64: int64(id), Valid: id != 0}
+}
+
+// checkLiabilityAccount verifies the liability account, when set, exists and is of kind loan.
+func (r loanRepo) checkLiabilityAccount(ctx context.Context, loan domain.Loan) error {
+	if loan.LiabilityAccountID == 0 {
+		return nil
+	}
+	acct, err := r.repos.queries.GetAccount(ctx, int64(loan.LiabilityAccountID))
+	if err != nil {
+		return mapNotFound(mapSQLError(err), "loan liability account")
+	}
+	if acct.Kind != string(domain.AccountLoan) {
+		return fmt.Errorf("loan liability account %d is of kind %s: %w", acct.ID, acct.Kind, domain.ErrInvalidValue)
 	}
 	return nil
 }
@@ -276,13 +306,15 @@ func toLoan(row gen.Loan) (domain.Loan, error) {
 		return domain.Loan{}, fmt.Errorf("parse loan disbursed_on %q: %w", row.DisbursedOn, err)
 	}
 	return domain.NewLoan(domain.Loan{
-		ID:           domain.LoanID(row.ID),
-		Kind:         kind,
-		Principal:    principal,
-		DisbursedOn:  disbursedOn,
-		TermMonths:   int(row.TermMonths),
-		RateType:     rateType,
-		DebitAccount: domain.AccountID(row.DebitAccountID),
+		ID:                 domain.LoanID(row.ID),
+		Name:               row.Name,
+		LiabilityAccountID: domain.AccountID(row.LiabilityAccountID.Int64),
+		Kind:               kind,
+		Principal:          principal,
+		DisbursedOn:        disbursedOn,
+		TermMonths:         int(row.TermMonths),
+		RateType:           rateType,
+		DebitAccount:       domain.AccountID(row.DebitAccountID),
 	})
 }
 

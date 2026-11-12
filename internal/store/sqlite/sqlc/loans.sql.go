@@ -24,7 +24,7 @@ func (q *Queries) DeleteLoan(ctx context.Context, id int64) (int64, error) {
 }
 
 const getLoan = `-- name: GetLoan :one
-SELECT id, kind, principal_minor, currency, disbursed_on, term_months, rate_type, debit_account_id, created_at, updated_at
+SELECT id, kind, principal_minor, currency, disbursed_on, term_months, rate_type, debit_account_id, created_at, updated_at, name, liability_account_id
 FROM loans
 WHERE id = ?1
 `
@@ -43,6 +43,8 @@ func (q *Queries) GetLoan(ctx context.Context, id int64) (Loan, error) {
 		&i.DebitAccountID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Name,
+		&i.LiabilityAccountID,
 	)
 	return i, err
 }
@@ -78,6 +80,8 @@ func (q *Queries) GetScheduleAt(ctx context.Context, arg GetScheduleAtParams) (L
 
 const insertLoan = `-- name: InsertLoan :one
 INSERT INTO loans (
+    name,
+    liability_account_id,
     kind,
     principal_minor,
     currency,
@@ -93,23 +97,29 @@ VALUES (
     ?4,
     ?5,
     ?6,
-    ?7
+    ?7,
+    ?8,
+    ?9
 )
-RETURNING id, kind, principal_minor, currency, disbursed_on, term_months, rate_type, debit_account_id, created_at, updated_at
+RETURNING id, kind, principal_minor, currency, disbursed_on, term_months, rate_type, debit_account_id, created_at, updated_at, name, liability_account_id
 `
 
 type InsertLoanParams struct {
-	Kind           string
-	PrincipalMinor int64
-	Currency       string
-	DisbursedOn    string
-	TermMonths     int64
-	RateType       string
-	DebitAccountID int64
+	Name               string
+	LiabilityAccountID sql.NullInt64
+	Kind               string
+	PrincipalMinor     int64
+	Currency           string
+	DisbursedOn        string
+	TermMonths         int64
+	RateType           string
+	DebitAccountID     int64
 }
 
 func (q *Queries) InsertLoan(ctx context.Context, arg InsertLoanParams) (Loan, error) {
 	row := q.db.QueryRowContext(ctx, insertLoan,
+		arg.Name,
+		arg.LiabilityAccountID,
 		arg.Kind,
 		arg.PrincipalMinor,
 		arg.Currency,
@@ -130,6 +140,8 @@ func (q *Queries) InsertLoan(ctx context.Context, arg InsertLoanParams) (Loan, e
 		&i.DebitAccountID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Name,
+		&i.LiabilityAccountID,
 	)
 	return i, err
 }
@@ -402,7 +414,7 @@ func (q *Queries) ListLoanInstallmentsBySchedule(ctx context.Context, scheduleID
 }
 
 const listLoans = `-- name: ListLoans :many
-SELECT id, kind, principal_minor, currency, disbursed_on, term_months, rate_type, debit_account_id, created_at, updated_at
+SELECT id, kind, principal_minor, currency, disbursed_on, term_months, rate_type, debit_account_id, created_at, updated_at, name, liability_account_id
 FROM loans
 ORDER BY id
 `
@@ -427,6 +439,8 @@ func (q *Queries) ListLoans(ctx context.Context) ([]Loan, error) {
 			&i.DebitAccountID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Name,
+			&i.LiabilityAccountID,
 		); err != nil {
 			return nil, err
 		}
@@ -472,30 +486,36 @@ func (q *Queries) UnlinkLoanInstallment(ctx context.Context, arg UnlinkLoanInsta
 const updateLoan = `-- name: UpdateLoan :execrows
 UPDATE loans
 SET
-    kind = ?1,
-    principal_minor = ?2,
-    currency = ?3,
-    disbursed_on = ?4,
-    term_months = ?5,
-    rate_type = ?6,
-    debit_account_id = ?7,
+    name = ?1,
+    liability_account_id = ?2,
+    kind = ?3,
+    principal_minor = ?4,
+    currency = ?5,
+    disbursed_on = ?6,
+    term_months = ?7,
+    rate_type = ?8,
+    debit_account_id = ?9,
     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-WHERE id = ?8
+WHERE id = ?10
 `
 
 type UpdateLoanParams struct {
-	Kind           string
-	PrincipalMinor int64
-	Currency       string
-	DisbursedOn    string
-	TermMonths     int64
-	RateType       string
-	DebitAccountID int64
-	ID             int64
+	Name               string
+	LiabilityAccountID sql.NullInt64
+	Kind               string
+	PrincipalMinor     int64
+	Currency           string
+	DisbursedOn        string
+	TermMonths         int64
+	RateType           string
+	DebitAccountID     int64
+	ID                 int64
 }
 
 func (q *Queries) UpdateLoan(ctx context.Context, arg UpdateLoanParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, updateLoan,
+		arg.Name,
+		arg.LiabilityAccountID,
 		arg.Kind,
 		arg.PrincipalMinor,
 		arg.Currency,

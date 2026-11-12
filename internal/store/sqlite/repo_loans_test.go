@@ -58,12 +58,14 @@ func TestLoanRepoCRUDScheduleEventsAndLink(t *testing.T) {
 	if err := store.WithTx(ctx, func(r app.Repos) error {
 		var txErr error
 		loan, txErr = r.Loans().Insert(ctx, domain.Loan{
-			Kind:         domain.LoanKindMortgage,
-			Principal:    principal,
-			DisbursedOn:  mustDate(t, "2026-01-01"),
-			TermMonths:   24,
-			RateType:     domain.RateTypeFixed,
-			DebitAccount: debit.ID,
+			Name:               "Mortgage",
+			LiabilityAccountID: loanAcc.ID,
+			Kind:               domain.LoanKindMortgage,
+			Principal:          principal,
+			DisbursedOn:        mustDate(t, "2026-01-01"),
+			TermMonths:         24,
+			RateType:           domain.RateTypeFixed,
+			DebitAccount:       debit.ID,
 		})
 		if txErr != nil {
 			return txErr
@@ -156,7 +158,7 @@ func TestLoanRepoValidationAndNotFound(t *testing.T) {
 
 	if err := store.WithTx(ctx, func(r app.Repos) error {
 		_, err := r.Loans().Insert(ctx, domain.Loan{
-			Kind: domain.LoanKindLoan, Principal: principal, DisbursedOn: mustDate(t, "2026-01-01"),
+			Name: "X", LiabilityAccountID: 1, Kind: domain.LoanKindLoan, Principal: principal, DisbursedOn: mustDate(t, "2026-01-01"),
 			TermMonths: 12, RateType: domain.RateTypeFixed, DebitAccount: 999,
 		})
 		if !errors.Is(err, domain.ErrNotFound) {
@@ -167,12 +169,19 @@ func TestLoanRepoValidationAndNotFound(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var account domain.Account
+	var account, liability domain.Account
 	if err := store.WithTx(ctx, func(r app.Repos) error {
 		var txErr error
 		account, txErr = r.Accounts().Insert(ctx, domain.Account{
 			Name: "A", Kind: domain.AccountChecking, Currency: eur,
 			OpeningBalance: mustMoney(t, 0, eur), OpenedOn: mustDate(t, "2026-01-01"),
+		})
+		if txErr != nil {
+			return txErr
+		}
+		liability, txErr = r.Accounts().Insert(ctx, domain.Account{
+			Name: "L", Kind: domain.AccountLoan, Currency: eur,
+			OpeningBalance: mustMoney(t, -1000, eur), OpenedOn: mustDate(t, "2026-01-01"),
 		})
 		return txErr
 	}); err != nil {
@@ -181,7 +190,7 @@ func TestLoanRepoValidationAndNotFound(t *testing.T) {
 
 	if err := store.WithTx(ctx, func(r app.Repos) error {
 		loan, txErr := r.Loans().Insert(ctx, domain.Loan{
-			Kind: domain.LoanKindLoan, Principal: principal, DisbursedOn: mustDate(t, "2026-01-01"),
+			Name: "Y", LiabilityAccountID: liability.ID, Kind: domain.LoanKindLoan, Principal: principal, DisbursedOn: mustDate(t, "2026-01-01"),
 			TermMonths: 12, RateType: domain.RateTypeFixed, DebitAccount: account.ID,
 		})
 		if txErr != nil {

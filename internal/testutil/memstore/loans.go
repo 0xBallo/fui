@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -71,6 +72,32 @@ func cloneEvent(event domain.LoanEvent) domain.LoanEvent {
 	return out
 }
 
+// checkIdentity enforces what the SQL schema does: the liability account exists and is of kind
+// loan, and neither the name (case-insensitively) nor the liability account is used by another loan.
+func (l loans) checkIdentity(loan domain.Loan) error {
+	if loan.LiabilityAccountID != 0 {
+		acct, ok := l.st.Accounts[loan.LiabilityAccountID]
+		if !ok {
+			return notFound("account", loan.LiabilityAccountID)
+		}
+		if acct.Kind != domain.AccountLoan {
+			return fmt.Errorf("loan liability account %d is of kind %s: %w", acct.ID, acct.Kind, domain.ErrInvalidValue)
+		}
+	}
+	for id, other := range l.st.Loans {
+		if id == loan.ID {
+			continue
+		}
+		if strings.EqualFold(other.Name, loan.Name) {
+			return exists("loan", loan.Name)
+		}
+		if loan.LiabilityAccountID != 0 && other.LiabilityAccountID == loan.LiabilityAccountID {
+			return exists("loan liability account", fmt.Sprint(loan.LiabilityAccountID))
+		}
+	}
+	return nil
+}
+
 func (l loans) Insert(_ context.Context, loan domain.Loan) (domain.Loan, error) {
 	if err := l.writable(); err != nil {
 		return domain.Loan{}, err
@@ -81,6 +108,9 @@ func (l loans) Insert(_ context.Context, loan domain.Loan) (domain.Loan, error) 
 	}
 	if _, ok := l.st.Accounts[norm.DebitAccount]; !ok {
 		return domain.Loan{}, notFound("account", norm.DebitAccount)
+	}
+	if err := l.checkIdentity(norm); err != nil {
+		return domain.Loan{}, err
 	}
 	norm.ID = domain.LoanID(l.st.nextID("loans"))
 	l.st.Loans[norm.ID] = norm
@@ -100,6 +130,9 @@ func (l loans) Update(_ context.Context, loan domain.Loan) error {
 	}
 	if _, ok := l.st.Accounts[norm.DebitAccount]; !ok {
 		return notFound("account", norm.DebitAccount)
+	}
+	if err := l.checkIdentity(norm); err != nil {
+		return err
 	}
 	l.st.Loans[norm.ID] = norm
 	return nil
