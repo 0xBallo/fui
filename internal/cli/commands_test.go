@@ -94,6 +94,55 @@ func TestTransferPositionalAndFlagAmountMustMatch(t *testing.T) {
 	}
 }
 
+// TestTransferDoubleDashAndHelp covers the "fui transfer -- AMOUNT ..." escape hatch (consistent
+// with fui add) and that --help still works despite DisableFlagParsing.
+func TestTransferDoubleDashAndHelp(t *testing.T) {
+	h := newHarness(t)
+	h.account("Checking", "checking", "EUR", "1000")
+	h.account("Savings", "savings", "EUR", "0")
+
+	out, _ := h.mustRun("transfer", "--", "200", "--from", "Checking", "--to", "Savings", "--json")
+	if !strings.Contains(out, `"amount":-20000`) {
+		t.Errorf("transfer -- 200 output = %q, want -20000", out)
+	}
+
+	help, _ := h.mustRun("transfer", "--help")
+	if !strings.Contains(help, "Transfer money between two accounts") {
+		t.Errorf("transfer --help = %q, want the command's short description", help)
+	}
+}
+
+// TestTransferUnexpectedArgument covers the usage error for a stray positional argument beyond
+// the optional leading amount.
+func TestTransferUnexpectedArgument(t *testing.T) {
+	h := newHarness(t)
+	h.account("Checking", "checking", "EUR", "1000")
+	h.account("Savings", "savings", "EUR", "0")
+
+	_, stderr, code := h.run("transfer", "200", "extra", "--from", "Checking", "--to", "Savings")
+	if code != 1 {
+		t.Errorf("transfer with a stray argument = exit %d, want 1", code)
+	}
+	if !strings.Contains(stderr, "extra") {
+		t.Errorf("stderr = %q, want it to mention the unexpected argument", stderr)
+	}
+}
+
+// TestTransferUnknownAccountFails covers the not_found path when the source account does not
+// exist, propagated from app.Service.PlanTransfer.
+func TestTransferUnknownAccountFails(t *testing.T) {
+	h := newHarness(t)
+	h.account("Savings", "savings", "EUR", "0")
+
+	_, stderr, code := h.run("transfer", "200", "--from", "Unknown", "--to", "Savings", "--json")
+	if code != 1 {
+		t.Errorf("transfer from an unknown account = exit %d, want 1", code)
+	}
+	if !strings.Contains(stderr, "not_found") {
+		t.Errorf("stderr = %q, want not_found", stderr)
+	}
+}
+
 // TestAccountShowEdit covers account show and edit.
 func TestAccountShowEdit(t *testing.T) {
 	h := newHarness(t)
