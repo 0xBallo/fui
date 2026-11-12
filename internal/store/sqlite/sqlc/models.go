@@ -78,6 +78,11 @@ type Transaction struct {
 	TransferGroupID sql.NullInt64
 	CreatedAt       string
 	UpdatedAt       string
+	SearchText      string
+}
+
+type TransactionsFt struct {
+	SearchText string
 }
 
 type TransferGroup struct {

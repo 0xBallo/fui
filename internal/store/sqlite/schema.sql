@@ -82,6 +82,7 @@ CREATE TABLE transactions (
     transfer_group_id INTEGER,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    search_text TEXT NOT NULL DEFAULT '', -- appended last, like the 0003 ALTER, so SELECT * matches
     UNIQUE (account_id, external_id)
 ) STRICT;
 
@@ -93,3 +94,10 @@ CREATE INDEX idx_transactions_fingerprint
     ON transactions (fingerprint);
 CREATE INDEX idx_transactions_date_id
     ON transactions (date, id);
+
+CREATE VIRTUAL TABLE transactions_fts USING fts5 (
+    search_text,
+    content = 'transactions',
+    content_rowid = 'id',
+    tokenize = 'trigram'
+);

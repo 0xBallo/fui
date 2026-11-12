@@ -7,6 +7,7 @@ import (
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
 	gen "github.com/0xballo/fui/internal/store/sqlite/sqlc"
+	"github.com/0xballo/fui/internal/textnorm"
 )
 
 type transactionRepo struct {
@@ -145,7 +146,14 @@ func toInsertTransactionParams(t domain.Transaction) gen.InsertTransactionParams
 		Fingerprint:     t.Fingerprint,
 		ImportBatchID:   toNullInt64(t.ImportBatchID),
 		TransferGroupID: toNullInt64(t.TransferGroupID),
+		SearchText:      searchText(t),
 	}
+}
+
+// searchText is the normalized text the FTS index and the LIKE fallback work on.
+// ponytail: payees have no table yet, so the payee name part is empty.
+func searchText(t domain.Transaction) string {
+	return textnorm.SearchText(t.Description, "", t.Notes)
 }
 
 func toUpdateTransactionParams(t domain.Transaction) gen.UpdateTransactionParams {
@@ -168,6 +176,7 @@ func toUpdateTransactionParams(t domain.Transaction) gen.UpdateTransactionParams
 		Fingerprint:     params.Fingerprint,
 		ImportBatchID:   params.ImportBatchID,
 		TransferGroupID: params.TransferGroupID,
+		SearchText:      params.SearchText,
 	}
 }
 

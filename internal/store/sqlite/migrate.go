@@ -13,6 +13,7 @@ import (
 
 	"github.com/0xballo/fui/internal/backup"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/textnorm"
 
 	"github.com/pressly/goose/v3"
 )
@@ -86,6 +87,55 @@ func (s *Store) migrate(ctx context.Context, existing bool) error {
 			format:   "migrate schema: %v",
 			args:     []any{err},
 		}
+	}
+	if userVersion < searchSchemaVersion {
+		return backfillSearchText(ctx, s.writeDB)
+	}
+	return nil
+}
+
+// searchSchemaVersion is the migration that added transactions.search_text.
+const searchSchemaVersion = 3
+
+// backfillSearchText fills search_text of rows that predate migration 0003. It runs in Go because
+// SQL cannot do the NFD folding; the update triggers keep the FTS index in sync.
+func backfillSearchText(ctx context.Context, db *sql.DB) error {
+	type row struct {
+		id                 int64
+		description, notes string
+	}
+	rows, err := db.QueryContext(ctx, "SELECT id, description, notes FROM transactions WHERE description <> '' OR notes <> ''")
+	if err != nil {
+		return fmt.Errorf("backfill search_text: list: %w", err)
+	}
+	var todo []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.description, &r.notes); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("backfill search_text: scan: %w", err)
+		}
+		todo = append(todo, r)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("backfill search_text: close: %w", err)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("backfill search_text: iterate: %w", err)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("backfill search_text: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, r := range todo {
+		if _, err := tx.ExecContext(ctx, "UPDATE transactions SET search_text = ? WHERE id = ?",
+			textnorm.SearchText(r.description, "", r.notes), r.id); err != nil {
+			return fmt.Errorf("backfill search_text: update %d: %w", r.id, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("backfill search_text: commit: %w", err)
 	}
 	return nil
 }

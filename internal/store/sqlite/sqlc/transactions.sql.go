@@ -25,7 +25,7 @@ func (q *Queries) DeleteTransaction(ctx context.Context, id int64) (int64, error
 
 const getTransaction = `-- name: GetTransaction :one
 SELECT
-    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at
+    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text
 FROM transactions
 WHERE id = ?1
 `
@@ -53,6 +53,7 @@ func (q *Queries) GetTransaction(ctx context.Context, id int64) (Transaction, er
 		&i.TransferGroupID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SearchText,
 	)
 	return i, err
 }
@@ -74,7 +75,8 @@ INSERT INTO transactions (
     external_id,
     fingerprint,
     import_batch_id,
-    transfer_group_id
+    transfer_group_id,
+    search_text
 )
 VALUES (
     ?1,
@@ -92,10 +94,11 @@ VALUES (
     ?13,
     ?14,
     ?15,
-    ?16
+    ?16,
+    ?17
 )
 RETURNING
-    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at
+    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text
 `
 
 type InsertTransactionParams struct {
@@ -115,6 +118,7 @@ type InsertTransactionParams struct {
 	Fingerprint     string
 	ImportBatchID   sql.NullInt64
 	TransferGroupID sql.NullInt64
+	SearchText      string
 }
 
 func (q *Queries) InsertTransaction(ctx context.Context, arg InsertTransactionParams) (Transaction, error) {
@@ -135,6 +139,7 @@ func (q *Queries) InsertTransaction(ctx context.Context, arg InsertTransactionPa
 		arg.Fingerprint,
 		arg.ImportBatchID,
 		arg.TransferGroupID,
+		arg.SearchText,
 	)
 	var i Transaction
 	err := row.Scan(
@@ -157,13 +162,14 @@ func (q *Queries) InsertTransaction(ctx context.Context, arg InsertTransactionPa
 		&i.TransferGroupID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SearchText,
 	)
 	return i, err
 }
 
 const listTransactions = `-- name: ListTransactions :many
 SELECT
-    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at
+    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text
 FROM transactions
 WHERE (?1 = '' OR date >= ?1)
     AND (?2 = '' OR date <= ?2)
@@ -247,6 +253,7 @@ func (q *Queries) ListTransactions(ctx context.Context, arg ListTransactionsPara
 			&i.TransferGroupID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SearchText,
 		); err != nil {
 			return nil, err
 		}
@@ -263,7 +270,7 @@ func (q *Queries) ListTransactions(ctx context.Context, arg ListTransactionsPara
 
 const listTransactionsForReport = `-- name: ListTransactionsForReport :many
 SELECT
-    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at
+    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text
 FROM transactions
 WHERE date >= ?1
     AND date <= ?2
@@ -306,6 +313,7 @@ func (q *Queries) ListTransactionsForReport(ctx context.Context, arg ListTransac
 			&i.TransferGroupID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SearchText,
 		); err != nil {
 			return nil, err
 		}
@@ -341,7 +349,7 @@ func (q *Queries) SumTransactionsUpTo(ctx context.Context, arg SumTransactionsUp
 
 const transactionsByExternalID = `-- name: TransactionsByExternalID :many
 SELECT
-    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at
+    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text
 FROM transactions
 WHERE account_id = ?1
     AND external_id = ?2
@@ -382,6 +390,7 @@ func (q *Queries) TransactionsByExternalID(ctx context.Context, arg Transactions
 			&i.TransferGroupID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SearchText,
 		); err != nil {
 			return nil, err
 		}
@@ -398,7 +407,7 @@ func (q *Queries) TransactionsByExternalID(ctx context.Context, arg Transactions
 
 const transactionsByFingerprint = `-- name: TransactionsByFingerprint :many
 SELECT
-    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at
+    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text
 FROM transactions
 WHERE fingerprint = ?1
 ORDER BY id
@@ -433,6 +442,7 @@ func (q *Queries) TransactionsByFingerprint(ctx context.Context, fingerprint str
 			&i.TransferGroupID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SearchText,
 		); err != nil {
 			return nil, err
 		}
@@ -449,7 +459,7 @@ func (q *Queries) TransactionsByFingerprint(ctx context.Context, fingerprint str
 
 const transactionsByTransferGroup = `-- name: TransactionsByTransferGroup :many
 SELECT
-    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at
+    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text
 FROM transactions
 WHERE transfer_group_id = ?1
 ORDER BY id
@@ -484,6 +494,7 @@ func (q *Queries) TransactionsByTransferGroup(ctx context.Context, transferGroup
 			&i.TransferGroupID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SearchText,
 		); err != nil {
 			return nil, err
 		}
@@ -500,7 +511,7 @@ func (q *Queries) TransactionsByTransferGroup(ctx context.Context, transferGroup
 
 const transactionsNearAmount = `-- name: TransactionsNearAmount :many
 SELECT
-    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at
+    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text
 FROM transactions
 WHERE account_id = ?1
     AND amount_minor = ?2
@@ -550,6 +561,7 @@ func (q *Queries) TransactionsNearAmount(ctx context.Context, arg TransactionsNe
 			&i.TransferGroupID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SearchText,
 		); err != nil {
 			return nil, err
 		}
@@ -583,8 +595,9 @@ SET
     fingerprint = ?14,
     import_batch_id = ?15,
     transfer_group_id = ?16,
+    search_text = ?17,
     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-WHERE id = ?17
+WHERE id = ?18
 `
 
 type UpdateTransactionParams struct {
@@ -604,6 +617,7 @@ type UpdateTransactionParams struct {
 	Fingerprint     string
 	ImportBatchID   sql.NullInt64
 	TransferGroupID sql.NullInt64
+	SearchText      string
 	ID              int64
 }
 
@@ -625,6 +639,7 @@ func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionPa
 		arg.Fingerprint,
 		arg.ImportBatchID,
 		arg.TransferGroupID,
+		arg.SearchText,
 		arg.ID,
 	)
 	if err != nil {

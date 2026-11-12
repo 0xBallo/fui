@@ -15,7 +15,8 @@ INSERT INTO transactions (
     external_id,
     fingerprint,
     import_batch_id,
-    transfer_group_id
+    transfer_group_id,
+    search_text
 )
 VALUES (
     @account_id,
@@ -33,7 +34,8 @@ VALUES (
     @external_id,
     @fingerprint,
     @import_batch_id,
-    @transfer_group_id
+    @transfer_group_id,
+    @search_text
 )
 RETURNING
     *;
@@ -57,6 +59,7 @@ SET
     fingerprint = @fingerprint,
     import_batch_id = @import_batch_id,
     transfer_group_id = @transfer_group_id,
+    search_text = @search_text,
     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = @id;
 
