@@ -1,5 +1,6 @@
 /dist/
 /bin/
+/fui
 *.db
 *.db-wal
 *.db-shm

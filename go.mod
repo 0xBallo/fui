@@ -17,6 +17,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/charmbracelet/x/exp/golden v0.0.0-20241011142426-46044092ad91
 	github.com/charmbracelet/x/exp/teatest v0.0.0-20261101151554-27ecf3e4d454
+	github.com/mattn/go-isatty v0.0.24
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/pressly/goose/v3 v3.30.0
 	github.com/spf13/cobra v1.10.2
@@ -41,7 +42,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
-	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
 	github.com/mattn/go-runewidth v0.0.27 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
