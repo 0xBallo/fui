@@ -44,6 +44,7 @@ var outputSchemas = map[string]string{
 	"fui connector list":  "connector[]",
 	"fui connector show":  "connector_detail",
 	"fui connector test":  "test_report",
+	"fui skill install":   "skill_install_result",
 }
 
 // helpFlag describes one flag of a command in "help --json" output.
