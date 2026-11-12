@@ -285,7 +285,13 @@ func TestModuleGates(t *testing.T) {
 	}
 	off := reporting.NewAnalytics(f.store, clock.NewFixed(date("2026-03-15").In(time.UTC)), nil, reporting.Config{BaseCurrency: eur()})
 	if _, err := off.Forecast(ctx, reporting.ForecastRequest{}); !errors.Is(err, app.ErrModuleDisabled) {
-		t.Errorf("forecast without analytics err = %v", err)
+		t.Errorf("forecast without recurring err = %v", err)
+	}
+	// Forecast belongs to recurring alone: the expense preset (no analytics) runs it.
+	expense := reporting.Config{BaseCurrency: eur(), Location: time.UTC, Modules: must(module.Preset("expense"))}
+	exp := reporting.NewAnalytics(f.store, clock.NewFixed(date("2026-03-15").In(time.UTC)), memSource{f.store}, expense)
+	if _, err := exp.Forecast(ctx, reporting.ForecastRequest{HorizonDays: 7}); err != nil {
+		t.Errorf("forecast under expense preset: %v", err)
 	}
 }
 

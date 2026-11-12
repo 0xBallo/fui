@@ -52,7 +52,8 @@ type ForecastRequest struct {
 // spending: the cap budgets (when the budget module is on) and, for what they do not cover, the
 // average of the last three complete months. Spending is spread evenly over each month.
 func (a *Analytics) Forecast(ctx context.Context, req ForecastRequest) (ForecastResult, error) {
-	if err := a.gate(); err != nil {
+	if err := a.cfg.Modules.Require(module.Recurring); err != nil {
+		err = app.WrapModuleError(err)
 		return ForecastResult{}, err
 	}
 	horizonDays := cmp.Or(req.HorizonDays, a.cfg.HorizonDays)

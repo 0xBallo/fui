@@ -6,7 +6,6 @@ exec fui recurring list --json
 stdout 'Netflix'
 exec fui recurring run --until today --dry-run
 exec fui recurring run --until today --yes
-# forecast reads the analytics module too.
-exec fui module enable analytics
+# forecast belongs to the recurring module alone (expense preset has no analytics).
 exec fui forecast --horizon 60 --json
 stdout 'Checking'
