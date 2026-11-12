@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # check-commits.sh validates every commit header in the given `git log` range against the
 # Conventional Commits format from AGENTS.md: "<type>(<scope>): <imperative lowercase summary>",
-# scope optional, header at most 72 characters, no Co-Authored-By/AI-tool mentions.
+# scope optional, header at most 72 characters, no Co-Authored-By/AI-tool mentions. Merge commits are skipped:
+# GitHub checks out a PR as a merge commit, and merging main back into develop is part of the flow.
 set -euo pipefail
 
 range="${1:?usage: check-commits.sh <rev-range>}"
@@ -24,6 +25,6 @@ while IFS= read -r sha; do
 		echo "::error::$sha: commit message must not mention an AI tool or co-author trailer"
 		status=1
 	fi
-done < <(git log --format=%H "$range")
+done < <(git log --no-merges --format=%H "$range")
 
 exit $status
