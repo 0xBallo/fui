@@ -8,11 +8,13 @@ import (
 	"time"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/cli"
 	"github.com/0xballo/fui/internal/config"
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/testutil/memstore"
+	"github.com/0xballo/fui/pkg/fuiproto"
 )
 
 // fixedClock is a deterministic app.Clock: every test runs as if "now" were 2026-11-11 10:00 UTC.
@@ -42,6 +44,8 @@ type harness struct {
 	t         *testing.T
 	store     *memstore.Store
 	svc       *app.Service
+	importing *importing.Service
+	connect   *fakeConnectors
 	backup    *fakeBackup
 	cfg       *config.Config
 	term      bool
@@ -56,12 +60,14 @@ func newHarness(t *testing.T) *harness {
 	clock := fixedClock{time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)}
 	svcCfg := app.Config{Locale: domain.LocaleENUS, Location: time.UTC, BaseCurrency: currency(t, "EUR")}
 	svc := app.New(store, clock, backup, svcCfg)
+	connect := &fakeConnectors{csvFixtures: map[string][]fuiproto.Record{}}
 	cfg := &config.Config{
 		Currency: "EUR", Locale: config.LocaleUS, MonthStartDay: 1,
 		ConfigFile: filepath.Join(t.TempDir(), "config.toml"),
 	}
 	return &harness{
-		t: t, store: store, svc: svc, backup: backup, cfg: cfg, stdin: &bytes.Buffer{},
+		t: t, store: store, svc: svc, importing: importing.New(store, clock, backup, connect), connect: connect,
+		backup: backup, cfg: cfg, stdin: &bytes.Buffer{},
 		reporting: mustReporting(t, store, clock),
 	}
 }
@@ -108,8 +114,8 @@ func (h *harness) run(args ...string) (stdout, stderr string, code int) {
 	h.t.Helper()
 	var out, errw bytes.Buffer
 	deps := &cli.Deps{
-		Service: h.svc, Reporting: h.reporting, Config: h.cfg, Stdin: h.stdin, Stdout: &out, Stderr: &errw,
-		IsTerminal: h.term, Version: "test",
+		Service: h.svc, Importing: h.importing, Reporting: h.reporting, Config: h.cfg,
+		Stdin: h.stdin, Stdout: &out, Stderr: &errw, IsTerminal: h.term, Version: "test",
 	}
 	code = cli.Execute(context.Background(), deps, args)
 	return out.String(), errw.String(), code
