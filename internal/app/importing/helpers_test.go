@@ -111,6 +111,14 @@ func category(c string) func(*fuiproto.TransactionRecord) {
 	return func(t *fuiproto.TransactionRecord) { t.Category = c }
 }
 
+func payeeName(p string) func(*fuiproto.TransactionRecord) {
+	return func(t *fuiproto.TransactionRecord) { t.Payee = p }
+}
+
+func withTags(names ...string) func(*fuiproto.TransactionRecord) {
+	return func(t *fuiproto.TransactionRecord) { t.Tags = names }
+}
+
 func counterparty(iban string) func(*fuiproto.TransactionRecord) {
 	return func(t *fuiproto.TransactionRecord) { t.CounterpartyIBAN = iban }
 }

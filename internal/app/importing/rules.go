@@ -41,7 +41,7 @@ func (b *builder) applyRules(ctx context.Context) error {
 		if c, ok := byID[res.CategoryID]; ok && row.Category == "" {
 			row.Category, row.Rules.CategoryRule = c.Name, res.CategoryRule
 		}
-		if res.PayeeID != 0 && row.Tx.PayeeID == 0 {
+		if res.PayeeID != 0 && row.Tx.PayeeID == 0 && row.Payee == "" {
 			row.Tx.PayeeID, row.Rules.PayeeRule = res.PayeeID, res.PayeeRule
 		}
 		if res.TagsRule != "" {

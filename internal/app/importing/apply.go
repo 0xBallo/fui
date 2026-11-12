@@ -16,6 +16,8 @@ type ImportResult struct {
 	Transactions int
 	Accounts     int
 	Categories   int
+	Payees       int
+	Tags         int
 	Transfers    int
 	BackupPath   string
 }
@@ -44,6 +46,7 @@ func (s *Service) ApplyImport(ctx context.Context, p ImportPlan) (ImportResult, 
 		w := &writer{
 			r: r, p: p, now: s.clock.Now().UTC(),
 			ids: map[string]domain.AccountID{}, cats: map[string]domain.CategoryID{},
+			payees: map[string]domain.PayeeID{}, tags: map[string]domain.TagID{},
 		}
 		return w.run(ctx, &res)
 	})
@@ -55,12 +58,15 @@ func (s *Service) ApplyImport(ctx context.Context, p ImportPlan) (ImportResult, 
 
 // writer performs the writes of one ApplyImport inside its transaction.
 type writer struct {
-	r    app.Repos
-	p    ImportPlan
-	now  time.Time
-	ids  map[string]domain.AccountID // created accounts by ref
-	cats map[string]domain.CategoryID
-	txs  []domain.Transaction // prepared transaction of every included row, by row index
+	r       app.Repos
+	p       ImportPlan
+	now     time.Time
+	ids     map[string]domain.AccountID // created accounts by ref
+	cats    map[string]domain.CategoryID
+	payees  map[string]domain.PayeeID // by NormalizePayee of the name or an alias
+	tags    map[string]domain.TagID   // by Tag.Key
+	txs     []domain.Transaction      // prepared transaction of every included row, by row index
+	rowTags [][]domain.TagID          // tag IDs to set on each included row, by row index
 }
 
 func (w *writer) run(ctx context.Context, res *ImportResult) error {
@@ -88,8 +94,8 @@ func (w *writer) run(ctx context.Context, res *ImportResult) error {
 		if err != nil {
 			return fmt.Errorf("create transaction of line %d: %w", row.Line, err)
 		}
-		if len(row.Rules.TagIDs) > 0 {
-			if err := w.r.Tags().SetTags(ctx, t.ID, row.Rules.TagIDs); err != nil {
+		if ids := w.rowTags[i]; len(ids) > 0 {
+			if err := w.r.Tags().SetTags(ctx, t.ID, ids); err != nil {
 				return fmt.Errorf("set tags of line %d: %w", row.Line, err)
 			}
 		}
@@ -119,16 +125,44 @@ func (w *writer) accounts(ctx context.Context, res *ImportResult) error {
 	return nil
 }
 
-// prepare builds the transaction of each included row: real account, category, batch, fingerprint.
-func (w *writer) prepare(ctx context.Context, batch domain.ImportBatchID, res *ImportResult) error {
-	existing, err := w.r.Categories().List(ctx)
+// loadLookups indexes the existing categories, payees and tags by name, so that prepare can
+// tell a row's category/payee/tags apart from one still to be created.
+func (w *writer) loadLookups(ctx context.Context) error {
+	cats, err := w.r.Categories().List(ctx)
 	if err != nil {
 		return fmt.Errorf("list categories: %w", err)
 	}
-	for _, c := range existing {
+	for _, c := range cats {
 		w.cats[strings.ToLower(c.Name)] = c.ID
 	}
+	payees, err := w.r.Payees().List(ctx)
+	if err != nil {
+		return fmt.Errorf("list payees: %w", err)
+	}
+	for _, p := range payees {
+		w.payees[domain.NormalizePayee(p.Name)] = p.ID
+		for _, a := range p.Aliases {
+			w.payees[domain.NormalizePayee(a)] = p.ID
+		}
+	}
+	tags, err := w.r.Tags().List(ctx)
+	if err != nil {
+		return fmt.Errorf("list tags: %w", err)
+	}
+	for _, t := range tags {
+		w.tags[t.Key()] = t.ID
+	}
+	return nil
+}
+
+// prepare builds the transaction of each included row: real account, category, payee, tags,
+// batch, fingerprint.
+func (w *writer) prepare(ctx context.Context, batch domain.ImportBatchID, res *ImportResult) error {
+	if err := w.loadLookups(ctx); err != nil {
+		return err
+	}
 	w.txs = make([]domain.Transaction, len(w.p.Rows))
+	w.rowTags = make([][]domain.TagID, len(w.p.Rows))
 	for i, row := range w.p.Rows {
 		if !row.Include {
 			continue
@@ -138,7 +172,16 @@ func (w *writer) prepare(ctx context.Context, batch domain.ImportBatchID, res *I
 		if tx.AccountID < 0 {
 			tx.AccountID = w.ids[row.AccountRef]
 		}
+		var err error
 		if tx.CategoryID, err = w.category(ctx, row, res); err != nil {
+			return err
+		}
+		if tx.PayeeID == 0 {
+			if tx.PayeeID, err = w.payee(ctx, row, res); err != nil {
+				return err
+			}
+		}
+		if w.rowTags[i], err = w.tagsFor(ctx, row, res); err != nil {
 			return err
 		}
 		if tx.Fingerprint, err = domain.Fingerprint(tx.AccountID, tx.Date, tx.Amount, tx.Description); err != nil {
@@ -174,6 +217,58 @@ func (w *writer) category(ctx context.Context, row Row, res *ImportResult) (doma
 	w.cats[key] = c.ID
 	res.Categories++
 	return c.ID, nil
+}
+
+// payee returns the ID of the row's payee, creating it on first use. It returns 0 unchanged
+// when the row names no payee, leaving a payee the rules may already have set.
+func (w *writer) payee(ctx context.Context, row Row, res *ImportResult) (domain.PayeeID, error) {
+	if row.Payee == "" {
+		return 0, nil
+	}
+	key := domain.NormalizePayee(row.Payee)
+	if id, ok := w.payees[key]; ok {
+		return id, nil
+	}
+	p, err := domain.NewPayee(row.Payee)
+	if err != nil {
+		return 0, fmt.Errorf("payee of line %d: %w", row.Line, err)
+	}
+	p, err = w.r.Payees().Insert(ctx, p)
+	if err != nil {
+		return 0, fmt.Errorf("create payee %q: %w", p.Name, err)
+	}
+	w.payees[key] = p.ID
+	res.Payees++
+	return p.ID, nil
+}
+
+// tagsFor returns the IDs to set on the row: what the rules matched plus the row's named tags,
+// creating the ones not in the archive yet.
+func (w *writer) tagsFor(ctx context.Context, row Row, res *ImportResult) ([]domain.TagID, error) {
+	ids := append([]domain.TagID(nil), row.Rules.TagIDs...)
+	seen := make(map[domain.TagID]bool, len(ids))
+	for _, id := range ids {
+		seen[id] = true
+	}
+	for _, name := range row.Tags {
+		key := strings.ToLower(name)
+		id, ok := w.tags[key]
+		if !ok {
+			t, err := domain.NewTag(name)
+			if err != nil {
+				return nil, fmt.Errorf("tag of line %d: %w", row.Line, err)
+			}
+			if t, err = w.r.Tags().Insert(ctx, t); err != nil {
+				return nil, fmt.Errorf("create tag %q: %w", t.Name, err)
+			}
+			w.tags[key], id = t.ID, t.ID
+			res.Tags++
+		}
+		if !seen[id] {
+			seen[id], ids = true, append(ids, id)
+		}
+	}
+	return ids, nil
 }
 
 // link creates the transfer groups: the legs that share a label, then the accepted proposals.

@@ -40,8 +40,10 @@ type Row struct {
 	Include    bool
 	AccountRef string
 	Tx         domain.Transaction
-	Category   string // category name to apply, created when missing
-	Transfer   string // transfer label shared by the two legs, as written in the stream
+	Category   string   // category name to apply, created when missing
+	Payee      string   // payee name to apply, created when missing
+	Tags       []string // tag names to apply, created when missing
+	Transfer   string   // transfer label shared by the two legs, as written in the stream
 	Matched    []domain.TransactionID
 	Rules      RuleEffect // what the categorization rules set on this row
 }
@@ -84,6 +86,8 @@ type ImportPlan struct {
 	Bindings        []Binding
 	Unmapped        []UnmappedRef
 	NewCategories   []domain.Category
+	NewPayees       []domain.Payee
+	NewTags         []domain.Tag
 	Rows            []Row
 	Errors          []RowError
 	Transfers       []TransferProposal
@@ -129,7 +133,7 @@ func (p *ImportPlan) SetInclude(i int, include bool) error {
 // refresh recomputes Changes from the other fields. Importing always asks for confirmation:
 // Bulk is set, and ApplyImport takes the backup itself.
 func (p *ImportPlan) refresh() {
-	changes := make([]app.Change, 0, len(p.NewAccounts)+len(p.NewCategories)+2)
+	changes := make([]app.Change, 0, len(p.NewAccounts)+len(p.NewCategories)+len(p.NewPayees)+len(p.NewTags)+2)
 	for _, a := range p.NewAccounts {
 		f := map[string]any{"name": a.Account.Name, "kind": string(a.Account.Kind)}
 		moneyFields(f, "opening_balance", a.Account.OpeningBalance)
@@ -142,6 +146,18 @@ func (p *ImportPlan) refresh() {
 		changes = append(changes, app.Change{
 			Op: app.OpCreate, Entity: app.EntityCategory, Fields: map[string]any{"name": c.Name, "kind": string(c.Kind)},
 			Summary: fmt.Sprintf("create %s category %q", c.Kind, c.Name),
+		})
+	}
+	for _, pe := range p.NewPayees {
+		changes = append(changes, app.Change{
+			Op: app.OpCreate, Entity: app.EntityPayee, Fields: map[string]any{"name": pe.Name},
+			Summary: fmt.Sprintf("create payee %q", pe.Name),
+		})
+	}
+	for _, t := range p.NewTags {
+		changes = append(changes, app.Change{
+			Op: app.OpCreate, Entity: app.EntityTag, Fields: map[string]any{"name": t.Name},
+			Summary: fmt.Sprintf("create tag %q", t.Name),
 		})
 	}
 	n := p.Counts()

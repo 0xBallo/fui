@@ -70,6 +70,8 @@ type exportData struct {
 	txs      []domain.Transaction // oldest first
 	accounts map[domain.AccountID]domain.Account
 	cats     map[domain.CategoryID]domain.Category
+	payees   map[domain.PayeeID]domain.Payee
+	tags     map[domain.TransactionID][]domain.Tag
 	balances map[domain.AccountID]domain.Money // final balance of the accounts involved
 	balDate  domain.Date
 }
@@ -77,30 +79,72 @@ type exportData struct {
 func (s *Service) loadExport(ctx context.Context, r app.Repos, f domain.TxFilter) (exportData, error) {
 	d := exportData{
 		accounts: map[domain.AccountID]domain.Account{}, cats: map[domain.CategoryID]domain.Category{},
+		payees: map[domain.PayeeID]domain.Payee{}, tags: map[domain.TransactionID][]domain.Tag{},
 		balances: map[domain.AccountID]domain.Money{}, balDate: f.To(),
 	}
-	accts, err := r.Accounts().List(ctx)
-	if err != nil {
-		return d, fmt.Errorf("list accounts: %w", err)
+	if err := d.loadLookups(ctx, r); err != nil {
+		return d, err
 	}
-	for _, a := range accts {
-		d.accounts[a.ID] = a
-	}
-	cats, err := r.Categories().List(ctx)
-	if err != nil {
-		return d, fmt.Errorf("list categories: %w", err)
-	}
-	for _, c := range cats {
-		d.cats[c.ID] = c
-	}
+	var err error
 	if d.txs, err = r.Transactions().List(ctx, f, nil, 0); err != nil {
 		return d, fmt.Errorf("list transactions: %w", err)
+	}
+	if err := d.loadTags(ctx, r); err != nil {
+		return d, err
 	}
 	if d.balDate.IsZero() {
 		if d.balDate, err = domain.FromTime(s.clock.Now()); err != nil {
 			return d, fmt.Errorf("today: %w", err)
 		}
 	}
+	if err := d.loadBalances(ctx, r); err != nil {
+		return d, err
+	}
+	return d, nil
+}
+
+// loadLookups loads the accounts, categories and payees referenced by the archive.
+func (d *exportData) loadLookups(ctx context.Context, r app.Repos) error {
+	accts, err := r.Accounts().List(ctx)
+	if err != nil {
+		return fmt.Errorf("list accounts: %w", err)
+	}
+	for _, a := range accts {
+		d.accounts[a.ID] = a
+	}
+	cats, err := r.Categories().List(ctx)
+	if err != nil {
+		return fmt.Errorf("list categories: %w", err)
+	}
+	for _, c := range cats {
+		d.cats[c.ID] = c
+	}
+	payees, err := r.Payees().List(ctx)
+	if err != nil {
+		return fmt.Errorf("list payees: %w", err)
+	}
+	for _, p := range payees {
+		d.payees[p.ID] = p
+	}
+	return nil
+}
+
+// loadTags fetches the tags of every exported transaction.
+func (d *exportData) loadTags(ctx context.Context, r app.Repos) error {
+	for _, t := range d.txs {
+		tags, err := r.Tags().TagsOf(ctx, t.ID)
+		if err != nil {
+			return fmt.Errorf("tags of transaction %d: %w", t.ID, err)
+		}
+		if len(tags) > 0 {
+			d.tags[t.ID] = tags
+		}
+	}
+	return nil
+}
+
+// loadBalances computes the balance at balDate of every account with an exported transaction.
+func (d *exportData) loadBalances(ctx context.Context, r app.Repos) error {
 	for _, t := range d.txs {
 		if _, done := d.balances[t.AccountID]; done {
 			continue
@@ -108,16 +152,32 @@ func (s *Service) loadExport(ctx context.Context, r app.Repos, f domain.TxFilter
 		a := d.accounts[t.AccountID]
 		sum, err := r.Transactions().SumUpTo(ctx, a.ID, d.balDate)
 		if err != nil {
-			return d, fmt.Errorf("balance of %q: %w", a.Name, err)
+			return fmt.Errorf("balance of %q: %w", a.Name, err)
 		}
 		if d.balances[a.ID], err = domain.NewMoney(a.OpeningBalance.Minor()+sum, a.Currency); err != nil {
-			return d, fmt.Errorf("balance of %q: %w", a.Name, err)
+			return fmt.Errorf("balance of %q: %w", a.Name, err)
 		}
 	}
-	return d, nil
+	return nil
 }
 
 func (d exportData) category(t domain.Transaction) string { return d.cats[t.CategoryID].Name }
+
+// payee returns the name of the transaction's payee, or "" when it has none.
+func (d exportData) payee(t domain.Transaction) string { return d.payees[t.PayeeID].Name }
+
+// tagNames returns the names of the transaction's tags, ordered by tag ID, or nil when it has none.
+func (d exportData) tagNames(t domain.Transaction) []string {
+	tags := d.tags[t.ID]
+	if len(tags) == 0 {
+		return nil
+	}
+	names := make([]string, len(tags))
+	for i, tg := range tags {
+		names[i] = tg.Name
+	}
+	return names
+}
 
 func (d exportData) writeCSV(w io.Writer) error {
 	rows := [][]string{{
@@ -230,7 +290,7 @@ func (d exportData) fuiTx(t domain.Transaction) *fuiproto.TransactionRecord {
 		Account: accountRef(d.accounts[t.AccountID]), ID: t.ExternalID, Date: t.Date.String(),
 		Amount: t.Amount.Minor(), Currency: t.Amount.Currency().Code(), Description: orDefault(t.Description, noDescription),
 		Status: fuiproto.TransactionStatus(t.Status), Kind: fuiproto.TransactionKind(t.Kind),
-		Category: d.category(t), Notes: t.Notes,
+		Category: d.category(t), Notes: t.Notes, Payee: d.payee(t), Tags: d.tagNames(t),
 	}
 	if rec.ID == "" {
 		rec.ID = "fui-" + strconv.FormatInt(int64(t.ID), 10)

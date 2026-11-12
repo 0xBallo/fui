@@ -21,9 +21,22 @@ func (b *builder) addRow(ctx context.Context, rec *fuiproto.TransactionRecord) e
 	row := Row{
 		Line: line, Class: domain.DedupNew, Include: true, AccountRef: rec.Account, Tx: tx,
 		Category: strings.TrimSpace(rec.Category), Transfer: strings.TrimSpace(rec.Transfer),
+		Payee: strings.TrimSpace(rec.Payee), Tags: sanitizeTags(rec.Tags),
 	}
 	if row.Category != "" {
 		if _, err := domain.NewCategory(row.Category, domain.CategoryExpense); err != nil {
+			b.plan.Errors = append(b.plan.Errors, RowError{Line: line, Message: err.Error()})
+			return nil
+		}
+	}
+	if row.Payee != "" {
+		if _, err := domain.NewPayee(row.Payee); err != nil {
+			b.plan.Errors = append(b.plan.Errors, RowError{Line: line, Message: err.Error()})
+			return nil
+		}
+	}
+	for _, t := range row.Tags {
+		if _, err := domain.NewTag(t); err != nil {
 			b.plan.Errors = append(b.plan.Errors, RowError{Line: line, Message: err.Error()})
 			return nil
 		}
@@ -35,6 +48,8 @@ func (b *builder) addRow(ctx context.Context, rec *fuiproto.TransactionRecord) e
 		}
 	}
 	b.noteCategory(&row)
+	b.notePayee(&row)
+	b.noteTags(&row)
 	b.ibans[len(b.plan.Rows)] = rec.CounterpartyIBAN
 	b.plan.Rows = append(b.plan.Rows, row)
 	return nil
@@ -82,6 +97,29 @@ func orDefault(s, def string) string {
 		return def
 	}
 	return s
+}
+
+// sanitizeTags trims the tag names of a record and drops empty or case-insensitively duplicate
+// ones, keeping the first occurrence's spelling.
+func sanitizeTags(tags []string) []string {
+	if len(tags) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(tags))
+	out := make([]string, 0, len(tags))
+	for _, t := range tags {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		key := strings.ToLower(t)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, t)
+	}
+	return out
 }
 
 // notePoint remembers the balance_after of the row for the coherence check. A pending row is
@@ -178,6 +216,42 @@ func (b *builder) noteCategory(row *Row) {
 	c, _ := domain.NewCategory(row.Category, kindFor(row.Tx)) // name validated in addRow
 	b.newCats[key] = true
 	b.plan.NewCategories = append(b.plan.NewCategories, c)
+}
+
+// notePayee canonicalises the payee name (matched by name or alias) and lists it if it is not
+// in the archive yet.
+func (b *builder) notePayee(row *Row) {
+	if row.Payee == "" {
+		return
+	}
+	key := domain.NormalizePayee(row.Payee)
+	if p, ok := b.payees[key]; ok {
+		row.Payee = p.Name
+		return
+	}
+	if row.Class == domain.DedupDuplicate || b.newPayees[key] {
+		return
+	}
+	p, _ := domain.NewPayee(row.Payee) // name validated in addRow
+	b.newPayees[key] = true
+	b.plan.NewPayees = append(b.plan.NewPayees, p)
+}
+
+// noteTags canonicalises the row's tag names and lists the ones that do not exist yet.
+func (b *builder) noteTags(row *Row) {
+	for i, name := range row.Tags {
+		key := strings.ToLower(name)
+		if t, ok := b.tags[key]; ok {
+			row.Tags[i] = t.Name
+			continue
+		}
+		if row.Class == domain.DedupDuplicate || b.newTags[key] {
+			continue
+		}
+		t, _ := domain.NewTag(name) // name validated in addRow
+		b.newTags[key] = true
+		b.plan.NewTags = append(b.plan.NewTags, t)
+	}
 }
 
 // kindFor guesses the kind of a category created by an import from the sign of its first use.

@@ -19,6 +19,8 @@ import (
 var (
 	words      = []string{"coffee", "rent", "salary", "market", "fuel", "gift"}
 	catNames   = []string{"Food", "Fun", "Pay"}
+	payeeNames = []string{"Market Co", "Landlord", "Employer"}
+	tagNames   = []string{"vacation", "recurring", "shared"}
 	accKinds   = []fuiproto.AccountKind{"checking", "card", "savings", "investment", "cash", "loan"}
 	plainKinds = []fuiproto.TransactionKind{"payment", "fee", "interest", "refund", "other"}
 )
@@ -38,13 +40,15 @@ func drawStream(t *rapid.T, withCategories bool) (sliceSource, int) {
 	day := rapid.IntRange(1, 28)
 	for range rapid.IntRange(0, 25).Draw(t, "transactions") {
 		desc := strings.Join(rapid.SliceOfN(rapid.SampledFrom(words), 1, 3).Draw(t, "words"), " ")
-		cat := ""
+		cat, payee, txTags := "", "", []string(nil)
 		if withCategories {
 			cat = rapid.SampledFrom(append([]string{""}, catNames...)).Draw(t, "category")
+			payee = rapid.SampledFrom(append([]string{""}, payeeNames...)).Draw(t, "payee")
+			txTags = rapid.SliceOfN(rapid.SampledFrom(tagNames), 0, len(tagNames)).Draw(t, "tags")
 		}
 		recs = append(recs, txRec(fmt.Sprintf("r%d", rapid.IntRange(0, nAcct-1).Draw(t, "account")), ext(),
 			fmt.Sprintf("2026-09-%02d", day.Draw(t, "day")), rapid.Int64Range(-100000, 100000).Draw(t, "amount"), desc,
-			kind(rapid.SampledFrom(plainKinds).Draw(t, "kind")), category(cat),
+			kind(rapid.SampledFrom(plainKinds).Draw(t, "kind")), category(cat), payeeName(payee), withTags(txTags...),
 			func(r *fuiproto.TransactionRecord) {
 				r.Notes = rapid.SampledFrom([]string{"", "note"}).Draw(t, "notes")
 				r.Status = rapid.SampledFrom([]fuiproto.TransactionStatus{"booked", "pending"}).Draw(t, "status")
@@ -168,11 +172,23 @@ func (e env) view(t tb) []string {
 		for _, c := range cats {
 			catName[c.ID] = c.Name
 		}
+		payees := must(r.Payees().List(ctx))
+		payeeOf := map[domain.PayeeID]string{0: ""}
+		for _, p := range payees {
+			payeeOf[p.ID] = p.Name
+		}
 		lines := map[domain.TransactionID]string{}
 		legs := map[domain.TransferGroupID][]string{}
 		for _, tx := range txs {
-			lines[tx.ID] = fmt.Sprintf("tx %s %s %d %q %q %q %s %s %s", name[tx.AccountID], tx.Date, tx.Amount.Minor(),
-				tx.Description, catName[tx.CategoryID], tx.Notes, tx.Status, tx.Kind, tx.ExternalID)
+			tagsOf := must(r.Tags().TagsOf(ctx, tx.ID))
+			tagList := make([]string, len(tagsOf))
+			for i, tg := range tagsOf {
+				tagList[i] = tg.Name
+			}
+			slices.Sort(tagList)
+			lines[tx.ID] = fmt.Sprintf("tx %s %s %d %q %q %q %s %s %s payee=%q tags=%q", name[tx.AccountID], tx.Date, tx.Amount.Minor(),
+				tx.Description, catName[tx.CategoryID], tx.Notes, tx.Status, tx.Kind, tx.ExternalID,
+				payeeOf[tx.PayeeID], strings.Join(tagList, ","))
 			if tx.TransferGroupID != 0 {
 				legs[tx.TransferGroupID] = append(legs[tx.TransferGroupID], lines[tx.ID])
 			}

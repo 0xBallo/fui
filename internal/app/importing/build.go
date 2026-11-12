@@ -81,21 +81,27 @@ type builder struct {
 	today domain.Date
 	plan  *ImportPlan
 
-	accts   map[string]*acctInfo
-	order   []string         // refs in stream order
-	active  []domain.Account // active accounts, for IBAN-based transfer matching
-	cats    map[string]domain.Category
-	newCats map[string]bool
-	seenExt map[string]bool
-	ibans   map[int]string // counterparty IBAN by row index
-	bal     map[string][]balPoint
-	pseudo  domain.AccountID
+	accts     map[string]*acctInfo
+	order     []string         // refs in stream order
+	active    []domain.Account // active accounts, for IBAN-based transfer matching
+	cats      map[string]domain.Category
+	newCats   map[string]bool
+	payees    map[string]domain.Payee // by NormalizePayee of the name or an alias
+	newPayees map[string]bool
+	tags      map[string]domain.Tag // by Tag.Key
+	newTags   map[string]bool
+	seenExt   map[string]bool
+	ibans     map[int]string // counterparty IBAN by row index
+	bal       map[string][]balPoint
+	pseudo    domain.AccountID
 }
 
 func newBuilder(r app.Repos, req PlanRequest, st stream, today domain.Date) *builder {
 	return &builder{
 		r: r, req: req, st: st, today: today,
 		accts: map[string]*acctInfo{}, cats: map[string]domain.Category{}, newCats: map[string]bool{},
+		payees: map[string]domain.Payee{}, newPayees: map[string]bool{},
+		tags: map[string]domain.Tag{}, newTags: map[string]bool{},
 		seenExt: map[string]bool{}, ibans: map[int]string{}, bal: map[string][]balPoint{},
 	}
 }
@@ -105,12 +111,8 @@ func (b *builder) build(ctx context.Context, plan *ImportPlan) error {
 	if err := b.resolveAccounts(ctx); err != nil {
 		return err
 	}
-	cats, err := b.r.Categories().List(ctx)
-	if err != nil {
-		return fmt.Errorf("list categories: %w", err)
-	}
-	for _, c := range cats {
-		b.cats[strings.ToLower(c.Name)] = c
+	if err := b.loadLookups(ctx); err != nil {
+		return err
 	}
 	var balances []fuiproto.BalanceRecord
 	for _, rec := range b.st.result.Records {
@@ -141,6 +143,36 @@ func (b *builder) build(ctx context.Context, plan *ImportPlan) error {
 	}
 	b.checkBalances()
 	return b.checkAlreadyImported(ctx)
+}
+
+// loadLookups indexes the existing categories, payees and tags by name, so that addRow can tell
+// a row's category/payee/tags apart from ones still to be created.
+func (b *builder) loadLookups(ctx context.Context) error {
+	cats, err := b.r.Categories().List(ctx)
+	if err != nil {
+		return fmt.Errorf("list categories: %w", err)
+	}
+	for _, c := range cats {
+		b.cats[strings.ToLower(c.Name)] = c
+	}
+	payees, err := b.r.Payees().List(ctx)
+	if err != nil {
+		return fmt.Errorf("list payees: %w", err)
+	}
+	for _, p := range payees {
+		b.payees[domain.NormalizePayee(p.Name)] = p
+		for _, a := range p.Aliases {
+			b.payees[domain.NormalizePayee(a)] = p
+		}
+	}
+	tags, err := b.r.Tags().List(ctx)
+	if err != nil {
+		return fmt.Errorf("list tags: %w", err)
+	}
+	for _, t := range tags {
+		b.tags[t.Key()] = t
+	}
+	return nil
 }
 
 func (b *builder) checkAlreadyImported(ctx context.Context) error {
