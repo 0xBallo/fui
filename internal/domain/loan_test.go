@@ -24,6 +24,7 @@ func refLoan(t tb) Loan {
 	eur := cur(t, "EUR")
 	principal, _ := NewMoney(10_000_000, eur) // 100 000.00 EUR
 	l, err := NewLoan(Loan{
+		Name: "L", LiabilityAccountID: 99,
 		Kind:         LoanKindMortgage,
 		Principal:    principal,
 		DisbursedOn:  date(t, 2026, 1, 1),
@@ -55,59 +56,75 @@ func TestNewLoan_validation(t *testing.T) {
 		{
 			name: "valid",
 			loan: Loan{
+				Name: "L", LiabilityAccountID: 99,
 				Kind: LoanKindMortgage, Principal: goodPrincipal,
 				DisbursedOn: goodDate, TermMonths: 12,
 				RateType: RateTypeFixed, DebitAccount: 1,
 			},
 		},
 		{
+			name:    "blank name",
+			loan:    Loan{Name: "  ", LiabilityAccountID: 99, Kind: LoanKindLoan, Principal: goodPrincipal, DisbursedOn: goodDate, TermMonths: 12, RateType: RateTypeFixed, DebitAccount: 1},
+			wantErr: ErrMissingField,
+		},
+		{
+			name:    "no liability account",
+			loan:    Loan{Name: "L", Kind: LoanKindLoan, Principal: goodPrincipal, DisbursedOn: goodDate, TermMonths: 12, RateType: RateTypeFixed, DebitAccount: 1},
+			wantErr: ErrMissingField,
+		},
+		{
+			name:    "liability account is the debit account",
+			loan:    Loan{Name: "L", LiabilityAccountID: 1, Kind: LoanKindLoan, Principal: goodPrincipal, DisbursedOn: goodDate, TermMonths: 12, RateType: RateTypeFixed, DebitAccount: 1},
+			wantErr: ErrInvalidValue,
+		},
+		{
 			name:    "zero kind",
-			loan:    Loan{Principal: goodPrincipal, DisbursedOn: goodDate, TermMonths: 12, RateType: RateTypeFixed, DebitAccount: 1},
+			loan:    Loan{Name: "L", LiabilityAccountID: 99, Principal: goodPrincipal, DisbursedOn: goodDate, TermMonths: 12, RateType: RateTypeFixed, DebitAccount: 1},
 			wantErr: ErrMissingField,
 		},
 		{
 			name:    "invalid kind",
-			loan:    Loan{Kind: "bank", Principal: goodPrincipal, DisbursedOn: goodDate, TermMonths: 12, RateType: RateTypeFixed, DebitAccount: 1},
+			loan:    Loan{Name: "L", LiabilityAccountID: 99, Kind: "bank", Principal: goodPrincipal, DisbursedOn: goodDate, TermMonths: 12, RateType: RateTypeFixed, DebitAccount: 1},
 			wantErr: ErrInvalidValue,
 		},
 		{
 			name:    "zero principal currency",
-			loan:    Loan{Kind: LoanKindLoan, DisbursedOn: goodDate, TermMonths: 12, RateType: RateTypeFixed, DebitAccount: 1},
+			loan:    Loan{Name: "L", LiabilityAccountID: 99, Kind: LoanKindLoan, DisbursedOn: goodDate, TermMonths: 12, RateType: RateTypeFixed, DebitAccount: 1},
 			wantErr: ErrMissingField,
 		},
 		{
 			name:    "negative principal",
-			loan:    Loan{Kind: LoanKindLoan, Principal: money(t, -1, "EUR"), DisbursedOn: goodDate, TermMonths: 12, RateType: RateTypeFixed, DebitAccount: 1},
+			loan:    Loan{Name: "L", LiabilityAccountID: 99, Kind: LoanKindLoan, Principal: money(t, -1, "EUR"), DisbursedOn: goodDate, TermMonths: 12, RateType: RateTypeFixed, DebitAccount: 1},
 			wantErr: ErrInvalidValue,
 		},
 		{
 			name:    "zero principal",
-			loan:    Loan{Kind: LoanKindLoan, Principal: money(t, 0, "EUR"), DisbursedOn: goodDate, TermMonths: 12, RateType: RateTypeFixed, DebitAccount: 1},
+			loan:    Loan{Name: "L", LiabilityAccountID: 99, Kind: LoanKindLoan, Principal: money(t, 0, "EUR"), DisbursedOn: goodDate, TermMonths: 12, RateType: RateTypeFixed, DebitAccount: 1},
 			wantErr: ErrInvalidValue,
 		},
 		{
 			name:    "zero disbursed_on",
-			loan:    Loan{Kind: LoanKindLoan, Principal: goodPrincipal, TermMonths: 12, RateType: RateTypeFixed, DebitAccount: 1},
+			loan:    Loan{Name: "L", LiabilityAccountID: 99, Kind: LoanKindLoan, Principal: goodPrincipal, TermMonths: 12, RateType: RateTypeFixed, DebitAccount: 1},
 			wantErr: ErrMissingField,
 		},
 		{
 			name:    "zero term",
-			loan:    Loan{Kind: LoanKindLoan, Principal: goodPrincipal, DisbursedOn: goodDate, RateType: RateTypeFixed, DebitAccount: 1},
+			loan:    Loan{Name: "L", LiabilityAccountID: 99, Kind: LoanKindLoan, Principal: goodPrincipal, DisbursedOn: goodDate, RateType: RateTypeFixed, DebitAccount: 1},
 			wantErr: ErrInvalidValue,
 		},
 		{
 			name:    "negative term",
-			loan:    Loan{Kind: LoanKindLoan, Principal: goodPrincipal, DisbursedOn: goodDate, TermMonths: -1, RateType: RateTypeFixed, DebitAccount: 1},
+			loan:    Loan{Name: "L", LiabilityAccountID: 99, Kind: LoanKindLoan, Principal: goodPrincipal, DisbursedOn: goodDate, TermMonths: -1, RateType: RateTypeFixed, DebitAccount: 1},
 			wantErr: ErrInvalidValue,
 		},
 		{
 			name:    "invalid rate type",
-			loan:    Loan{Kind: LoanKindLoan, Principal: goodPrincipal, DisbursedOn: goodDate, TermMonths: 12, RateType: "unknown", DebitAccount: 1},
+			loan:    Loan{Name: "L", LiabilityAccountID: 99, Kind: LoanKindLoan, Principal: goodPrincipal, DisbursedOn: goodDate, TermMonths: 12, RateType: "unknown", DebitAccount: 1},
 			wantErr: ErrInvalidValue,
 		},
 		{
 			name:    "zero debit account",
-			loan:    Loan{Kind: LoanKindLoan, Principal: goodPrincipal, DisbursedOn: goodDate, TermMonths: 12, RateType: RateTypeFixed},
+			loan:    Loan{Name: "L", LiabilityAccountID: 99, Kind: LoanKindLoan, Principal: goodPrincipal, DisbursedOn: goodDate, TermMonths: 12, RateType: RateTypeFixed},
 			wantErr: ErrMissingField,
 		},
 	}
@@ -192,6 +209,7 @@ func TestComputeSchedule_knownValues(t *testing.T) {
 	eur := cur(t, "EUR")
 	principal, _ := NewMoney(300_000, eur) // 3 000.00 EUR
 	loan, _ := NewLoan(Loan{
+		Name: "L", LiabilityAccountID: 99,
 		Kind:         LoanKindLoan,
 		Principal:    principal,
 		DisbursedOn:  date(t, 2026, 1, 1),
@@ -311,6 +329,7 @@ func TestComputeSchedule_bankInstallmentOverride(t *testing.T) {
 	eur := cur(t, "EUR")
 	principal, _ := NewMoney(300_000, eur)
 	loan, _ := NewLoan(Loan{
+		Name: "L", LiabilityAccountID: 99,
 		Kind: LoanKindLoan, Principal: principal,
 		DisbursedOn: date(t, 2026, 1, 1), TermMonths: 3,
 		RateType: RateTypeFixed, DebitAccount: 1,
@@ -355,6 +374,7 @@ func TestComputeSchedule_singleInstallment(t *testing.T) {
 	eur := cur(t, "EUR")
 	principal, _ := NewMoney(100_000, eur) // 1 000.00 EUR
 	loan, _ := NewLoan(Loan{
+		Name: "L", LiabilityAccountID: 99,
 		Kind: LoanKindLoan, Principal: principal,
 		DisbursedOn: date(t, 2026, 1, 1), TermMonths: 1,
 		RateType: RateTypeFixed, DebitAccount: 1,
@@ -667,6 +687,7 @@ func TestProperty_principalSumEqualsCapital(t *testing.T) {
 			rt.Skip()
 		}
 		loan, err := NewLoan(Loan{
+			Name: "L", LiabilityAccountID: 99,
 			Kind: LoanKindLoan, Principal: principal,
 			DisbursedOn: date(rt, 2020, 1, 1), TermMonths: months,
 			RateType: RateTypeFixed, DebitAccount: 1,
@@ -703,6 +724,7 @@ func TestProperty_finalResidualIsZero(t *testing.T) {
 		principal, _ := NewMoney(capitalCents, eur)
 		r, _ := NewAnnualRate(bps)
 		loan, err := NewLoan(Loan{
+			Name: "L", LiabilityAccountID: 99,
 			Kind: LoanKindLoan, Principal: principal,
 			DisbursedOn: date(rt, 2020, 1, 1), TermMonths: months,
 			RateType: RateTypeFixed, DebitAccount: 1,
@@ -737,6 +759,7 @@ func TestProperty_eventPreservesResidualZero(t *testing.T) {
 		principal, _ := NewMoney(capitalCents, eur)
 		r, _ := NewAnnualRate(bps)
 		loan, err := NewLoan(Loan{
+			Name: "L", LiabilityAccountID: 99,
 			Kind: LoanKindLoan, Principal: principal,
 			DisbursedOn: date(rt, 2020, 1, 1), TermMonths: months,
 			RateType: RateTypeVariable, DebitAccount: 1,
@@ -790,6 +813,7 @@ func TestProperty_installmentsBeforeEventUnchanged(t *testing.T) {
 		principal, _ := NewMoney(capitalCents, eur)
 		r, _ := NewAnnualRate(bps)
 		loan, err := NewLoan(Loan{
+			Name: "L", LiabilityAccountID: 99,
 			Kind: LoanKindLoan, Principal: principal,
 			DisbursedOn: date(rt, 2020, 1, 1), TermMonths: months,
 			RateType: RateTypeFixed, DebitAccount: 1,
@@ -1155,6 +1179,7 @@ func TestProperty_prepaymentPreservesInvariants(t *testing.T) {
 		principal, _ := NewMoney(capitalCents, eur)
 		r, _ := NewAnnualRate(bps)
 		loan, err := NewLoan(Loan{
+			Name: "L", LiabilityAccountID: 99,
 			Kind: LoanKindLoan, Principal: principal,
 			DisbursedOn: date(rt, 2020, 1, 1), TermMonths: months,
 			RateType: RateTypeFixed, DebitAccount: 1,
@@ -1244,6 +1269,7 @@ func TestComputeSchedule_bankInstallmentBelowInterest(t *testing.T) {
 	eur := cur(t, "EUR")
 	principal, _ := NewMoney(300_000, eur)
 	loan, _ := NewLoan(Loan{
+		Name: "L", LiabilityAccountID: 99,
 		Kind: LoanKindLoan, Principal: principal,
 		DisbursedOn: date(t, 2026, 1, 1), TermMonths: 3,
 		RateType: RateTypeFixed, DebitAccount: 1,

@@ -14,7 +14,7 @@ import (
 func TestLoanConvertersAndValidators(t *testing.T) {
 	eur := mustCurrency(t, "EUR")
 	loan, err := toLoan(gen.Loan{
-		ID: 1, Kind: "loan", PrincipalMinor: 100_000_00, Currency: "EUR",
+		ID: 1, Name: "L", LiabilityAccountID: sql.NullInt64{Int64: 3, Valid: true}, Kind: "loan", PrincipalMinor: 100_000_00, Currency: "EUR",
 		DisbursedOn: "2026-01-01", TermMonths: 24, RateType: "fixed", DebitAccountID: 2,
 	})
 	if err != nil {
@@ -23,7 +23,7 @@ func TestLoanConvertersAndValidators(t *testing.T) {
 	if loan.ID != 1 || loan.DebitAccount != 2 {
 		t.Fatalf("toLoan(valid) = %+v", loan)
 	}
-	if _, err := toLoan(gen.Loan{Kind: "loan", PrincipalMinor: 1, Currency: "XXX", DisbursedOn: "2026-01-01", TermMonths: 1, RateType: "fixed", DebitAccountID: 1}); err == nil {
+	if _, err := toLoan(gen.Loan{Name: "L", LiabilityAccountID: sql.NullInt64{Int64: 3, Valid: true}, Kind: "loan", PrincipalMinor: 1, Currency: "XXX", DisbursedOn: "2026-01-01", TermMonths: 1, RateType: "fixed", DebitAccountID: 1}); err == nil {
 		t.Fatal("toLoan accepted invalid currency")
 	}
 
@@ -141,7 +141,7 @@ func TestLoanRepoErrorBranches(t *testing.T) {
 
 	if err := store.WithTx(ctx, func(r app.Repos) error {
 		err := r.Loans().Update(ctx, domain.Loan{
-			ID: 1, Kind: domain.LoanKindLoan, Principal: principal, DisbursedOn: mustDate(t, "2026-01-01"),
+			ID: 1, Name: "L", LiabilityAccountID: 3, Kind: domain.LoanKindLoan, Principal: principal, DisbursedOn: mustDate(t, "2026-01-01"),
 			TermMonths: 12, RateType: domain.RateTypeFixed, DebitAccount: 1,
 		})
 		if !errors.Is(err, domain.ErrNotFound) {
@@ -166,8 +166,15 @@ func TestLoanRepoErrorBranches(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		liab, err := r.Accounts().Insert(ctx, domain.Account{
+			Name: "Debt", Kind: domain.AccountLoan, Currency: eur,
+			OpeningBalance: mustMoney(t, -1, eur), OpenedOn: mustDate(t, "2026-01-01"),
+		})
+		if err != nil {
+			return err
+		}
 		loan, err = r.Loans().Insert(ctx, domain.Loan{
-			Kind: domain.LoanKindLoan, Principal: principal, DisbursedOn: mustDate(t, "2026-01-01"),
+			Name: "Debt", LiabilityAccountID: liab.ID, Kind: domain.LoanKindLoan, Principal: principal, DisbursedOn: mustDate(t, "2026-01-01"),
 			TermMonths: 12, RateType: domain.RateTypeFixed, DebitAccount: acct.ID,
 		})
 		if err != nil {

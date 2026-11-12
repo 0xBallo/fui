@@ -16,7 +16,7 @@ func contractLoans(t *testing.T, f *fixture) {
 	schedule := makeContractSchedule(t, loan.ID)
 	linkContractInstallment(t, f, loan.ID, schedule, loanAcc.ID)
 	contractLoanEvents(t, f, loan.ID)
-	contractLoanUpdateDelete(t, f, loan, loanAcc.ID)
+	contractLoanUpdateDelete(t, f, loan, f.account(t, "New debit").ID)
 }
 
 func (f *fixture) loanAccount(t *testing.T, name string) domain.Account {

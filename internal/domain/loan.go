@@ -3,7 +3,6 @@ package domain
 import (
 	"fmt"
 	"math/big"
-	"strings"
 )
 
 // LoanKind classifies a financing contract.
@@ -114,10 +113,15 @@ type Loan struct {
 	DebitAccount       AccountID // account from which instalments are debited
 }
 
-// NewLoan validates l and returns it with the name trimmed. Principal must be positive and in a
+// NewLoan validates l and returns it with the name trimmed. The name and the liability account
+// are required, and the liability account must not be the debit account. Principal must be positive and in a
 // non-zero currency; TermMonths must be ≥ 1.
 func NewLoan(l Loan) (Loan, error) {
-	l.Name = strings.TrimSpace(l.Name)
+	name, err := requireName("name", l.Name)
+	if err != nil {
+		return Loan{}, err
+	}
+	l.Name = name
 	if !l.Kind.Valid() {
 		return Loan{}, enumError("kind", string(l.Kind))
 	}
@@ -142,6 +146,13 @@ func NewLoan(l Loan) (Loan, error) {
 	}
 	if l.DebitAccount == 0 {
 		return Loan{}, missingField("debit_account")
+	}
+	if l.LiabilityAccountID == 0 {
+		return Loan{}, missingField("liability_account")
+	}
+	if l.LiabilityAccountID == l.DebitAccount {
+		return Loan{}, newError(ErrInvalidValue, map[string]any{"field": "liability_account"},
+			"liability account must differ from the debit account")
 	}
 	return l, nil
 }
