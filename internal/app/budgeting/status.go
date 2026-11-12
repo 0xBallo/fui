@@ -209,37 +209,11 @@ func (s *Service) rows(ctx context.Context, r app.Repos, p domain.Period, budget
 		return nil, fmt.Errorf("list transactions: %w", err)
 	}
 	if s.cfg.Mode == domain.BudgetEnvelope || slices.ContainsFunc(budgets, func(b domain.Budget) bool { return b.Carry }) {
-		before, err := p.From().AddDays(-1)
+		hist, err := history(ctx, r, p, budgets)
 		if err != nil {
 			return nil, err
 		}
-		var cats []domain.CategoryID
-		var tags []domain.TagID
-		for _, b := range budgets {
-			for _, t := range b.Targets {
-				if t.CategoryID != 0 {
-					cats = append(cats, t.CategoryID)
-				} else {
-					tags = append(tags, t.TagID)
-				}
-			}
-		}
-		// The filter ANDs categories with tags, so each kind is its own query.
-		for _, spec := range []domain.TxFilterSpec{{CategoryIDs: cats}, {TagIDs: tags}} {
-			if len(cats)+len(tags) == 0 || len(spec.CategoryIDs)+len(spec.TagIDs) == 0 {
-				continue
-			}
-			spec.To = before
-			f, err := domain.NewTxFilter(spec)
-			if err != nil {
-				return nil, err
-			}
-			hist, err := r.Transactions().List(ctx, f, nil, 0)
-			if err != nil {
-				return nil, fmt.Errorf("list transactions: %w", err)
-			}
-			txs = append(txs, hist...)
-		}
+		txs = append(txs, hist...)
 	}
 	seen := map[domain.TransactionID]bool{}
 	var out []domain.BudgetRow
@@ -253,6 +227,43 @@ func (s *Service) rows(ctx context.Context, r app.Repos, p domain.Period, budget
 			return nil, err
 		}
 		out = append(out, rows...)
+	}
+	return out, nil
+}
+
+// history lists the transactions before p in the categories and tags the budgets target.
+func history(ctx context.Context, r app.Repos, p domain.Period, budgets []domain.Budget) ([]domain.Transaction, error) {
+	before, err := p.From().AddDays(-1)
+	if err != nil {
+		return nil, err
+	}
+	var cats []domain.CategoryID
+	var tags []domain.TagID
+	for _, b := range budgets {
+		for _, t := range b.Targets {
+			if t.CategoryID != 0 {
+				cats = append(cats, t.CategoryID)
+			} else {
+				tags = append(tags, t.TagID)
+			}
+		}
+	}
+	var out []domain.Transaction
+	// The filter ANDs categories with tags, so each kind is its own query.
+	for _, spec := range []domain.TxFilterSpec{{CategoryIDs: cats}, {TagIDs: tags}} {
+		if len(spec.CategoryIDs)+len(spec.TagIDs) == 0 {
+			continue
+		}
+		spec.To = before
+		f, err := domain.NewTxFilter(spec)
+		if err != nil {
+			return nil, err
+		}
+		txs, err := r.Transactions().List(ctx, f, nil, 0)
+		if err != nil {
+			return nil, fmt.Errorf("list transactions: %w", err)
+		}
+		out = append(out, txs...)
 	}
 	return out, nil
 }
