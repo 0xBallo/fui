@@ -17,6 +17,7 @@ func TestNewTxFilterValidation(t *testing.T) {
 		{AccountIDs: []AccountID{0}},
 		{CategoryIDs: []CategoryID{-1}},
 		{PayeeIDs: []PayeeID{0}},
+		{TagIDs: []TagID{0}},
 		{Statuses: []TxStatus{"done"}},
 		{Kinds: []TxKind{"gift"}},
 		{ImportBatchID: ImportBatchID(-2)},
@@ -139,6 +140,7 @@ func TestTxFilterMatch(t *testing.T) {
 		CategoryIDs:   []CategoryID{10},
 		Uncategorized: true,
 		PayeeIDs:      []PayeeID{20, 21},
+		TagIDs:        []TagID{40, 41},
 		Statuses:      []TxStatus{StatusBooked},
 		Kinds:         []TxKind{KindPayment},
 		ImportBatchID: 30,
@@ -161,37 +163,43 @@ func TestTxFilterMatch(t *testing.T) {
 		Kind:          KindPayment,
 		ImportBatchID: 30,
 	}
-	if !f.Match(tx, "amazon prime membership") {
+	tags := []TagID{40}
+	if !f.Match(tx, "amazon prime membership", tags) {
 		t.Fatal("expected tx to match")
 	}
 
-	reject := func(name string, mutate func(*Transaction), text string) {
+	reject := func(name string, mutate func(*Transaction), text string, tagIDs []TagID) {
 		t.Helper()
 		m := tx
 		mutate(&m)
-		if f.Match(m, text) {
+		if f.Match(m, text, tagIDs) {
 			t.Fatalf("expected mismatch for %s", name)
 		}
 	}
-	reject("date before", func(m *Transaction) { m.Date = date(t, 2026, 10, 31) }, "amazon prime membership")
-	reject("date after", func(m *Transaction) { m.Date = date(t, 2026, 12, 1) }, "amazon prime membership")
-	reject("account", func(m *Transaction) { m.AccountID = 9 }, "amazon prime membership")
-	reject("category", func(m *Transaction) { m.CategoryID = 9 }, "amazon prime membership")
-	reject("payee", func(m *Transaction) { m.PayeeID = 99 }, "amazon prime membership")
-	reject("status", func(m *Transaction) { m.Status = StatusPending }, "amazon prime membership")
-	reject("kind", func(m *Transaction) { m.Kind = KindFee }, "amazon prime membership")
-	reject("batch", func(m *Transaction) { m.ImportBatchID = 999 }, "amazon prime membership")
-	reject("abs min", func(m *Transaction) { m.Amount = money(t, -90, "EUR") }, "amazon prime membership")
-	reject("abs max", func(m *Transaction) { m.Amount = money(t, -700, "EUR") }, "amazon prime membership")
-	reject("sign", func(m *Transaction) { m.Amount = money(t, 500, "EUR") }, "amazon prime membership")
-	reject("text", func(*Transaction) {}, "something else")
+	reject("date before", func(m *Transaction) { m.Date = date(t, 2026, 10, 31) }, "amazon prime membership", tags)
+	reject("date after", func(m *Transaction) { m.Date = date(t, 2026, 12, 1) }, "amazon prime membership", tags)
+	reject("account", func(m *Transaction) { m.AccountID = 9 }, "amazon prime membership", tags)
+	reject("category", func(m *Transaction) { m.CategoryID = 9 }, "amazon prime membership", tags)
+	reject("payee", func(m *Transaction) { m.PayeeID = 99 }, "amazon prime membership", tags)
+	reject("tag", func(*Transaction) {}, "amazon prime membership", []TagID{99})
+	reject("no tag", func(*Transaction) {}, "amazon prime membership", nil)
+	reject("status", func(m *Transaction) { m.Status = StatusPending }, "amazon prime membership", tags)
+	reject("kind", func(m *Transaction) { m.Kind = KindFee }, "amazon prime membership", tags)
+	reject("batch", func(m *Transaction) { m.ImportBatchID = 999 }, "amazon prime membership", tags)
+	reject("abs min", func(m *Transaction) { m.Amount = money(t, -90, "EUR") }, "amazon prime membership", tags)
+	reject("abs max", func(m *Transaction) { m.Amount = money(t, -700, "EUR") }, "amazon prime membership", tags)
+	reject("sign", func(m *Transaction) { m.Amount = money(t, 500, "EUR") }, "amazon prime membership", tags)
+	reject("text", func(*Transaction) {}, "something else", tags)
+	if !f.Match(tx, "amazon prime membership", []TagID{41, 99}) {
+		t.Fatal("expected a match when tx carries one of several filtered tags (OR among tags)")
+	}
 
 	uncat, err := NewTxFilter(TxFilterSpec{CategoryIDs: []CategoryID{10}, Uncategorized: true})
 	if err != nil {
 		t.Fatalf("uncategorized filter: %v", err)
 	}
 	tx.CategoryID = 0
-	if !uncat.Match(tx, "") {
+	if !uncat.Match(tx, "", nil) {
 		t.Fatal("uncategorized OR category did not match uncategorized transaction")
 	}
 }
@@ -202,11 +210,11 @@ func TestTxFilterMatchIncomeAndAny(t *testing.T) {
 		t.Fatalf("income filter: %v", err)
 	}
 	tx := Transaction{Amount: money(t, 1, "EUR")}
-	if !income.Match(tx, "") {
+	if !income.Match(tx, "", nil) {
 		t.Fatal("income sign should match positive")
 	}
 	tx.Amount = money(t, -1, "EUR")
-	if income.Match(tx, "") {
+	if income.Match(tx, "", nil) {
 		t.Fatal("income sign must reject negative")
 	}
 
@@ -214,7 +222,7 @@ func TestTxFilterMatchIncomeAndAny(t *testing.T) {
 	if err != nil {
 		t.Fatalf("any filter: %v", err)
 	}
-	if !anySign.Match(tx, "") {
+	if !anySign.Match(tx, "", nil) {
 		t.Fatal("any sign should match any amount")
 	}
 }
@@ -263,7 +271,7 @@ func TestZeroTxFilterMatchesEverythingByDateID(t *testing.T) {
 	b := Transaction{ID: 1, Date: date(t, 2026, 1, 1), Amount: money(t, 50, "EUR")}
 	c := Transaction{ID: 3, Date: date(t, 2025, 1, 1), Amount: money(t, 0, "EUR")}
 	for _, tx := range []Transaction{a, b, c} {
-		if !f.Match(tx, "anything") {
+		if !f.Match(tx, "anything", nil) {
 			t.Fatalf("zero filter must match %+v", tx)
 		}
 	}

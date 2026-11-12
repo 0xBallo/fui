@@ -38,6 +38,9 @@ type TxFilterSpec struct {
 	CategoryIDs   []CategoryID
 	Uncategorized bool
 	PayeeIDs      []PayeeID
+	// TagIDs matches a transaction tagged with at least one of these tags (OR among tags); it
+	// combines with every other field as AND, same as CategoryIDs and PayeeIDs.
+	TagIDs        []TagID
 	Statuses      []TxStatus
 	Kinds         []TxKind
 	ImportBatchID ImportBatchID
@@ -58,6 +61,7 @@ type TxFilter struct {
 	categoryIDs   []CategoryID
 	uncategorized bool
 	payeeIDs      []PayeeID
+	tagIDs        []TagID
 	statuses      []TxStatus
 	kinds         []TxKind
 	importBatchID ImportBatchID
@@ -149,6 +153,9 @@ func fillFilterSets(out *TxFilter, spec TxFilterSpec) error {
 	if out.payeeIDs, err = uniqueValid(spec.PayeeIDs, func(id PayeeID) bool { return id > 0 }, "payee id"); err != nil {
 		return err
 	}
+	if out.tagIDs, err = uniqueValid(spec.TagIDs, func(id TagID) bool { return id > 0 }, "tag id"); err != nil {
+		return err
+	}
 	if out.statuses, err = uniqueValid(spec.Statuses, TxStatus.Valid, "status"); err != nil {
 		return err
 	}
@@ -211,12 +218,15 @@ func normalizeSort(sort TxSort) (TxSort, error) {
 	}
 }
 
-// Match reports whether tx and its normalized search text match the filter.
-func (f TxFilter) Match(tx Transaction, searchText string) bool {
+// Match reports whether tx, its normalized search text and its tags match the filter. tagIDs is
+// the full set of tags tx carries; the filter accepts tx when it carries at least one of
+// TagIDs (OR among tags), and that condition combines with every other field as AND.
+func (f TxFilter) Match(tx Transaction, searchText string, tagIDs []TagID) bool {
 	return f.matchesDate(tx.Date) &&
 		f.matchesAccount(tx.AccountID) &&
 		f.matchesCategory(tx.CategoryID) &&
 		f.matchesPayee(tx.PayeeID) &&
+		f.matchesTags(tagIDs) &&
 		f.matchesStatus(tx.Status) &&
 		f.matchesKind(tx.Kind) &&
 		f.matchesBatch(tx.ImportBatchID) &&
@@ -251,6 +261,20 @@ func (f TxFilter) matchesPayee(id PayeeID) bool {
 		return true
 	}
 	return slices.Contains(f.payeeIDs, id)
+}
+
+// matchesTags reports whether tagIDs (the tags of a transaction) intersects f.tagIDs; no tag
+// filter matches every transaction.
+func (f TxFilter) matchesTags(tagIDs []TagID) bool {
+	if len(f.tagIDs) == 0 {
+		return true
+	}
+	for _, id := range tagIDs {
+		if slices.Contains(f.tagIDs, id) {
+			return true
+		}
+	}
+	return false
 }
 
 func (f TxFilter) matchesStatus(status TxStatus) bool {
@@ -348,6 +372,9 @@ func (f TxFilter) Uncategorized() bool { return f.uncategorized }
 
 // PayeeIDs returns the payee ids used by the filter.
 func (f TxFilter) PayeeIDs() []PayeeID { return append([]PayeeID(nil), f.payeeIDs...) }
+
+// TagIDs returns the tag ids used by the filter.
+func (f TxFilter) TagIDs() []TagID { return append([]TagID(nil), f.tagIDs...) }
 
 // Statuses returns the accepted transaction statuses.
 func (f TxFilter) Statuses() []TxStatus { return append([]TxStatus(nil), f.statuses...) }
