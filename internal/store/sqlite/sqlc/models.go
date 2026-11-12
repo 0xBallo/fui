@@ -78,6 +78,17 @@ type Tag struct {
 	UpdatedAt string
 }
 
+type Rule struct {
+	ID         int64
+	Name       string
+	Priority   int64
+	Enabled    int64
+	Conditions string
+	Actions    string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
 type Transaction struct {
 	ID              int64
 	AccountID       int64
