@@ -37,6 +37,7 @@ var outputSchemas = map[string]string{
 	"fui config get":      "config_value",
 	"fui report run":      "spending_report|cashflow_report",
 	"fui kpi runway":      "runway",
+	"fui kpi networth":    "net_worth",
 	"fui import":          "import_plan|import_result",
 	"fui import undo":     "import_undo_result",
 	"fui import list":     "import_batch[]",
