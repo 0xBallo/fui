@@ -24,6 +24,7 @@ func TestFileNameAndPath(t *testing.T) {
 		{reason: backup.ReasonMigrate, want: "fui-20261111-231530-migrate.db"},
 		{reason: backup.ReasonBulk, want: "fui-20261111-231530-bulk.db"},
 		{reason: backup.ReasonRestore, want: "fui-20261111-231530-restore.db"},
+		{reason: backup.ReasonReset, want: "fui-20261111-231530-reset.db"},
 		{reason: "unsupported", wantErr: true},
 	}
 

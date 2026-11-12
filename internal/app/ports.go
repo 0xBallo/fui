@@ -20,6 +20,21 @@ type Backuper interface {
 	Restore(ctx context.Context, path string) error
 }
 
+// ResetOptions selects what a reset keeps.
+type ResetOptions struct {
+	// KeepSettings keeps the categories (and any other settings that exist); everything else is deleted.
+	KeepSettings bool
+}
+
+// Resetter rebuilds the archive as a fresh one. The Backuper given to New must also implement it
+// for the reset use case to work (the SQLite store does); it is a separate interface so the
+// Backuper fakes of other packages keep compiling.
+type Resetter interface {
+	// Reset takes a backup with reason "reset" that rotation never deletes, then atomically replaces
+	// the archive with a fresh one holding the default categories (or the kept settings).
+	Reset(ctx context.Context, opts ResetOptions) error
+}
+
 // Backup reasons passed to Backuper.Backup.
 const (
 	BackupReasonManual  = "manual"
