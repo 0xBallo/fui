@@ -79,9 +79,11 @@ type Model struct {
 	confirmPurpose confirmPurpose
 	deleteTarget   domain.TransactionID
 
-	filterForm                                  components.Form
-	filterAccount, filterCategory, filterStatus components.Autocomplete
-	filterFrom, filterTo, filterMin, filterMax  components.Autocomplete
+	filterForm                                              components.Form
+	filterAccount, filterCategory, filterStatus, filterKind components.Autocomplete
+	filterUncategorized, filterSign                         components.Autocomplete
+	filterFrom, filterTo, filterMin, filterMax              components.Autocomplete
+	chipFocus                                               int
 
 	searchField  components.Autocomplete
 	searchSeq    int
@@ -240,22 +242,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 }
 
 func (m *Model) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+	if handled, cmd := m.handleNavKey(msg); handled {
+		return m, cmd
+	}
 	switch {
-	case key.Matches(msg, m.km.Up):
-		m.table.MoveUp(1)
-	case key.Matches(msg, m.km.Down):
-		m.table.MoveDown(1)
-		return m, m.maybeLoadMore()
-	case key.Matches(msg, m.km.PageUp):
-		m.table.PageUp()
-	case key.Matches(msg, m.km.PageDown):
-		m.table.PageDown()
-		return m, m.maybeLoadMore()
-	case key.Matches(msg, m.km.Top):
-		m.table.MoveTop()
-	case key.Matches(msg, m.km.Bottom):
-		m.table.MoveBottom()
-		return m, m.maybeLoadMore()
 	case key.Matches(msg, m.km.Add):
 		m.openAddForm()
 	case key.Matches(msg, m.km.Edit):
@@ -275,7 +265,35 @@ func (m *Model) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		m.req = app.ListTxRequest{}
 		return m, m.load()
 	}
+	if handled, cmd := m.handleChipKey(msg); handled {
+		return m, cmd
+	}
 	return m, nil
+}
+
+// handleNavKey handles cursor movement in the table, reporting whether msg matched one of the
+// navigation bindings.
+func (m *Model) handleNavKey(msg tea.KeyMsg) (bool, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.km.Up):
+		m.table.MoveUp(1)
+	case key.Matches(msg, m.km.Down):
+		m.table.MoveDown(1)
+		return true, m.maybeLoadMore()
+	case key.Matches(msg, m.km.PageUp):
+		m.table.PageUp()
+	case key.Matches(msg, m.km.PageDown):
+		m.table.PageDown()
+		return true, m.maybeLoadMore()
+	case key.Matches(msg, m.km.Top):
+		m.table.MoveTop()
+	case key.Matches(msg, m.km.Bottom):
+		m.table.MoveBottom()
+		return true, m.maybeLoadMore()
+	default:
+		return false, nil
+	}
+	return true, nil
 }
 
 // maybeLoadMore starts fetching the next page once the cursor nears the loaded bottom.
@@ -432,5 +450,9 @@ func (m *Model) View() string {
 }
 
 func (m *Model) viewList() string {
-	return m.th.Title.Render("Transactions") + "\n\n" + m.table.View()
+	header := m.th.Title.Render("Transactions")
+	if chips := m.chipsView(); chips != "" {
+		header += "\n" + chips
+	}
+	return header + "\n\n" + m.table.View()
 }

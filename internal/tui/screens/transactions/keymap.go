@@ -19,11 +19,14 @@ type KeyMap struct {
 	Select      key.Binding
 	Categorize  key.Binding
 	ClearFilter key.Binding
+	PrevChip    key.Binding
+	NextChip    key.Binding
+	RemoveChip  key.Binding
 }
 
 // DefaultKeyMap returns the canonical key bindings for transactions.
 func DefaultKeyMap() KeyMap {
-	return KeyMap{
+	km := KeyMap{
 		Up: key.NewBinding(
 			key.WithKeys("k", "up"),
 			key.WithHelp("k/↑", "up"),
@@ -81,6 +84,26 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("ctrl+r", "reset filter"),
 		),
 	}
+	km.PrevChip, km.NextChip, km.RemoveChip = chipKeyBindings()
+	return km
+}
+
+// chipKeyBindings returns the bindings that move focus between filter chips and remove the
+// focused one, split out of DefaultKeyMap to keep it short.
+func chipKeyBindings() (prev, next, remove key.Binding) {
+	prev = key.NewBinding(
+		key.WithKeys("left"),
+		key.WithHelp("←", "prev filter chip"),
+	)
+	next = key.NewBinding(
+		key.WithKeys("right"),
+		key.WithHelp("→", "next filter chip"),
+	)
+	remove = key.NewBinding(
+		key.WithKeys("backspace", "x"),
+		key.WithHelp("backspace/x", "remove filter chip"),
+	)
+	return prev, next, remove
 }
 
 // Bindings returns all keys as a slice for help generation and collision checks.
@@ -89,5 +112,6 @@ func (k KeyMap) Bindings() []key.Binding {
 		k.Up, k.Down, k.PageUp, k.PageDown, k.Top, k.Bottom,
 		k.Add, k.Edit, k.Delete, k.Filter, k.Search,
 		k.Select, k.Categorize, k.ClearFilter,
+		k.PrevChip, k.NextChip, k.RemoveChip,
 	}
 }

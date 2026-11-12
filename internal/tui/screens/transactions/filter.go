@@ -3,8 +3,12 @@ package transactions
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/charmbracelet/bubbles/key"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -28,6 +32,21 @@ func (m *Model) openFilterForm() {
 	if len(m.req.Statuses) > 0 {
 		m.filterStatus.SetValue(m.req.Statuses[0])
 	}
+	m.filterKind = components.NewAutocomplete("Kind:", "any", m.th)
+	m.filterKind.SetSuggestions(txKinds())
+	if len(m.req.Kinds) > 0 {
+		m.filterKind.SetValue(m.req.Kinds[0])
+	}
+	m.filterUncategorized = components.NewAutocomplete("Uncategorized:", "no", m.th)
+	m.filterUncategorized.SetSuggestions([]string{"yes", "no"})
+	if m.req.Uncategorized {
+		m.filterUncategorized.SetValue("yes")
+	}
+	m.filterSign = components.NewAutocomplete("Income/Expense:", "any", m.th)
+	m.filterSign.SetSuggestions([]string{string(domain.TxSignIncome), string(domain.TxSignExpense)})
+	if m.req.Sign != "" && m.req.Sign != domain.TxSignAny {
+		m.filterSign.SetValue(string(m.req.Sign))
+	}
 	m.filterFrom = components.NewAutocomplete("From:", "any", m.th)
 	m.filterFrom.SetValue(m.req.From)
 	m.filterTo = components.NewAutocomplete("To:", "any", m.th)
@@ -37,7 +56,8 @@ func (m *Model) openFilterForm() {
 	m.filterMax = components.NewAutocomplete("Max amount:", "any", m.th)
 	m.filterMax.SetValue(m.req.MaxAmount)
 	m.filterForm = components.NewForm(
-		&m.filterAccount, &m.filterCategory, &m.filterStatus,
+		&m.filterAccount, &m.filterCategory, &m.filterStatus, &m.filterKind,
+		&m.filterUncategorized, &m.filterSign,
 		&m.filterFrom, &m.filterTo, &m.filterMin, &m.filterMax,
 	)
 	m.mode = modeFilter
@@ -82,11 +102,163 @@ func (m *Model) submitFilter() tea.Cmd {
 	if v := m.filterStatus.Value(); v != "" {
 		m.req.Statuses = []string{v}
 	}
+	if v := m.filterKind.Value(); v != "" {
+		m.req.Kinds = []string{v}
+	}
+	m.req.Uncategorized = m.filterUncategorized.Value() == "yes"
+	switch m.filterSign.Value() {
+	case string(domain.TxSignIncome):
+		m.req.Sign = domain.TxSignIncome
+	case string(domain.TxSignExpense):
+		m.req.Sign = domain.TxSignExpense
+	}
 	return m.load()
 }
 
 func (m *Model) viewFilter() string {
 	return m.th.Title.Render("Filter transactions") + "\n\n" + m.filterForm.View()
+}
+
+// filterChip is one active filter rendered as a removable chip in the header above the list.
+type filterChip struct {
+	kind, label, value string
+}
+
+// activeChips lists every non-empty filter field of m.req as a removable chip, in a stable order.
+func (m *Model) activeChips() []filterChip {
+	var chips []filterChip
+	if m.req.From != "" {
+		chips = append(chips, filterChip{"from", "From", m.req.From})
+	}
+	if m.req.To != "" {
+		chips = append(chips, filterChip{"to", "To", m.req.To})
+	}
+	for _, a := range m.req.Accounts {
+		chips = append(chips, filterChip{"account", "Account", a})
+	}
+	for _, c := range m.req.Categories {
+		chips = append(chips, filterChip{"category", "Category", c})
+	}
+	for _, s := range m.req.Statuses {
+		chips = append(chips, filterChip{"status", "Status", s})
+	}
+	for _, k := range m.req.Kinds {
+		chips = append(chips, filterChip{"kind", "Kind", k})
+	}
+	if m.req.Uncategorized {
+		chips = append(chips, filterChip{"uncategorized", "Uncategorized", "yes"})
+	}
+	if m.req.Sign != "" && m.req.Sign != domain.TxSignAny {
+		chips = append(chips, filterChip{"sign", "Income/Expense", string(m.req.Sign)})
+	}
+	if m.req.MinAmount != "" {
+		chips = append(chips, filterChip{"min", "Min", m.req.MinAmount})
+	}
+	if m.req.MaxAmount != "" {
+		chips = append(chips, filterChip{"max", "Max", m.req.MaxAmount})
+	}
+	if m.req.Text != "" {
+		chips = append(chips, filterChip{"text", "Search", m.req.Text})
+	}
+	return chips
+}
+
+// chipsView renders the active filter chips, highlighting the one with chip focus.
+func (m *Model) chipsView() string {
+	chips := m.activeChips()
+	if len(chips) == 0 {
+		return ""
+	}
+	if m.chipFocus >= len(chips) {
+		m.chipFocus = len(chips) - 1
+	}
+	parts := make([]string, len(chips))
+	for i, c := range chips {
+		text := fmt.Sprintf("%s: %s ×", c.label, c.value)
+		if i == m.chipFocus {
+			parts[i] = m.th.Selected.Render(text)
+		} else {
+			parts[i] = m.th.Muted.Render(text)
+		}
+	}
+	return strings.Join(parts, "  ")
+}
+
+// handleChipKey handles the chip-focus and chip-removal bindings in list mode, reporting whether
+// msg matched one of them.
+func (m *Model) handleChipKey(msg tea.KeyMsg) (bool, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.km.PrevChip):
+		m.moveChipFocus(-1)
+	case key.Matches(msg, m.km.NextChip):
+		m.moveChipFocus(1)
+	case key.Matches(msg, m.km.RemoveChip):
+		return true, m.removeFocusedChip()
+	default:
+		return false, nil
+	}
+	return true, nil
+}
+
+// moveChipFocus shifts the focused chip by delta, wrapping around the active chip list.
+func (m *Model) moveChipFocus(delta int) {
+	n := len(m.activeChips())
+	if n == 0 {
+		m.chipFocus = 0
+		return
+	}
+	m.chipFocus = (m.chipFocus + delta + n) % n
+}
+
+// removeFocusedChip clears the filter field the focused chip represents and reloads.
+func (m *Model) removeFocusedChip() tea.Cmd {
+	chips := m.activeChips()
+	if len(chips) == 0 {
+		return nil
+	}
+	if m.chipFocus >= len(chips) {
+		m.chipFocus = len(chips) - 1
+	}
+	c := chips[m.chipFocus]
+	switch c.kind {
+	case "from":
+		m.req.From = ""
+	case "to":
+		m.req.To = ""
+	case "min":
+		m.req.MinAmount = ""
+	case "max":
+		m.req.MaxAmount = ""
+	case "text":
+		m.req.Text = ""
+	case "account":
+		m.req.Accounts = removeValue(m.req.Accounts, c.value)
+	case "category":
+		m.req.Categories = removeValue(m.req.Categories, c.value)
+	case "status":
+		m.req.Statuses = removeValue(m.req.Statuses, c.value)
+	case "kind":
+		m.req.Kinds = removeValue(m.req.Kinds, c.value)
+	case "uncategorized":
+		m.req.Uncategorized = false
+	case "sign":
+		m.req.Sign = ""
+	}
+	if m.chipFocus > 0 {
+		m.chipFocus--
+	}
+	return m.load()
+}
+
+// removeValue returns s without its first occurrence of v, leaving s untouched.
+func removeValue(s []string, v string) []string {
+	out := make([]string, 0, len(s))
+	for _, x := range s {
+		if x != v {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 func (m *Model) openCategorize() {

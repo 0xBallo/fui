@@ -226,6 +226,58 @@ func TestTransactionsSearchDebounceNarrowsList(t *testing.T) {
 	}
 }
 
+func TestTransactionsNavigationKeys(t *testing.T) {
+	fx, scr := newFixture(t)
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-12.50", Description: "Coffee", Date: "2026-06-01"})
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-30", Description: "Groceries run", Date: "2026-06-02"})
+	scr = run(t, scr, scr.Init())
+
+	scr, _ = sendKey(scr, tea.KeyDown)
+	scr, _ = sendKey(scr, tea.KeyUp)
+	scr, _ = sendRunes(scr, "g") // top
+	scr, _ = sendKey(scr, tea.KeyPgDown)
+	scr, _ = sendKey(scr, tea.KeyPgUp)
+	scr, _ = sendRunes(scr, "G") // bottom
+
+	if !strings.Contains(scr.View(), "Coffee") {
+		t.Fatalf("expected navigation to leave the list intact, got:\n%s", scr.View())
+	}
+}
+
+func TestTransactionsChipKeysNoopWithoutChips(t *testing.T) {
+	fx, scr := newFixture(t)
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-12.50", Description: "Coffee", Date: "2026-06-01"})
+	scr = run(t, scr, scr.Init())
+
+	before := scr.View()
+	scr, _ = sendKey(scr, tea.KeyRight)
+	scr, _ = sendKey(scr, tea.KeyLeft)
+	scr, _ = sendKey(scr, tea.KeyBackspace)
+	if scr.View() != before {
+		t.Fatalf("expected chip navigation/removal to be a no-op without active filters, got:\n%s", scr.View())
+	}
+}
+
+func TestTransactionsTitleKeyMapAndInputActive(t *testing.T) {
+	_, scr := newFixture(t)
+	m := scr.(*transactions.Model)
+
+	if m.Title() != "Transactions" {
+		t.Fatalf("expected title %q, got %q", "Transactions", m.Title())
+	}
+	if len(m.KeyMap()) == 0 {
+		t.Fatalf("expected a non-empty key map")
+	}
+	if m.InputActive() {
+		t.Fatalf("expected the list mode to not capture input")
+	}
+
+	scr2, _ := sendRunes(scr, "/")
+	if !scr2.(*transactions.Model).InputActive() {
+		t.Fatalf("expected search mode to capture input")
+	}
+}
+
 func TestTransactionsFilterByCategory(t *testing.T) {
 	fx, scr := newFixture(t)
 	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-12.50", Description: "Coffee", Date: "2026-06-01"})
@@ -242,7 +294,10 @@ func TestTransactionsFilterByCategory(t *testing.T) {
 	scr, _ = sendRunes(scr, "Groceries")
 	scr, _ = sendKey(scr, tea.KeyEnter) // accept suggestion
 	scr, _ = sendKey(scr, tea.KeyEnter) // category -> status
-	scr, _ = sendKey(scr, tea.KeyEnter) // status -> from
+	scr, _ = sendKey(scr, tea.KeyEnter) // status -> kind
+	scr, _ = sendKey(scr, tea.KeyEnter) // kind -> uncategorized
+	scr, _ = sendKey(scr, tea.KeyEnter) // uncategorized -> sign
+	scr, _ = sendKey(scr, tea.KeyEnter) // sign -> from
 	scr, _ = sendKey(scr, tea.KeyEnter) // from -> to
 	scr, _ = sendKey(scr, tea.KeyEnter) // to -> min
 	scr, _ = sendKey(scr, tea.KeyEnter) // min -> max
@@ -259,6 +314,117 @@ func TestTransactionsFilterByCategory(t *testing.T) {
 	view = scr.View()
 	if !strings.Contains(view, "Coffee") {
 		t.Fatalf("expected the filter to reset, got:\n%s", view)
+	}
+}
+
+func TestTransactionsFilterByUncategorized(t *testing.T) {
+	fx, scr := newFixture(t)
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-12.50", Description: "Coffee", Date: "2026-06-01"})
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-30", Description: "Groceries run", Date: "2026-06-02", Category: "Groceries"})
+	scr = run(t, scr, scr.Init())
+
+	scr, _ = sendRunes(scr, "f")
+	scr, _ = sendKey(scr, tea.KeyEnter) // account -> category
+	scr, _ = sendKey(scr, tea.KeyEnter) // category -> status
+	scr, _ = sendKey(scr, tea.KeyEnter) // status -> kind
+	scr, _ = sendKey(scr, tea.KeyEnter) // kind -> uncategorized
+	scr, _ = sendRunes(scr, "yes")
+	scr, _ = sendKey(scr, tea.KeyEnter) // accept suggestion
+	scr, _ = sendKey(scr, tea.KeyEnter) // uncategorized -> sign
+	scr, _ = sendKey(scr, tea.KeyEnter) // sign -> from
+	scr, _ = sendKey(scr, tea.KeyEnter) // from -> to
+	scr, _ = sendKey(scr, tea.KeyEnter) // to -> min
+	scr, _ = sendKey(scr, tea.KeyEnter) // min -> max
+	scr, cmd := sendKey(scr, tea.KeyEnter)
+	scr = run(t, scr, cmd)
+
+	view := scr.View()
+	if !strings.Contains(view, "Coffee") || strings.Contains(view, "Groceries run") {
+		t.Fatalf("expected only the uncategorized transaction, got:\n%s", view)
+	}
+	if !strings.Contains(view, "Uncategorized: yes") {
+		t.Fatalf("expected an uncategorized chip, got:\n%s", view)
+	}
+}
+
+func TestTransactionsFilterByKindAndSign(t *testing.T) {
+	fx, scr := newFixture(t)
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-12.50", Description: "Coffee", Date: "2026-06-01", Kind: "payment"})
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "50", Description: "Refund", Date: "2026-06-02", Kind: "refund"})
+	scr = run(t, scr, scr.Init())
+
+	scr, _ = sendRunes(scr, "f")
+	scr, _ = sendKey(scr, tea.KeyEnter) // account -> category
+	scr, _ = sendKey(scr, tea.KeyEnter) // category -> status
+	scr, _ = sendKey(scr, tea.KeyEnter) // status -> kind
+	scr, _ = sendRunes(scr, "refund")
+	scr, _ = sendKey(scr, tea.KeyEnter) // accept suggestion
+	scr, _ = sendKey(scr, tea.KeyEnter) // kind -> uncategorized
+	scr, _ = sendKey(scr, tea.KeyEnter) // uncategorized -> sign
+	scr, _ = sendRunes(scr, "income")
+	scr, _ = sendKey(scr, tea.KeyEnter) // accept suggestion
+	scr, _ = sendKey(scr, tea.KeyEnter) // sign -> from
+	scr, _ = sendKey(scr, tea.KeyEnter) // from -> to
+	scr, _ = sendKey(scr, tea.KeyEnter) // to -> min
+	scr, _ = sendKey(scr, tea.KeyEnter) // min -> max
+	scr, cmd := sendKey(scr, tea.KeyEnter)
+	scr = run(t, scr, cmd)
+
+	view := scr.View()
+	if !strings.Contains(view, "Refund") || strings.Contains(view, "Coffee") {
+		t.Fatalf("expected only the refund transaction, got:\n%s", view)
+	}
+	if !strings.Contains(view, "Kind: refund") || !strings.Contains(view, "Income/Expense: income") {
+		t.Fatalf("expected kind and sign chips, got:\n%s", view)
+	}
+}
+
+func TestTransactionsFilterChipsRemoveOne(t *testing.T) {
+	fx, scr := newFixture(t)
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-12.50", Description: "Coffee", Date: "2026-06-01"})
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-30", Description: "Groceries run", Date: "2026-06-02", Category: "Groceries"})
+	scr = run(t, scr, scr.Init())
+
+	scr, _ = sendRunes(scr, "f")
+	scr, _ = sendRunes(scr, "Checking")
+	scr, _ = sendKey(scr, tea.KeyEnter) // accept suggestion
+	scr, _ = sendKey(scr, tea.KeyEnter) // account -> category
+	scr, _ = sendRunes(scr, "Groceries")
+	scr, _ = sendKey(scr, tea.KeyEnter) // accept suggestion
+	scr, _ = sendKey(scr, tea.KeyEnter) // category -> status
+	scr, _ = sendKey(scr, tea.KeyEnter) // status -> kind
+	scr, _ = sendKey(scr, tea.KeyEnter) // kind -> uncategorized
+	scr, _ = sendKey(scr, tea.KeyEnter) // uncategorized -> sign
+	scr, _ = sendKey(scr, tea.KeyEnter) // sign -> from
+	scr, _ = sendKey(scr, tea.KeyEnter) // from -> to
+	scr, _ = sendKey(scr, tea.KeyEnter) // to -> min
+	scr, _ = sendKey(scr, tea.KeyEnter) // min -> max
+	scr, cmd := sendKey(scr, tea.KeyEnter)
+	scr = run(t, scr, cmd)
+
+	view := scr.View()
+	if !strings.Contains(view, "Account: Checking") || !strings.Contains(view, "Category: Groceries") {
+		t.Fatalf("expected filter chips in the header, got:\n%s", view)
+	}
+	if !strings.Contains(view, "Groceries run") || strings.Contains(view, "Coffee") {
+		t.Fatalf("expected only the Groceries category after filtering, got:\n%s", view)
+	}
+
+	// Chips are in field order (account, then category): move focus to the category chip and
+	// remove it, which should reload with only the account filter still active.
+	scr, _ = sendKey(scr, tea.KeyRight)
+	scr, cmd = sendKey(scr, tea.KeyBackspace)
+	scr = run(t, scr, cmd)
+
+	view = scr.View()
+	if strings.Contains(view, "Category: Groceries") {
+		t.Fatalf("expected the category chip to be removed, got:\n%s", view)
+	}
+	if !strings.Contains(view, "Account: Checking") {
+		t.Fatalf("expected the account chip to remain, got:\n%s", view)
+	}
+	if !strings.Contains(view, "Coffee") {
+		t.Fatalf("expected Coffee back in view after removing the category filter, got:\n%s", view)
 	}
 }
 
