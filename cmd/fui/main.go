@@ -19,6 +19,7 @@ import (
 	"github.com/mattn/go-isatty"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/budgeting"
 	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/app/rules"
@@ -144,6 +145,15 @@ func wireStore(ctx context.Context, cfg *config.Config, appClock app.Clock, deps
 		Currency: cfg.Currency,
 	})
 	deps.Rules = rules.New(store, store)
+	modules, err := cfg.ModulesEnabled()
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("resolve modules.enabled: %w", err)
+	}
+	deps.Budgeting = budgeting.New(store, appClock, budgeting.Config{
+		Locale: domain.Locale(cfg.Locale), BaseCurrency: baseCurrency, MonthStartDay: cfg.MonthStartDay,
+		Mode: domain.BudgetMode(cfg.Budget.Mode), Modules: modules,
+	})
 	deps.RunTUI = func(ctx context.Context) error {
 		return tui.Run(ctx, newTUIUseCases(deps.Service, rep), tui.Config{
 			Locale: domain.Locale(cfg.Locale), Theme: cfg.Theme,
