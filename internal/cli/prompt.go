@@ -36,3 +36,30 @@ func missingFieldError(field string) error {
 		Details: map[string]any{"field": field},
 	}
 }
+
+func promptSelect(deps *Deps, rt runtimeFlags, field, label string, options []huh.Option[string], value *string) error {
+	if !deps.IsTerminal || rt.noInput || rt.agent {
+		return missingFieldError(field)
+	}
+	form := huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Title(label).Options(options...).Value(value))).
+		WithAccessible(true).WithInput(deps.Stdin).WithOutput(deps.Stdout)
+	if err := form.Run(); err != nil {
+		return fmt.Errorf("prompt %s: %w", field, err)
+	}
+	if *value == "" {
+		return missingFieldError(field)
+	}
+	return nil
+}
+
+func promptMultiSelect(deps *Deps, rt runtimeFlags, field, label string, options []huh.Option[string], values *[]string) error {
+	if !deps.IsTerminal || rt.noInput || rt.agent {
+		return missingFieldError(field)
+	}
+	form := huh.NewForm(huh.NewGroup(huh.NewMultiSelect[string]().Title(label).Options(options...).Value(values))).
+		WithAccessible(true).WithInput(deps.Stdin).WithOutput(deps.Stdout)
+	if err := form.Run(); err != nil {
+		return fmt.Errorf("prompt %s: %w", field, err)
+	}
+	return nil
+}
