@@ -10,6 +10,7 @@ import (
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 	"github.com/0xballo/fui/pkg/fuiproto"
 )
 
@@ -23,6 +24,9 @@ type PlanRequest struct {
 	CreateAccounts bool
 	// Mappings binds a connector account ref to an existing account typed by the user.
 	Mappings map[string]string
+	// Modules gates module-dependent import steps (currently only recurrence matching, see
+	// recur.go); the zero value leaves every one of them off.
+	Modules module.Set
 }
 
 // PlanImport runs steps 1–7 of the import pipeline: it validates the stream, resolves the
@@ -132,6 +136,9 @@ func (b *builder) build(ctx context.Context, plan *ImportPlan) error {
 	}
 	slices.SortStableFunc(plan.Errors, func(x, y RowError) int { return cmp.Compare(x.Line, y.Line) })
 	if err := b.applyRules(ctx); err != nil {
+		return err
+	}
+	if err := b.matchRecurrences(ctx); err != nil {
 		return err
 	}
 	if err := b.finishAccounts(balances); err != nil {

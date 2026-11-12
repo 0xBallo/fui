@@ -19,7 +19,10 @@ type ImportResult struct {
 	Payees       int
 	Tags         int
 	Transfers    int
-	BackupPath   string
+	// RecurrencesConfirmed counts the rows that booked a pending transaction a recurrence
+	// created instead of inserting a new one (see recur.go); included in Transactions too.
+	RecurrencesConfirmed int
+	BackupPath           string
 }
 
 // ApplyImport is step 8: a backup (reason "import"), then one transaction that creates the new
@@ -91,8 +94,14 @@ func (w *writer) run(ctx context.Context, res *ImportResult) error {
 		if !row.Include {
 			continue
 		}
-		t, err := w.r.Transactions().Insert(ctx, w.txs[i])
-		if err != nil {
+		var t domain.Transaction
+		var err error
+		if row.ConfirmsPending != 0 {
+			if t, err = w.confirm(ctx, row, i); err != nil {
+				return fmt.Errorf("confirm pending transaction of line %d: %w", row.Line, err)
+			}
+			res.RecurrencesConfirmed++
+		} else if t, err = w.r.Transactions().Insert(ctx, w.txs[i]); err != nil {
 			return fmt.Errorf("create transaction of line %d: %w", row.Line, err)
 		}
 		if rows := w.splits[i]; len(rows) > 0 {
@@ -108,6 +117,22 @@ func (w *writer) run(ctx context.Context, res *ImportResult) error {
 		res.Transactions++
 	}
 	return nil
+}
+
+// confirm books the pending transaction row.ConfirmsPending: it keeps that transaction's ID,
+// recurrence link and due date, but otherwise takes the values the import prepared for it (date,
+// amount, description, category, import batch link).
+func (w *writer) confirm(ctx context.Context, row Row, i int) (domain.Transaction, error) {
+	pending, err := w.r.Transactions().Get(ctx, row.ConfirmsPending)
+	if err != nil {
+		return domain.Transaction{}, fmt.Errorf("get pending transaction %d: %w", row.ConfirmsPending, err)
+	}
+	t := w.txs[i]
+	t.ID, t.RecurrenceID, t.DueDate = pending.ID, pending.RecurrenceID, pending.DueDate
+	if err := w.r.Transactions().Update(ctx, t); err != nil {
+		return domain.Transaction{}, fmt.Errorf("update transaction %d: %w", t.ID, err)
+	}
+	return t, nil
 }
 
 // accounts creates the new accounts and saves the ref associations.

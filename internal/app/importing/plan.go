@@ -47,6 +47,9 @@ type Row struct {
 	Transfer   string   // transfer label shared by the two legs, as written in the stream
 	Matched    []domain.TransactionID
 	Rules      RuleEffect // what the categorization rules set on this row
+	// ConfirmsPending is set when the row matches a pending transaction a recurrence created
+	// (recurring module only): applying it books that transaction instead of inserting a new one.
+	ConfirmsPending domain.TransactionID
 }
 
 // SplitRow is one split row attached to an imported transaction row.
