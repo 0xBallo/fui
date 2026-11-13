@@ -5,12 +5,6 @@ import (
 	"slices"
 )
 
-// CodeInsufficientQuantity is returned when a sell exceeds the held quantity.
-const CodeInsufficientQuantity Code = "insufficient_quantity"
-
-// ErrInsufficientQuantity matches errors from selling more than is held.
-var ErrInsufficientQuantity = &Error{Code: CodeInsufficientQuantity, Message: "insufficient quantity"}
-
 // Position is the state of a holding derived from its operations up to a date.
 type Position struct {
 	Security  SecurityID
@@ -160,7 +154,8 @@ func (l *ledger) apply(op SecurityOp) error {
 	if err != nil {
 		return err
 	}
-	if left.Sign() < 0 {
+	// A zero-quantity sell (possible from stored data) has nothing to draw on and no meaning.
+	if left.Sign() < 0 || l.held.IsZero() {
 		return newError(ErrInsufficientQuantity,
 			map[string]any{"date": op.Date.String(), "held": l.held.String(), "sell": op.Quantity.String()},
 			"cannot sell %s on %s: only %s held", op.Quantity, op.Date, l.held)

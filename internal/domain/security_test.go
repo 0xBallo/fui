@@ -288,6 +288,12 @@ func TestComputePositionErrors(t *testing.T) {
 			t.Fatalf("err = %v", err)
 		}
 	})
+	t.Run("zero-quantity sell", func(t *testing.T) {
+		o := op(t, OpSell, "2026-01-01", "0", 0, 100, 0)
+		if _, err := ComputePosition(sec, []SecurityOp{o}, nil, asOf); !errors.Is(err, ErrInsufficientQuantity) {
+			t.Fatalf("err = %v", err)
+		}
+	})
 	t.Run("same-day sell uses same-day buy", func(t *testing.T) {
 		_, err := ComputePosition(sec, []SecurityOp{
 			op(t, OpSell, "2026-01-01", "1", 0, 100, 0), op(t, OpBuy, "2026-01-01", "1", 0, 100, 0),
