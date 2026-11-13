@@ -18,9 +18,8 @@ const (
 	RecurringChange
 	// StopIncome drops every positive base flow dated on or after Date.
 	StopIncome
-	// NewLoan pays the annuity installments of Amount at RateBP over Years,
-	// the first one a month after Date. The capital inflow, if any, is a
-	// separate OneOff.
+	// NewLoan credits the capital Amount on Date, then pays the annuity
+	// installments at RateBP over Years, the first one a month after Date.
 	NewLoan
 )
 
@@ -90,7 +89,7 @@ func CashFlow(start domain.Date, opening int64, base []Flow, events []Event, mon
 		}
 	}
 	for _, ev := range events {
-		if err := applyEvent(ev, ends, scenM, put); err != nil {
+		if err := applyEvent(start, ev, ends, scenM, put); err != nil {
 			return CashFlowResult{}, err
 		}
 	}
@@ -117,7 +116,7 @@ func stopped(f Flow, events []Event) bool {
 	return false
 }
 
-func applyEvent(ev Event, ends []domain.Date, scen []int64, put func([]int64, domain.Date, int64)) error {
+func applyEvent(start domain.Date, ev Event, ends []domain.Date, scen []int64, put func([]int64, domain.Date, int64)) error {
 	switch ev.Kind {
 	case OneOff:
 		put(scen, ev.Date, ev.Amount)
@@ -132,6 +131,12 @@ func applyEvent(ev Event, ends []domain.Date, scen []int64, put func([]int64, do
 		pay, err := annuity(ev.Amount, ev.RateBP, ev.Years)
 		if err != nil {
 			return err
+		}
+		// A loan starting today credits in month 1: put drops flows dated <= start.
+		if ev.Date.After(start) {
+			put(scen, ev.Date, ev.Amount)
+		} else {
+			scen[0] += ev.Amount
 		}
 		for k := 1; k <= ev.Years*12; k++ {
 			d, err := ev.Date.AddMonths(k)

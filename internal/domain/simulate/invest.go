@@ -70,16 +70,21 @@ type Rates struct{ Pessimistic, Base, Optimistic int64 }
 // Triple holds the outcome for each of the three rates.
 type Triple struct{ Pessimistic, Base, Optimistic Result }
 
+func (f Frequency) valid() bool {
+	return f == FrequencyNone || f == FrequencyMonthly || f == FrequencyQuarterly || f == FrequencyYearly
+}
+
 func (p Params) validate() error {
 	switch {
-	case p.Years < 1:
-		return fmt.Errorf("%w: years must be at least 1", ErrInvalidParams)
+	case p.Years < 1 || p.Years > 100:
+		return fmt.Errorf("%w: years must be 1..100", ErrInvalidParams)
+	case p.InflationBP <= -10000 || p.ContributionGrow <= -10000:
+		return fmt.Errorf("%w: inflation and contribution growth must be above -100%%", ErrInvalidParams)
 	case p.Initial < 0 || p.Contribution < 0:
 		return fmt.Errorf("%w: amounts must not be negative", ErrInvalidParams)
 	case p.TaxBP < 0 || p.TaxBP > 10000 || p.CostBP < 0:
 		return fmt.Errorf("%w: tax must be 0..10000 bp and cost >= 0", ErrInvalidParams)
-	case p.Frequency != FrequencyNone && p.Frequency != FrequencyMonthly &&
-		p.Frequency != FrequencyQuarterly && p.Frequency != FrequencyYearly:
+	case !p.Frequency.valid():
 		return fmt.Errorf("%w: unknown frequency %d", ErrInvalidParams, p.Frequency)
 	case p.Compounding != CompoundMonthly && p.Compounding != CompoundAnnual:
 		return fmt.Errorf("%w: unknown compounding", ErrInvalidParams)

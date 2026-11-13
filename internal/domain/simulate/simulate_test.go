@@ -213,8 +213,19 @@ func TestCashFlow(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// 15000, 5000, -5000 (month 3)
-		if !r.HasFirstBelowZero || r.RunwayMonths != 2 || r.FirstBelowZero != r.Months[2].End {
+		// credit 120000 in month 1: 145000-10000, then -10000/month, never below zero in 4 months.
+		if r.Months[0].Scenario != 135000 || r.HasFirstBelowZero {
+			t.Fatalf("%+v", r)
+		}
+		// opening -130000: credit lifts month 1 to -20000 -> below zero immediately.
+		r, err = CashFlow(start, -130000, nil, ev, 4)
+		if err != nil || !r.HasFirstBelowZero || r.RunwayMonths != 0 {
+			t.Fatalf("%+v %v", r, err)
+		}
+		// credit dated later lands in its own month (2); installments start a month later.
+		ev[0].Date = date(t, 2026, 3, 15)
+		r, _ = CashFlow(start, 25000, nil, ev, 4)
+		if r.Months[0].Scenario != 25000 || r.Months[1].Scenario != 25000+120000 {
 			t.Fatalf("%+v", r)
 		}
 	})
