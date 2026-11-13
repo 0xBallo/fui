@@ -33,3 +33,12 @@ REQ: <task/owner>: <change needed> ; ...    # or -
 Then reply with the single line `TASK DONE` (or `TASK BLOCKED: <reason>`). If you later receive review findings
 (format `F<n> <path>:<line> <problem> -> <expected>`), fix each with new commits, update the report adding
 `FIXED: F1,F2,...`, and reply `TASK DONE` again.
+
+## v0.3 addendum (token-lean)
+
+- Branch from `develop` (worktree is created for you). Do not push or merge.
+- Final answer is ONE line only: `RESULT <task> <done|blocked:<reason>> commits=<n> cover=<pct>` and nothing else;
+  all details go in `.task-report.md` (same format as above).
+- If you cannot complete (quota, ambiguity), commit WIP, write the report with `STATUS: blocked:<why>` and a
+  `RESUME:` line saying exactly what is left, then emit the RESULT line.
+- Prefer reading only the spec sections cited in your brief; do not read unrelated docs/tasks.
