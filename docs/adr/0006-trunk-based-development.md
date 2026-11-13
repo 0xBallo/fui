@@ -1,6 +1,6 @@
 # ADR 0006: Trunk-based development with Conventional Commits and rebase merges
 
-* Status: Accepted
+* Status: Superseded by [ADR 0013](0013-git-flow-with-develop-and-squash-merges.md)
 * Date: 2026-11-11
 
 ## Context and Problem Statement

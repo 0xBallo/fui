@@ -10,9 +10,11 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/module"
+	"github.com/0xballo/fui/internal/tui/components"
 	"github.com/0xballo/fui/internal/tui/screens"
 	"github.com/0xballo/fui/internal/tui/screens/accounts"
 	"github.com/0xballo/fui/internal/tui/screens/budget"
@@ -31,9 +33,10 @@ const (
 	minHeight = 24
 )
 
-// reservedRows is the vertical space Root reserves for the tab bar and the status bar, leaving
-// the rest to the active screen.
-const reservedRows = 4
+// reservedRows is the vertical space Root reserves for the tab bar (three lines), the status bar
+// and the blank line above it, plus one for the rule under each screen title, leaving the rest to
+// the active screen.
+const reservedRows = 6
 
 // UseCases is the union of every MVP screen's needs: the app layer (shared with the CLI) plus the
 // reporting layer the dashboard uses for spending and runway.
@@ -96,7 +99,7 @@ var _ tea.Model = (*Root)(nil)
 
 // New builds Root over uc, the MVP screens, and cfg. Locale defaults to en-US and Theme to
 // "auto" when unset; "auto" and "high-contrast" detect the terminal's background with
-// theme.OSCDetector (OSC 11, falling back to COLORFGBG, then assuming a dark background).
+// theme.LipglossDetector (OSC 11, falling back to COLORFGBG, then assuming a dark background).
 func New(uc UseCases, cfg Config) *Root {
 	if cfg.Locale == "" {
 		cfg.Locale = domain.LocaleENUS
@@ -114,7 +117,7 @@ func (r *Root) rebuild() {
 	r.loc = cfg.Locale
 	r.th = theme.Resolve(theme.Config{
 		Theme: cfg.Theme, ThemeLight: cfg.ThemeLight, ThemeDark: cfg.ThemeDark,
-	}, theme.OSCDetector{})
+	}, theme.LipglossDetector{})
 	r.tabs = [len(tabNames)]screens.Screen{}
 	r.tabs[screens.TabDashboard] = dashboard.New(r.uc, r.loc, r.th, cfg.MonthStartDay)
 	r.tabs[screens.TabTransactions] = transactions.New(r.uc, r.loc, r.th)
@@ -163,9 +166,10 @@ func (r *Root) resize() {
 	}
 }
 
-// Run starts the program over uc and cfg and blocks until the user quits or ctx is cancelled.
+// Run starts the program full screen (the alternate screen, so the shell is restored on exit) and
+// with mouse reporting, over uc and cfg and blocks until the user quits or ctx is cancelled.
 func Run(ctx context.Context, uc UseCases, cfg Config) error {
-	if _, err := tea.NewProgram(New(uc, cfg), tea.WithContext(ctx)).Run(); err != nil {
+	if _, err := tea.NewProgram(New(uc, cfg), tea.WithContext(ctx), tea.WithAltScreen(), tea.WithMouseCellMotion()).Run(); err != nil {
 		return fmt.Errorf("run tui: %w", err)
 	}
 	return nil
@@ -202,6 +206,8 @@ func (r *Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return r.switchTo(msg.Target)
 	case tea.KeyMsg:
 		return r.handleKey(msg)
+	case tea.MouseMsg:
+		return r.handleMouse(msg)
 	}
 	return r.forward(msg)
 }
@@ -268,29 +274,117 @@ func (r *Root) View() string {
 			"Terminal too small: %dx%d. FUI needs at least %dx%d.", r.width, r.height, minWidth, minHeight))
 	}
 	body := r.tabs[r.active].View()
+	// Fill the terminal: the body takes every line the tab bar (three), the blank line and the
+	// status bar leave, so the status bar sits on the last row.
+	h := max(1, r.height-5)
 	if r.showHelp {
-		body = r.viewHelp()
+		body = components.Modal(r.th, r.width, h, r.viewHelp(h))
 	}
-	return r.viewTabs() + "\n\n" + body + "\n\n" + r.viewStatus()
+	if r.height > 0 {
+		body = lipgloss.NewStyle().Height(h).MaxHeight(h).Render(body)
+	}
+	return r.viewTabs() + "\n" + body + "\n\n" + r.viewStatus()
 }
 
 // tabNames are the seven screens in tab order; a tab with no Screen is rendered disabled.
 var tabNames = [...]string{"Dashboard", "Transactions", "Accounts", "Budget", "Reports", "Import", "Settings"}
 
+// Tab borders: the active tab is open at the bottom so it merges with the rule that continues to
+// the right edge, as in the lipgloss tabs example.
+var (
+	tabBorder = lipgloss.Border{
+		Top: "─", Bottom: "─", Left: "│", Right: "│",
+		TopLeft: "╭", TopRight: "╮", BottomLeft: "┴", BottomRight: "┴",
+	}
+	activeTabBorder = lipgloss.Border{
+		Top: "─", Bottom: " ", Left: "│", Right: "│",
+		TopLeft: "╭", TopRight: "╮", BottomLeft: "┘", BottomRight: "└",
+	}
+)
+
+// viewTabs renders the bordered tab bar, dropping padding and then the inactive tabs' numbers when
+// the terminal is too narrow for all seven labels.
 func (r *Root) viewTabs() string {
-	parts := make([]string, len(tabNames))
-	for i, name := range tabNames {
-		label := fmt.Sprintf("%d %s", i+1, name)
-		switch {
-		case r.tabs[i] == nil:
-			parts[i] = r.th.DisabledTab.Render(label)
-		case screens.ID(i) == r.active:
-			parts[i] = r.th.ActiveTab.Render(label)
-		default:
-			parts[i] = r.th.InactiveTab.Render(label)
+	row := lipgloss.JoinHorizontal(lipgloss.Top, r.tabParts()...)
+	gap := lipgloss.NewStyle().Border(tabBorder, false, false, true, false).
+		BorderForeground(r.th.Tokens.Accent).
+		Render(strings.Repeat(" ", max(0, r.width-lipgloss.Width(row))))
+	return lipgloss.JoinHorizontal(lipgloss.Bottom, row, gap)
+}
+
+// tabParts renders each tab with the roomiest variant that fits the terminal width.
+func (r *Root) tabParts() []string {
+	var parts []string
+	for _, v := range []struct {
+		pad      int
+		numbered bool
+	}{{1, true}, {0, true}, {0, false}} {
+		parts = r.renderTabs(v.pad, v.numbered)
+		if r.width == 0 || lipgloss.Width(lipgloss.JoinHorizontal(lipgloss.Top, parts...)) <= r.width {
+			break
 		}
 	}
-	return strings.Join(parts, "  ")
+	return parts
+}
+
+// tabAt returns the tab under column x of the tab bar.
+func (r *Root) tabAt(x int) (screens.ID, bool) {
+	left := 0
+	for i, part := range r.tabParts() {
+		left += lipgloss.Width(part)
+		if x < left {
+			return screens.ID(i), true
+		}
+	}
+	return 0, false
+}
+
+// tabBarRows is the height of the bordered tab bar.
+const tabBarRows = 3
+
+// handleMouse switches tabs on a click in the tab bar and turns the wheel into up/down keys for
+// the active screen. A click anywhere closes the help; a screen with an open form gets no mouse
+// input, as its fields are keyboard-only.
+func (r *Root) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	if msg.Action != tea.MouseActionPress {
+		return r, nil
+	}
+	switch {
+	case r.showHelp:
+		if msg.Button == tea.MouseButtonLeft {
+			r.showHelp = false
+		}
+	case r.tabs[r.active].InputActive():
+	case msg.Button == tea.MouseButtonLeft && msg.Y < tabBarRows:
+		if id, ok := r.tabAt(msg.X); ok {
+			return r.switchTo(id)
+		}
+	case msg.Button == tea.MouseButtonWheelUp:
+		return r.forward(tea.KeyMsg{Type: tea.KeyUp})
+	case msg.Button == tea.MouseButtonWheelDown:
+		return r.forward(tea.KeyMsg{Type: tea.KeyDown})
+	}
+	return r, nil
+}
+
+func (r *Root) renderTabs(pad int, numbered bool) []string {
+	tab := lipgloss.NewStyle().Border(tabBorder, true).BorderForeground(r.th.Tokens.Accent).Padding(0, pad)
+	parts := make([]string, len(tabNames))
+	for i, name := range tabNames {
+		label := name
+		if numbered || screens.ID(i) == r.active {
+			label = fmt.Sprintf("%d %s", i+1, name)
+		}
+		switch {
+		case r.tabs[i] == nil:
+			parts[i] = tab.Render(r.th.DisabledTab.Render(label))
+		case screens.ID(i) == r.active:
+			parts[i] = tab.Border(activeTabBorder, true).Render(r.th.ActiveTab.Render(label))
+		default:
+			parts[i] = tab.Render(r.th.InactiveTab.Render(label))
+		}
+	}
+	return parts
 }
 
 func (r *Root) viewStatus() string {
@@ -304,16 +398,37 @@ func (r *Root) viewStatus() string {
 	}
 }
 
-func (r *Root) viewHelp() string {
+// viewHelp lists the global and active-screen bindings, wrapping them into side-by-side columns
+// when they would not fit the h lines of the modal that frames them.
+func (r *Root) viewHelp(h int) string {
 	bindings := append(append([]key.Binding{}, r.km.Bindings()...), r.ActiveKeyMap()...)
-	lines := make([]string, 0, len(bindings)+1)
-	lines = append(lines, r.th.Title.Render("Help — "+r.tabs[r.active].Title()))
+	var keys, descs []string
 	for _, b := range bindings {
-		h := b.Help()
-		if h.Key == "" {
-			continue
+		if hb := b.Help(); hb.Key != "" {
+			keys, descs = append(keys, hb.Key), append(descs, hb.Desc)
 		}
-		lines = append(lines, r.th.HelpKey.Render(h.Key)+"  "+r.th.HelpDesc.Render(h.Desc))
 	}
-	return strings.Join(lines, "\n")
+	// The modal's border and the title with its rule take four lines.
+	perCol := len(keys)
+	if r.height > 0 {
+		perCol = max(1, h-4)
+	}
+	var cols []string
+	for start := 0; start < len(keys); start += perCol {
+		end := min(start+perCol, len(keys))
+		keyW := 0
+		for _, k := range keys[start:end] {
+			keyW = max(keyW, lipgloss.Width(k))
+		}
+		lines := make([]string, 0, end-start)
+		for i := start; i < end; i++ {
+			lines = append(lines, r.th.HelpKey.Width(keyW).Render(keys[i])+"  "+r.th.HelpDesc.Render(descs[i]))
+		}
+		col := strings.Join(lines, "\n")
+		if end < len(keys) {
+			col = lipgloss.NewStyle().PaddingRight(4).Render(col)
+		}
+		cols = append(cols, col)
+	}
+	return r.th.Title.Render("Help — "+r.tabs[r.active].Title()) + "\n" + lipgloss.JoinHorizontal(lipgloss.Top, cols...)
 }

@@ -17,7 +17,8 @@ import (
 type mode int
 
 const (
-	modeSource mode = iota
+	modeIdle mode = iota
+	modeSource
 	modeMapping
 	modePreview
 	modeConfirm
@@ -72,6 +73,9 @@ func New(uc UseCases, loc domain.Locale, th theme.Theme) *Model {
 	m.table = components.NewTable(previewColumns(), th)
 	m.confirm = components.NewConfirmDialog(th)
 	m.resetSourceForm()
+	// Start on the idle page, not in the form: a form captures every key, so the tab keys would
+	// be unreachable until the user found esc.
+	m.mode = modeIdle
 	return m
 }
 
@@ -132,6 +136,11 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 
 func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	switch m.mode {
+	case modeIdle:
+		if key.Matches(msg, m.km.New) {
+			m.resetSourceForm()
+		}
+		return m, nil
 	case modeSource:
 		return m.handleSourceKey(msg)
 	case modeMapping:
@@ -182,14 +191,16 @@ type resultMsg struct{ result importing.ImportResult }
 // View renders the active panel.
 func (m *Model) View() string {
 	switch m.mode {
+	case modeIdle:
+		return m.th.Title.Render("Import") + "\n\n" + m.th.Muted.Render("n new import")
 	case modeSource:
-		return m.viewSource()
+		return components.Modal(m.th, m.width, m.height, m.viewSource())
 	case modeMapping:
-		return m.viewMapping()
+		return components.Modal(m.th, m.width, m.height, m.viewMapping())
 	case modePreview:
 		return m.viewPreview()
 	case modeConfirm:
-		return m.viewPreview() + "\n\n" + m.confirm.View()
+		return components.Modal(m.th, m.width, m.height, m.confirm.View())
 	case modeResult:
 		return m.viewResult()
 	}

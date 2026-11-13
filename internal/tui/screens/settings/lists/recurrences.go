@@ -219,9 +219,9 @@ func (m *Recurrences) View() string {
 	var body string
 	switch m.mode {
 	case recurrencesForm:
-		body = m.viewForm()
+		body = components.Modal(m.th, m.width, m.height, m.viewForm())
 	case recurrencesConfirm:
-		body = m.viewList() + "\n\n" + m.confirm.View()
+		body = components.Modal(m.th, m.width, m.height, m.confirm.View())
 	case recurrencesListMode:
 		body = m.viewList()
 	default:

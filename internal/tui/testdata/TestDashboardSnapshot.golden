@@ -1,18 +1,24 @@
-1 Dashboard  2 Transactions  3 Accounts  4 Budget  5 Reports  6 Import  7 Settin
+╭───────────╮╭────────────╮╭────────╮╭──────╮╭───────╮╭──────╮╭────────╮        
+│1 Dashboard││Transactions││Accounts││Budget││Reports││Import││Settings│        
+┘           └┴────────────┴┴────────┴┴──────┴┴───────┴┴──────┴┴────────┴────────
+Dashboard                                                                       
+─────────                                                                       
+                                                                                
+Accounts                                                                        
+╭────────────────────────────────────────────────┬────────────┬────────────────╮
+│Account                                         │Kind        │         Balance│
+├────────────────────────────────────────────────┼────────────┼────────────────┤
+│Checking                                        │checking    │        1,207.50│
+╰────────────────────────────────────────────────┴────────────┴────────────────╯
+                                                                                
+Net worth                                                                       
+1,207.50                                                                        
+                                                                                
+Runway                                                                          
+not enough data (needs at least 3 complete months)                              
+                                                                                
+Spending this month                                                             
+Groceries ██████████████████████████████████████████████████████████████ 42.50  
+                                                                                
 
-Dashboard
-
-Accounts
-Account                  Kind                  Balance
-Checking                 checking             1,207.50
-
-Net worth
-1,207.50
-
-Runway
-not enough data (needs at least 3 complete months)
-
-Spending this month
-Groceries ██████████████████████████████████████████████████████████████ 42.50
-
-? help · q quit
+? help · q quit

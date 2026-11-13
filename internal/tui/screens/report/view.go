@@ -1,14 +1,18 @@
 package report
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/0xballo/fui/internal/tui/components"
+)
 
 // View renders the active panel.
 func (m *Model) View() string {
 	switch m.mode {
 	case modeParamsForm, modeSaveForm, modeExportForm:
-		return m.viewForm()
+		return components.Modal(m.th, m.width, m.height, m.viewForm())
 	case modeConfirmRemove:
-		return m.viewSaved() + "\n\n" + m.confirm.View()
+		return components.Modal(m.th, m.width, m.height, m.confirm.View())
 	case modeSaved:
 		return m.viewSaved()
 	case modeReport:

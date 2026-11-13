@@ -274,11 +274,11 @@ func (m *Rules) View() string {
 	var body string
 	switch m.mode {
 	case rulesForm:
-		body = m.viewForm()
+		body = components.Modal(m.th, m.width, m.height, m.viewForm())
 	case rulesConfirm:
-		body = m.viewList() + "\n\n" + m.confirm.View()
+		body = components.Modal(m.th, m.width, m.height, m.confirm.View())
 	case rulesTest:
-		body = m.viewTest()
+		body = components.Modal(m.th, m.width, m.height, m.viewTest())
 	case rulesList:
 		body = m.viewList()
 	default:

@@ -333,5 +333,5 @@ func (m *Model) submitCategorize(confirmReconciled bool) tea.Cmd {
 }
 
 func (m *Model) viewCategorize() string {
-	return m.viewList() + "\n\n" + m.categorizeField.View()
+	return components.Modal(m.th, m.width, m.height, m.th.Title.Render("Categorize")+"\n"+m.categorizeField.View())
 }

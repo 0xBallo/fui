@@ -48,6 +48,9 @@ func newScreen(t *testing.T) (fixture, screens.Screen) {
 // dropdown that the first enter accepts instead of advancing: a second enter is needed then.
 func fillSourceForm(scr screens.Screen, connector, file, profile, account, since string) (screens.Screen, tea.Cmd) {
 	var cmd tea.Cmd
+	if !scr.InputActive() {
+		scr, _ = sendRunes(scr, "n") // open the source form from the idle page
+	}
 	for i, v := range []string{connector, file, profile, account, since} {
 		if v != "" {
 			scr, _ = sendRunes(scr, v)
@@ -201,8 +204,17 @@ func TestImportBackAndCancelKeysReturnToEarlierModes(t *testing.T) {
 		fuiTx("acc-1", "tx-1", "2026-06-01", -1000, "Pizza"),
 	)
 	scr = run(t, scr, scr.Init())
+	if scr.InputActive() {
+		t.Fatal("InputActive() should be false on the idle page, so the tab keys work")
+	}
+	scr, _ = sendRunes(scr, "n")
 	if !scr.InputActive() {
 		t.Fatal("InputActive() should be true on the source form")
+	}
+	// esc on the source form returns to the idle page, releasing the keyboard.
+	scr, _ = sendKey(scr, tea.KeyEsc)
+	if scr.InputActive() || !strings.Contains(scr.View(), "n new import") {
+		t.Fatalf("expected esc to close the source form, got:\n%s", scr.View())
 	}
 
 	scr, cmd := fillSourceForm(scr, "fui", "statement.fui.jsonl", "", "", "")
@@ -294,6 +306,7 @@ func TestImportUnknownConnectorKeepsSourceForm(t *testing.T) {
 	scr = run(t, scr, scr.Init())
 
 	// "unknown" matches no connector suggestion, so a single enter per field advances normally.
+	scr, _ = sendRunes(scr, "n") // open the source form from the idle page
 	scr, _ = sendRunes(scr, "unknown")
 	scr, _ = sendKey(scr, tea.KeyEnter)
 	scr, _ = sendRunes(scr, "statement.csv")

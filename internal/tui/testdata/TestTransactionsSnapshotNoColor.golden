@@ -1,9 +1,24 @@
-[?25l[?2004h1 Dashboard  2 Transactions  3 Accounts  4 Budget  5 Reports  6 Import  7 Settin
-[K
-Transactions[K
-[K
-Date       Account          Description              Category       Status      
-06/10/2026 Checking         Supermarket              Groceries      booked      
-1 transaction   -42.50 EUR[K
-[K
-? help · q quit[K
+╭─────────╮╭──────────────╮╭────────╮╭──────╮╭───────╮╭──────╮╭────────╮        
+│Dashboard││2 Transactions││Accounts││Budget││Reports││Import││Settings│        
+┴─────────┴┘              └┴────────┴┴──────┴┴───────┴┴──────┴┴────────┴────────
+Transactions                                                                    
+────────────                                                                    
+                                                                                
+╭──────────┬────────────────┬─────────┬──────────────┬──────────┬──────────────╮
+│Date      │Account         │Descript…│Category      │Status    │        Amount│
+├──────────┼────────────────┼─────────┼──────────────┼──────────┼──────────────┤
+│06/10/2026│Checking        │Supermar…│Groceries     │booked    │        -42.50│
+╰──────────┴────────────────┴─────────┴──────────────┴──────────┴──────────────╯
+1 transaction   -42.50 EUR                                                      
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+
+? help · q quit
