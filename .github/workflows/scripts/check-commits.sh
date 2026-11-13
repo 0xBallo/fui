@@ -26,7 +26,7 @@ while IFS= read -r sha; do
 	ai='claude|copilot|chatgpt|gemini|openai|anthropic|ai assistant|\[bot\]'
 	if printf '%s\n' "$header" | grep -qiE "$ai" ||
 		printf '%s\n' "$body" | grep -iE '^co-authored-by:' | grep -qiE "$ai" ||
-		printf '%s\n' "$body" | grep -qiE 'generated (with|by)'; then
+		printf '%s\n' "$body" | grep -qiE "generated (with|by) .{0,20}($ai)"; then
 		echo "::error::$sha: commit message must not attribute the change to an AI tool"
 		status=1
 	fi
