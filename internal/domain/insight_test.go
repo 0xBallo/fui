@@ -72,6 +72,13 @@ func TestDetectAnomalies(t *testing.T) {
 			t.Fatalf("got %v, %v", got, err)
 		}
 	})
+	t.Run("key stable across edits", func(t *testing.T) {
+		a, _ := DetectAnomalies(cfg, per, append(hist(), expense(t, 9, date(t, 2026, 6, 10), 9000, 7, 5)))
+		b, _ := DetectAnomalies(cfg, per, append(hist(), expense(t, 9, date(t, 2026, 6, 10), 9000, 7, 6)))
+		if len(a) != 1 || len(b) != 1 || a[0].Key != b[0].Key {
+			t.Fatalf("keys differ after recategorizing: %v vs %v", a, b)
+		}
+	})
 	t.Run("history outside window", func(t *testing.T) {
 		old := []Transaction{
 			expense(t, 1, date(t, 2025, 1, 1), 1000, 7, 5),

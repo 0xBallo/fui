@@ -183,7 +183,7 @@ func DetectAnomalies(cfg InsightConfig, period Period, txs []Transaction) ([]Ins
 		}
 		out = append(out, Insight{
 			Kind:    InsightAnomaly,
-			Key:     insightKey(string(InsightAnomaly), subj, tx.Date.String(), fmt.Sprint(tx.ID, tx.Amount.Minor(), tx.CategoryID)),
+			Key:     insightKey(string(InsightAnomaly), fmt.Sprint(int64(tx.ID))),
 			Subject: subj,
 			Detail:  fmt.Sprintf("date=%s median=%d count=%d", tx.Date, med, len(hist)),
 			Amount:  m,
