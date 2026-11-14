@@ -38,6 +38,13 @@ func (r *repos) Splits() app.SplitRepo             { return splitRepo{repos: r} 
 func (r *repos) Loans() app.LoanRepo               { return loanRepo{repos: r} }
 func (r *repos) Budgets() app.BudgetRepo           { return budgetRepo{repos: r} }
 func (r *repos) Recurrences() app.RecurrenceRepo   { return recurrenceRepo{repos: r} }
+func (r *repos) SavedSimulations() app.SavedSimulationRepo {
+	return savedSimulationRepo{repos: r}
+}
+
+func (r *repos) DismissedInsights() app.DismissedInsightRepo {
+	return dismissedInsightRepo{repos: r}
+}
 func (r *repos) SavedReports() app.SavedReportRepo { return savedReportRepo{repos: r} }
 func (r *repos) Reconciliations() app.ReconciliationRepo {
 	return reconciliationRepo{repos: r}

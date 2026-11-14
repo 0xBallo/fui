@@ -96,6 +96,10 @@ func seed(t tb, s *Store, accounts, salt int) {
 		VALUES (?, 10, 1, '{}', '{"category_id":1}')`, fmt.Sprintf("Rule%d", salt))
 	exec(`INSERT INTO saved_reports (name, kind, params)
 		VALUES (?, 'cashflow', '{"period":{"kind":"last_months","value":3}}')`, fmt.Sprintf("Report%d", salt))
+	exec(`INSERT INTO saved_simulations (name, kind, params)
+		VALUES (?, 'investment', '{"years":20}')`, fmt.Sprintf("Simulation%d", salt))
+	exec(`INSERT INTO dismissed_insights (key, kind, dismissed_at)
+		VALUES (?, 'subscription', '2026-01-01T00:00:00Z')`, fmt.Sprintf("insight-%d", salt))
 	if accounts > 0 {
 		exec(`INSERT INTO recurrences (
 			account_id, category_id, description, amount_minor, currency, every, unit, day_of_month, start_date, next_date
@@ -170,6 +174,7 @@ func assertEmptyExceptCategories(t tb, s *Store) {
 		"reconciliations",
 		"loans", "loan_schedules", "loan_installments", "loan_events",
 		"recurrences",
+		"saved_simulations", "dismissed_insights",
 	} {
 		if n := count(t, s, table); n != 0 {
 			t.Errorf("table %s has %d rows after reset, want 0", table, n)
@@ -284,6 +289,7 @@ func TestResetKeepSettingsProperty(t *testing.T) {
 			"reconciliations",
 			"loans", "loan_schedules", "loan_installments", "loan_events",
 			"recurrences",
+			"saved_simulations", "dismissed_insights",
 		} {
 			if n := count(rt, s, table); n != 0 {
 				rt.Fatalf("table %s has %d rows after reset, want 0", table, n)

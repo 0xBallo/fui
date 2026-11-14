@@ -135,6 +135,11 @@ table|connector_account_refs|connector_account_refs|CREATE TABLE connector_accou
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     UNIQUE (connector, ref)
 ) STRICT
+table|dismissed_insights|dismissed_insights|CREATE TABLE dismissed_insights (
+    key TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK (kind IN ('anomaly', 'subscription', 'price_change', 'trend')),
+    dismissed_at TEXT NOT NULL CHECK (length(dismissed_at) >= 20)
+) STRICT
 table|fx_rates|fx_rates|CREATE TABLE fx_rates (
     id INTEGER PRIMARY KEY,
     currency TEXT NOT NULL CHECK (length(currency) = 3),
@@ -262,6 +267,13 @@ table|saved_reports|saved_reports|CREATE TABLE saved_reports (
     params TEXT NOT NULL CHECK (json_valid(params)),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+) STRICT
+table|saved_simulations|saved_simulations|CREATE TABLE saved_simulations (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    kind TEXT NOT NULL CHECK (kind IN ('investment', 'pac', 'cashflow')),
+    params TEXT NOT NULL CHECK (json_valid(params)),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 ) STRICT
 table|securities|securities|CREATE TABLE securities (
     id INTEGER PRIMARY KEY,

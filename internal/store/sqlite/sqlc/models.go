@@ -99,6 +99,12 @@ type ConnectorAccountRef struct {
 	UpdatedAt string
 }
 
+type DismissedInsight struct {
+	Key         string
+	Kind        string
+	DismissedAt string
+}
+
 type FxRate struct {
 	ID         int64
 	Currency   string
@@ -229,6 +235,14 @@ type SavedReport struct {
 	Params    string
 	CreatedAt string
 	UpdatedAt string
+}
+
+type SavedSimulation struct {
+	ID        int64
+	Name      string
+	Kind      string
+	Params    string
+	CreatedAt string
 }
 
 type Security struct {
