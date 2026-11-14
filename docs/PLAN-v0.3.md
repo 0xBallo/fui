@@ -77,3 +77,77 @@ Lessons applied (memory): scratch under `./.scratch`, sandbox XDG for any manual
 
 Each `docs/tasks/W<nn>-*.md` holds the brief. Common acceptance: table-driven tests, rapid properties where noted,
 `TZ=UTC` and `Pacific/Kiritimati`, coverage per package ≥ 80% (`internal/domain` ≥ 90%).
+
+## 5. Status (2026-11-14)
+
+Work stopped by request after the in-flight tasks; `develop` CI green (all jobs), coverage total 84.3%,
+`internal/domain` 91.5%. Agents: Copilot (`claude-sonnet-5.5`, `gpt-5.3-codex`) and Claude Code `sonnet`, effort
+medium; Antigravity quota exhausted.
+
+| Task | Status | PR |
+| --- | --- | --- |
+| W01 Domain security/positions | merged | #8 |
+| W02 Domain asset/net worth | merged | #6 |
+| W03 Domain simulate | merged | #7 |
+| W04 Domain insights/compare | merged | #9 |
+| W05 Connector OFX | merged | #11 |
+| W06 Connector CAMT.053 | merged | #10 |
+| W07 Store securities (0012) | merged | #12 |
+| W08 Store assets (0013) | merged | #13 |
+| W09 Store simulations/insights (0014) | merged | #15 |
+| W10 Undo journal (0015) | merged | #17 |
+| W11 App investing | merged | #16 |
+| W12 App assets | merged | #14 |
+| W13 App simulations | merged | #20 |
+| W14 App insights/compare | merged | #18 |
+| W15 App net worth/runway | merged | #23 |
+| W16 CLI security/invest/position | merged | #22 |
+| W17 CLI asset, kpi networth, runway `--include-investments` | **not started** | — |
+| W18 CLI simulate | merged | #25 |
+| W19 CLI insights/compare + `insights.*` config | merged | #24 |
+| W20 CLI undo | merged | #21 |
+| W21 Proto fui/1 security ops | merged | #19 |
+| W22 TUI insights/compare | **not started** | — |
+| W23 TUI simulations | **not started** | — |
+| W24 TUI positions/net worth | **not started** | — |
+| W25 Integration | **not started** | — |
+| Release `release/v0.3.0` | **not started** | — |
+
+Review fixes applied during the run: new-loan capital credited and simulation params bounded (W03); zero-quantity
+sell no longer divides by zero, `insufficient_quantity` registered in codes and exit codes (W01); anomaly insight key
+depends only on the transaction id (W04); dividends/coupons booked as `interest`, not `investment` (W11); simulation
+"current positions" uses market value of positions (W13); amount edits on split transactions are rejected (W10,
+fixes a v0.2 invariant break).
+
+### Known gaps
+
+- **Nothing new is reachable from the `fui` binary yet**: commands from W16/W18/W19/W20 are only constructors
+  (`NewSecurityCmd`, `NewInvestCmd`, `NewPositionCmd`, `NewSimulateCmd`, `NewInsightsCmd`, `NewReportCompareCmd`,
+  `newUndoCmd`) and OFX/CAMT (`NewOFX`, `NewCAMT`) are not in `internal/connector/registry.go`; W25 must register
+  them per module, build the services in `cmd/fui`, add `help --json` schema entries/goldens and e2e testscripts.
+- `report run <saved>` does not dispatch `compare`; saved reports of kind net worth still use the old
+  `Analytics.NetWorth` instead of `NetWorthReport` (W15 kept both for golden compatibility).
+- Full JSON dump (`export --all`) lacks the v0.2 entities (budgets, loans, recurrences, rules) and the v0.3 securities,
+  assets and op log; only saved simulations and dismissed insights were added (W09). Pre-existing gap.
+- Subscription insights only skip transactions linked to a recurrence (`RecurrenceID`); a subscription with an existing
+  recurrence but manually entered transactions is still reported.
+- Insights and period comparison work in a single currency (no FX conversion).
+- Undo journals only tx add/edit/rm, transfer, split/unsplit; categorize/tag/untag are not journaled, and a later
+  tag/untag makes the previous entry stale. Restoring rows whose payee/batch/recurrence was deleted fails (rolled back).
+- Investing: no edit/delete use cases for securities or operations (remove + re-add); cash account must share the
+  security currency; positions are per (account, security).
+- Assets: no update/delete use cases. Simulations: no per-account cash-flow scenarios.
+- CAMT error records use the entry ordinal as line; batch split only when `TxDtls` amounts sum to the entry amount.
+- Specs not yet updated for the v0.3 choices below (CLI names, undo scope, fui/1 `security_op` record): W25/docs.
+
+### Open points (product decisions; defaults in place)
+
+1. Generic undo scope: transaction writes only (default) or every write (categories, budgets, rules, …)?
+2. CLI names `fui security add/list/price`, `fui invest buy/sell/dividend`, `fui position list` (not in the spec).
+3. Cost basis: average cost (PMC). FIFO needed?
+4. Imported `kind=investment` rows (e.g. Widiba "Rimborso Titoli") stay plain transactions; auto-convert to security ops?
+5. Insight thresholds as config keys `insights.{anomaly_factor_permille,subscription_tolerance_permille,
+   subscription_min_occurrences,trend_permille,trend_min_amount}`: OK as permille integers?
+6. Simulation `--rate` with one value uses base ± 2 pp for pessimistic/optimistic: acceptable default?
+7. `ai` module and Monte Carlo stay out of v0.3 until the local model is chosen.
+8. Next step: W25 + W17 first (usable CLI), then W22–W24 (TUI), then release v0.3.0.
