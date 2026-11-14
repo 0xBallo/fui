@@ -30,6 +30,7 @@ const (
 // use case call runs inside a tea.Cmd.
 type Model struct {
 	uc            UseCases
+	netWorthUC    NetWorthUseCases
 	loc           domain.Locale
 	th            theme.Theme
 	km            KeyMap
@@ -43,6 +44,7 @@ type Model struct {
 
 	netWorth    app.NetWorth
 	netWorthErr error
+	netWorthPt  *reporting.NetWorthPoint
 
 	spending reporting.SpendingResult
 	chart    components.BarChart
@@ -117,6 +119,7 @@ type loadedMsg struct {
 
 	netWorth    app.NetWorth
 	netWorthErr error
+	netWorthPt  *reporting.NetWorthPoint
 
 	spending reporting.SpendingResult
 
@@ -142,6 +145,13 @@ func (m *Model) load() tea.Cmd {
 		// Net worth needs a configured base currency and fx rates; it is shown as "n/a" rather
 		// than failing the whole screen when either is missing.
 		out.netWorth, out.netWorthErr = m.uc.NetWorth(ctx, app.NetWorthRequest{})
+		if m.netWorthUC != nil && out.netWorthErr == nil {
+			point, err := m.netWorthUC.NetWorthAt(ctx, out.netWorth.At)
+			if err != nil {
+				return screens.ErrorMsg{Err: err}
+			}
+			out.netWorthPt = &point
+		}
 
 		cats, err := m.uc.ListCategories(ctx)
 		if err != nil {
@@ -182,6 +192,7 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		m.balances = msg.balances
 		m.table.SetRows(m.accountRows())
 		m.netWorth, m.netWorthErr = msg.netWorth, msg.netWorthErr
+		m.netWorthPt = msg.netWorthPt
 		m.spending = msg.spending
 		m.chart.SetItems(spendingBars(msg.spending))
 		m.runway, m.runwayAvailable = msg.runway, msg.runwayAvailable
@@ -248,10 +259,7 @@ func (m *Model) viewDashboard() string {
 }
 
 func (m *Model) viewNetWorth() string {
-	if m.netWorthErr != nil {
-		return m.th.Muted.Render("n/a (" + m.netWorthErr.Error() + ")")
-	}
-	return m.th.Base.Render(domain.FormatAmount(m.netWorth.Total, m.loc))
+	return m.renderNetWorth()
 }
 
 func (m *Model) viewRunway() string {
