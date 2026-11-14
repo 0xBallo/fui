@@ -101,8 +101,14 @@ func (s *Service) newTx(req AddTxRequest, accts []domain.Account, cats []domain.
 func (s *Service) ApplyAddTx(ctx context.Context, p AddTxPlan) (domain.Transaction, error) {
 	var out domain.Transaction
 	err := s.apply(ctx, p.Bulk, func(r Repos) (err error) {
-		out, err = r.Transactions().Insert(ctx, p.Tx)
-		return err
+		if out, err = r.Transactions().Insert(ctx, p.Tx); err != nil {
+			return err
+		}
+		after, err := snapshot(ctx, r, out.ID)
+		if err != nil {
+			return err
+		}
+		return s.journal(ctx, r, OpKindTxAdd, undoPayload{After: after})
 	})
 	return out, err
 }
@@ -501,10 +507,18 @@ func (s *Service) setTxFields(t *domain.Transaction, req EditTxRequest, cats []d
 // ApplyEditTx stores the edited transaction.
 func (s *Service) ApplyEditTx(ctx context.Context, p EditTxPlan) (domain.Transaction, error) {
 	err := s.apply(ctx, p.Bulk, func(r Repos) error {
+		before, err := snapshot(ctx, r, p.Tx.ID)
+		if err != nil {
+			return err
+		}
 		if err := r.Transactions().Update(ctx, p.Tx); err != nil {
 			return fmt.Errorf("update transaction %d: %w", p.Tx.ID, err)
 		}
-		return nil
+		after, err := snapshot(ctx, r, p.Tx.ID)
+		if err != nil {
+			return err
+		}
+		return s.journal(ctx, r, OpKindTxEdit, undoPayload{Before: before, After: after})
 	})
 	return p.Tx, err
 }
@@ -632,6 +646,18 @@ func (s *Service) PlanRemoveTx(ctx context.Context, req RemoveTxRequest) (Remove
 // ApplyRemoveTx deletes the planned transactions and their transfer group.
 func (s *Service) ApplyRemoveTx(ctx context.Context, p RemoveTxPlan) error {
 	return s.apply(ctx, p.Bulk, func(r Repos) error {
+		before, err := snapshot(ctx, r, p.TxIDs...)
+		if err != nil {
+			return err
+		}
+		undo := undoPayload{Before: before}
+		if p.GroupID != 0 {
+			g, err := r.Transfers().Get(ctx, p.GroupID)
+			if err != nil {
+				return fmt.Errorf("get transfer %d: %w", p.GroupID, err)
+			}
+			undo.Group, undo.FeeMinor, undo.FeeCurrency = int64(p.GroupID), g.Fee.Minor(), g.Fee.Currency().Code()
+		}
 		for _, id := range p.TxIDs {
 			if err := r.Transactions().Delete(ctx, id); err != nil {
 				return fmt.Errorf("delete transaction %d: %w", id, err)
@@ -642,7 +668,7 @@ func (s *Service) ApplyRemoveTx(ctx context.Context, p RemoveTxPlan) error {
 				return fmt.Errorf("delete transfer %d: %w", p.GroupID, err)
 			}
 		}
-		return nil
+		return s.journal(ctx, r, OpKindTxRemove, undo)
 	})
 }
 

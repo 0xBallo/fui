@@ -77,6 +77,7 @@ type Repos interface {
 	Reconciliations() ReconciliationRepo
 	Assets() AssetRepo
 	Securities() SecurityRepo
+	OpLog() OpLogRepo
 }
 
 // AccountRepo stores accounts. Names are unique case-insensitively.

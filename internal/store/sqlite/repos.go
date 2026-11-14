@@ -51,6 +51,8 @@ func (r *repos) Reconciliations() app.ReconciliationRepo {
 }
 func (r *repos) Securities() app.SecurityRepo { return securityRepo{repos: r} }
 
+func (r *repos) OpLog() app.OpLogRepo { return opLogRepo{repos: r} }
+
 func (r *repos) writable() error {
 	if r.readOnly {
 		return errReadOnly

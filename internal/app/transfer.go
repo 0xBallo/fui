@@ -186,7 +186,13 @@ func (s *Service) ApplyTransfer(ctx context.Context, p TransferPlan) (TransferRe
 		g.Out = domain.TransferLeg{TransactionID: res.Out.ID, AccountID: res.Out.AccountID, Amount: res.Out.Amount}
 		g.In = domain.TransferLeg{TransactionID: res.In.ID, AccountID: res.In.AccountID, Amount: res.In.Amount}
 		res.Group = g
-		return nil
+		after, err := snapshot(ctx, r, res.Out.ID, res.In.ID)
+		if err != nil {
+			return err
+		}
+		return s.journal(ctx, r, OpKindTransfer, undoPayload{
+			Group: int64(g.ID), FeeMinor: g.Fee.Minor(), FeeCurrency: g.Fee.Currency().Code(), After: after,
+		})
 	})
 	return res, err
 }

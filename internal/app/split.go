@@ -69,10 +69,18 @@ func (s *Service) PlanSplitTx(ctx context.Context, req SplitTxRequest) (SplitTxP
 // ApplySplitTx stores the split rows.
 func (s *Service) ApplySplitTx(ctx context.Context, p SplitTxPlan) error {
 	return s.apply(ctx, p.Bulk, func(r Repos) error {
+		before, err := snapshot(ctx, r, p.ID)
+		if err != nil {
+			return err
+		}
 		if err := r.Splits().ReplaceSplits(ctx, p.ID, p.Rows); err != nil {
 			return fmt.Errorf("split transaction %d: %w", p.ID, err)
 		}
-		return nil
+		after, err := snapshot(ctx, r, p.ID)
+		if err != nil {
+			return err
+		}
+		return s.journal(ctx, r, OpKindSplit, undoPayload{Before: before, After: after})
 	})
 }
 
