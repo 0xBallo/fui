@@ -111,7 +111,7 @@ func (m *Model) submitForm() tea.Cmd {
 		return m.submitSave()
 	case modeExportForm:
 		return m.submitExport()
-	case modeReport, modeSaved, modeConfirmRemove:
+	case modeReport, modeSaved, modeConfirmRemove, modeCompare:
 		return nil
 	}
 	return nil
