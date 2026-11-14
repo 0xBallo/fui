@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/investing"
 	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/domain/simulate"
@@ -170,7 +171,7 @@ func (s *Service) Run(ctx context.Context, enabled module.Set, req RunRequest) (
 		if req.Investment == nil {
 			return RunResult{}, missingParams(req.Kind)
 		}
-		out, err := s.runInvestment(ctx, *req.Investment)
+		out, err := s.runInvestment(ctx, enabled, *req.Investment)
 		if err != nil {
 			return RunResult{}, err
 		}
@@ -179,7 +180,7 @@ func (s *Service) Run(ctx context.Context, enabled module.Set, req RunRequest) (
 		if req.PAC == nil {
 			return RunResult{}, missingParams(req.Kind)
 		}
-		out, err := s.runPAC(ctx, *req.PAC)
+		out, err := s.runPAC(ctx, enabled, *req.PAC)
 		if err != nil {
 			return RunResult{}, err
 		}
@@ -410,8 +411,8 @@ func decodeRunRequest(sim app.SavedSimulation) (RunRequest, error) {
 	return req, nil
 }
 
-func (s *Service) runInvestment(ctx context.Context, p InvestmentParams) (simulate.Triple, error) {
-	base, err := s.investmentBase(ctx, p.InitialMinor, p.InitialCurrentPositions)
+func (s *Service) runInvestment(ctx context.Context, enabled module.Set, p InvestmentParams) (simulate.Triple, error) {
+	base, err := s.investmentBase(ctx, enabled, p.InitialMinor, p.InitialCurrentPositions)
 	if err != nil {
 		return simulate.Triple{}, err
 	}
@@ -433,8 +434,8 @@ func (s *Service) runInvestment(ctx context.Context, p InvestmentParams) (simula
 	})
 }
 
-func (s *Service) runPAC(ctx context.Context, p PACParams) (simulate.Triple, error) {
-	base, err := s.investmentBase(ctx, p.InitialMinor, p.InitialCurrentPositions)
+func (s *Service) runPAC(ctx context.Context, enabled module.Set, p PACParams) (simulate.Triple, error) {
+	base, err := s.investmentBase(ctx, enabled, p.InitialMinor, p.InitialCurrentPositions)
 	if err != nil {
 		return simulate.Triple{}, err
 	}
@@ -541,40 +542,38 @@ func (s *Service) forecastBase(ctx context.Context, enabled module.Set, start do
 	return opening, flows, nil
 }
 
-func (s *Service) investmentBase(ctx context.Context, fixed int64, fromCurrentPositions bool) (int64, error) {
+func (s *Service) investmentBase(ctx context.Context, enabled module.Set, fixed int64, fromCurrentPositions bool) (int64, error) {
 	if !fromCurrentPositions {
 		return fixed, nil
 	}
-	return s.currentInvestmentValue(ctx)
+	return s.currentInvestmentValue(ctx, enabled)
 }
 
-func (s *Service) currentInvestmentValue(ctx context.Context) (int64, error) {
+func (s *Service) currentInvestmentValue(ctx context.Context, enabled module.Set) (int64, error) {
 	if s.cfg.BaseCurrency.IsZero() {
 		return 0, fmt.Errorf("base currency: %w", domain.ErrMissingField)
 	}
-	today, err := s.today()
+	uc := investing.New(s.store, s.clock, investing.Config{
+		Locale:       s.cfg.Locale,
+		BaseCurrency: s.cfg.BaseCurrency,
+		Location:     s.cfg.Location,
+		Modules:      enabled,
+	})
+	lines, err := uc.ListPositions(ctx, investing.PositionsRequest{})
 	if err != nil {
 		return 0, err
 	}
 	total, _ := domain.NewMoney(0, s.cfg.BaseCurrency)
 	err = s.store.Read(ctx, func(r app.Repos) error {
-		accounts, err := r.Accounts().List(ctx)
-		if err != nil {
-			return fmt.Errorf("list accounts: %w", err)
-		}
-		for _, acc := range accounts {
-			if acc.Archived || acc.Kind != domain.AccountInvestment {
-				continue
+		for _, line := range lines {
+			value := line.Value
+			if !line.Position.HasPrice {
+				value, err = s.toBase(ctx, r, line.Position.CostBasis, line.Position.AsOf)
+				if err != nil {
+					return err
+				}
 			}
-			bal, err := balanceAt(ctx, r, acc, today)
-			if err != nil {
-				return err
-			}
-			base, err := s.toBase(ctx, r, bal, today)
-			if err != nil {
-				return err
-			}
-			if total, err = total.Add(base); err != nil {
+			if total, err = total.Add(value); err != nil {
 				return err
 			}
 		}
@@ -602,21 +601,6 @@ func (s *Service) toBase(ctx context.Context, r app.Repos, m domain.Money, date 
 		return domain.Money{}, fmt.Errorf("look up %s rate: %w", m.Currency(), err)
 	}
 	return domain.Convert(m, fx.Rate, s.cfg.BaseCurrency)
-}
-
-func balanceAt(ctx context.Context, r app.Repos, acct domain.Account, date domain.Date) (domain.Money, error) {
-	if date.Before(acct.OpenedOn) {
-		return domain.NewMoney(0, acct.Currency)
-	}
-	sum, err := r.Transactions().SumUpTo(ctx, acct.ID, date)
-	if err != nil {
-		return domain.Money{}, fmt.Errorf("balance of %q: %w", acct.Name, err)
-	}
-	mv, err := domain.NewMoney(sum, acct.Currency)
-	if err != nil {
-		return domain.Money{}, err
-	}
-	return acct.OpeningBalance.Add(mv)
 }
 
 func parseFrequency(in string) (simulate.Frequency, error) {
