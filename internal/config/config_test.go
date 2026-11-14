@@ -900,3 +900,41 @@ func TestSaveToFileAtomic(t *testing.T) {
 		t.Errorf("unexpected directory contents after atomic save: %v", entries)
 	}
 }
+
+func TestInsightsKeys(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.ConfigFile = filepath.Join(t.TempDir(), "config.toml")
+	if v, err := cfg.Get("insights.anomaly_factor_permille"); err != nil || v != "2500" {
+		t.Fatalf("default anomaly = %q, %v", v, err)
+	}
+	for key, val := range map[string]string{
+		"insights.anomaly_factor_permille":         "4000",
+		"insights.subscription_tolerance_permille": "0",
+		"insights.subscription_min_occurrences":    "4",
+		"insights.trend_permille":                  "300",
+		"insights.trend_min_amount":                "7000",
+	} {
+		if err := cfg.Set(key, val); err != nil {
+			t.Fatalf("Set(%s) = %v", key, err)
+		}
+		if got, err := cfg.Get(key); err != nil || got != val {
+			t.Fatalf("Get(%s) = %q, %v", key, got, err)
+		}
+	}
+	for key, val := range map[string]string{
+		"insights.anomaly_factor_permille":      "999",
+		"insights.subscription_min_occurrences": "1",
+		"insights.trend_min_amount":             "-1",
+		"insights.trend_permille":               "x",
+		"insights.nope":                         "1",
+	} {
+		if err := cfg.Set(key, val); err == nil {
+			t.Errorf("Set(%s,%s) must fail", key, val)
+		}
+	}
+	bad := config.Defaults()
+	bad.Insights.TrendPermille = 0
+	if err := bad.Validate(); err == nil {
+		t.Error("Validate must reject zero trend")
+	}
+}
