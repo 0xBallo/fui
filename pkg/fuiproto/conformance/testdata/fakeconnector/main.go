@@ -123,6 +123,7 @@ func emitRecords(path string, content []byte) error {
 	}
 
 	transactions := 0
+	firstTxID := ""
 	for lineIndex, row := range parseRows(content) {
 		date, amount, description, rowErr := parseRow(row)
 		if rowErr != nil {
@@ -142,9 +143,13 @@ func emitRecords(path string, content []byte) error {
 		}
 
 		transactions++
+		txID := fmt.Sprintf("fake-%03d", lineIndex+1)
+		if firstTxID == "" {
+			firstTxID = txID
+		}
 		tx := &fuiproto.TransactionRecord{
 			Account:     "fake-EUR",
-			ID:          fmt.Sprintf("fake-%03d", lineIndex+1),
+			ID:          txID,
 			Date:        date,
 			Amount:      amount,
 			Currency:    "EUR",
@@ -162,6 +167,30 @@ func emitRecords(path string, content []byte) error {
 		if err := enc.Encode(fuiproto.Record{
 			Type:        fuiproto.RecordTypeTransaction,
 			Transaction: tx,
+		}); err != nil {
+			return err
+		}
+	}
+
+	if firstTxID != "" {
+		if err := enc.Encode(fuiproto.Record{
+			Type: fuiproto.RecordTypeSecurityOp,
+			SecurityOp: &fuiproto.SecurityOpRecord{
+				Account:   "fake-EUR",
+				Date:      "2026-01-31",
+				Kind:      fuiproto.SecurityOpKindBuy,
+				Quantity:  1000000,
+				UnitPrice: 12345,
+				Fees:      99,
+				CashTx:    firstTxID,
+				Security: fuiproto.SecurityMeta{
+					Name:          "Fake ETF",
+					Ticker:        "FAKE",
+					Kind:          fuiproto.SecurityKindETF,
+					Currency:      "EUR",
+					QuantityScale: 6,
+				},
+			},
 		}); err != nil {
 			return err
 		}

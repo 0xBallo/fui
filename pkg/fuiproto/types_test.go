@@ -50,6 +50,7 @@ func TestRecordMarshalJSONErrors(t *testing.T) {
 		{name: "missing balance payload", record: Record{Type: RecordTypeBalance}, wantSub: "balance payload"},
 		{name: "missing schedule payload", record: Record{Type: RecordTypeSchedule}, wantSub: "schedule payload"},
 		{name: "missing installment payload", record: Record{Type: RecordTypeInstallment}, wantSub: "installment payload"},
+		{name: "missing security_op payload", record: Record{Type: RecordTypeSecurityOp}, wantSub: "security_op payload"},
 		{name: "missing error payload", record: Record{Type: RecordTypeError}, wantSub: "error payload"},
 		{name: "missing end payload", record: Record{Type: RecordTypeEnd}, wantSub: "end payload"},
 		{name: "unknown type", record: Record{Type: RecordType("unknown")}, wantSub: "unknown record type"},

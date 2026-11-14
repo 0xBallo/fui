@@ -15,6 +15,8 @@ type ImportResult struct {
 	Batch        app.ImportBatch
 	Transactions int
 	Accounts     int
+	Securities   int
+	SecurityOps  int
 	Categories   int
 	Payees       int
 	Tags         int
@@ -50,6 +52,7 @@ func (s *Service) ApplyImport(ctx context.Context, p ImportPlan) (ImportResult, 
 			r: r, p: p, now: s.clock.Now().UTC(),
 			ids: map[string]domain.AccountID{}, cats: map[string]domain.CategoryID{},
 			payees: map[string]domain.PayeeID{}, tags: map[string]domain.TagID{},
+			sec: map[domain.SecurityID]domain.SecurityID{}, cash: map[string]domain.TransactionID{},
 		}
 		return w.run(ctx, &res)
 	})
@@ -71,6 +74,8 @@ type writer struct {
 	txs     []domain.Transaction      // prepared transaction of every included row, by row index
 	splits  [][]domain.Split          // prepared split rows of every included row, by row index
 	rowTags [][]domain.TagID          // tag IDs to set on each included row, by row index
+	sec     map[domain.SecurityID]domain.SecurityID
+	cash    map[string]domain.TransactionID
 }
 
 func (w *writer) run(ctx context.Context, res *ImportResult) error {
@@ -90,6 +95,16 @@ func (w *writer) run(ctx context.Context, res *ImportResult) error {
 	if err := w.link(ctx, res); err != nil {
 		return err
 	}
+	if err := w.importTransactions(ctx, res); err != nil {
+		return err
+	}
+	if err := w.securities(ctx, res); err != nil {
+		return err
+	}
+	return w.securityOps(ctx, res)
+}
+
+func (w *writer) importTransactions(ctx context.Context, res *ImportResult) error {
 	for i, row := range w.p.Rows {
 		if !row.Include {
 			continue
@@ -114,7 +129,53 @@ func (w *writer) run(ctx context.Context, res *ImportResult) error {
 				return fmt.Errorf("set tags of line %d: %w", row.Line, err)
 			}
 		}
+		if row.Tx.ExternalID != "" {
+			if _, seen := w.cash[row.Tx.ExternalID]; !seen {
+				w.cash[row.Tx.ExternalID] = t.ID
+			}
+		}
 		res.Transactions++
+	}
+	return nil
+}
+
+func (w *writer) securities(ctx context.Context, res *ImportResult) error {
+	for _, sec := range w.p.NewSecurities {
+		inserted, err := w.r.Securities().Insert(ctx, sec)
+		if err != nil {
+			return fmt.Errorf("create security %q: %w", sec.Name, err)
+		}
+		w.sec[sec.ID] = inserted.ID
+		res.Securities++
+	}
+	return nil
+}
+
+func (w *writer) securityOps(ctx context.Context, res *ImportResult) error {
+	for _, row := range w.p.SecurityOps {
+		if !row.Include {
+			continue
+		}
+		op := row.Op
+		if op.Account < 0 {
+			op.Account = w.ids[row.AccountRef]
+		}
+		if mapped, ok := w.sec[row.Security.ID]; ok {
+			op.Security = mapped
+		} else {
+			op.Security = row.Security.ID
+		}
+		if row.CashTx != "" {
+			id, ok := w.cash[row.CashTx]
+			if !ok {
+				return fmt.Errorf("security_op line %d cash_tx %q not found", row.Line, row.CashTx)
+			}
+			op.CashTx = id
+		}
+		if _, err := w.r.Securities().InsertOp(ctx, op); err != nil {
+			return fmt.Errorf("create security_op of line %d: %w", row.Line, err)
+		}
+		res.SecurityOps++
 	}
 	return nil
 }

@@ -417,6 +417,25 @@ func TestValidateStreamSupportsScheduleInstallmentAndErrorRecords(t *testing.T) 
 			},
 		},
 		{
+			Type: RecordTypeSecurityOp,
+			SecurityOp: &SecurityOpRecord{
+				Account:   "acc-1",
+				Date:      "2026-11-12",
+				Kind:      SecurityOpKindBuy,
+				Quantity:  1000000,
+				UnitPrice: 1234,
+				Fees:      10,
+				CashTx:    "tx-1",
+				Security: SecurityMeta{
+					Name:          "World ETF",
+					Ticker:        "VWCE",
+					Kind:          SecurityKindETF,
+					Currency:      "EUR",
+					QuantityScale: 6,
+				},
+			},
+		},
+		{
 			Type: RecordTypeError,
 			Error: &ErrorRecord{
 				Line:    7,
@@ -651,6 +670,44 @@ func TestValidateStreamAdditionalBranches(t *testing.T) {
 				{Type: RecordTypeEnd, End: &EndRecord{Transactions: 1}},
 			},
 			rowContains: "splits sum",
+		},
+		{
+			name: "security_op requires known account",
+			records: []Record{
+				{Type: RecordTypeMeta, Meta: &MetaRecord{Protocol: ProtocolFUI1, Connector: "x", Version: "0.1.0"}},
+				{Type: RecordTypeSecurityOp, SecurityOp: &SecurityOpRecord{
+					Account: "missing", Date: "2026-11-11", Kind: SecurityOpKindBuy, Quantity: 1, UnitPrice: 1,
+					Security: SecurityMeta{Name: "S", Ticker: "S", Kind: SecurityKindStock, Currency: "EUR", QuantityScale: 0},
+				}},
+				{Type: RecordTypeEnd, End: &EndRecord{}},
+			},
+			structural: "security_op references unknown account",
+		},
+		{
+			name: "security_op invalid kind row-level",
+			records: []Record{
+				{Type: RecordTypeMeta, Meta: &MetaRecord{Protocol: ProtocolFUI1, Connector: "x", Version: "0.1.0"}},
+				{Type: RecordTypeAccount, Account: &AccountRecord{Ref: "a", Name: "A", Currency: "EUR", Kind: AccountKindChecking}},
+				{Type: RecordTypeSecurityOp, SecurityOp: &SecurityOpRecord{
+					Account: "a", Date: "2026-11-11", Kind: SecurityOpKind("bad"), Quantity: 1, UnitPrice: 1,
+					Security: SecurityMeta{Name: "S", Ticker: "S", Kind: SecurityKindStock, Currency: "EUR", QuantityScale: 0},
+				}},
+				{Type: RecordTypeEnd, End: &EndRecord{}},
+			},
+			rowContains: "invalid security_op kind",
+		},
+		{
+			name: "security_op invalid quantity scale row-level",
+			records: []Record{
+				{Type: RecordTypeMeta, Meta: &MetaRecord{Protocol: ProtocolFUI1, Connector: "x", Version: "0.1.0"}},
+				{Type: RecordTypeAccount, Account: &AccountRecord{Ref: "a", Name: "A", Currency: "EUR", Kind: AccountKindChecking}},
+				{Type: RecordTypeSecurityOp, SecurityOp: &SecurityOpRecord{
+					Account: "a", Date: "2026-11-11", Kind: SecurityOpKindBuy, Quantity: 1, UnitPrice: 1,
+					Security: SecurityMeta{Name: "S", Ticker: "S", Kind: SecurityKindStock, Currency: "EUR", QuantityScale: 9},
+				}},
+				{Type: RecordTypeEnd, End: &EndRecord{}},
+			},
+			rowContains: "quantity_scale out of range",
 		},
 	}
 

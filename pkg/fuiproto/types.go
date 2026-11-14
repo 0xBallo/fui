@@ -39,6 +39,8 @@ const (
 	RecordTypeSchedule RecordType = "schedule"
 	// RecordTypeInstallment identifies installment records.
 	RecordTypeInstallment RecordType = "installment"
+	// RecordTypeSecurityOp identifies security operation records.
+	RecordTypeSecurityOp RecordType = "security_op"
 	// RecordTypeError identifies error records.
 	RecordTypeError RecordType = "error"
 	// RecordTypeEnd identifies end records.
@@ -105,6 +107,36 @@ const (
 	RateTypeVariable RateType = "variable"
 	// RateTypeMixed identifies mixed rates.
 	RateTypeMixed RateType = "mixed"
+)
+
+// SecurityKind is the security kind enum.
+type SecurityKind string
+
+const (
+	// SecurityKindStock identifies stock securities.
+	SecurityKindStock SecurityKind = "stock"
+	// SecurityKindETF identifies ETF securities.
+	SecurityKindETF SecurityKind = "etf"
+	// SecurityKindBond identifies bond securities.
+	SecurityKindBond SecurityKind = "bond"
+	// SecurityKindFund identifies fund securities.
+	SecurityKindFund SecurityKind = "fund"
+	// SecurityKindCrypto identifies crypto securities.
+	SecurityKindCrypto SecurityKind = "crypto"
+)
+
+// SecurityOpKind is the security operation kind enum.
+type SecurityOpKind string
+
+const (
+	// SecurityOpKindBuy identifies buy operations.
+	SecurityOpKindBuy SecurityOpKind = "buy"
+	// SecurityOpKindSell identifies sell operations.
+	SecurityOpKindSell SecurityOpKind = "sell"
+	// SecurityOpKindDividend identifies dividend operations.
+	SecurityOpKindDividend SecurityOpKind = "dividend"
+	// SecurityOpKindCoupon identifies coupon operations.
+	SecurityOpKindCoupon SecurityOpKind = "coupon"
 )
 
 // SourceMeta contains source file metadata for meta records.
@@ -193,6 +225,28 @@ type InstallmentRecord struct {
 	Remaining int64  `json:"remaining"`
 }
 
+// SecurityMeta describes one security referenced by a security operation.
+type SecurityMeta struct {
+	Name          string       `json:"name"`
+	Ticker        string       `json:"ticker,omitempty"`
+	ISIN          string       `json:"isin,omitempty"`
+	Kind          SecurityKind `json:"kind"`
+	Currency      string       `json:"currency"`
+	QuantityScale int          `json:"quantity_scale"`
+}
+
+// SecurityOpRecord is one operation on a security.
+type SecurityOpRecord struct {
+	Account   string         `json:"account"`
+	Date      string         `json:"date"`
+	Kind      SecurityOpKind `json:"kind"`
+	Quantity  int64          `json:"quantity"`
+	UnitPrice int64          `json:"unit_price"`
+	Fees      int64          `json:"fees,omitempty"`
+	CashTx    string         `json:"cash_tx,omitempty"`
+	Security  SecurityMeta   `json:"security"`
+}
+
 // ErrorRecord reports an unconvertible source row.
 type ErrorRecord struct {
 	Line    int            `json:"line"`
@@ -215,6 +269,7 @@ type Record struct {
 	Balance     *BalanceRecord
 	Schedule    *ScheduleRecord
 	Installment *InstallmentRecord
+	SecurityOp  *SecurityOpRecord
 	Error       *ErrorRecord
 	End         *EndRecord
 }
@@ -274,6 +329,8 @@ func (r Record) MarshalJSON() ([]byte, error) {
 		return marshalScheduleRecord(r.Type, r.Schedule)
 	case RecordTypeInstallment:
 		return marshalInstallmentRecord(r.Type, r.Installment)
+	case RecordTypeSecurityOp:
+		return marshalSecurityOpRecord(r.Type, r.SecurityOp)
 	case RecordTypeError:
 		return marshalErrorRecord(r.Type, r.Error)
 	case RecordTypeEnd:
@@ -306,6 +363,8 @@ func (r *Record) UnmarshalJSON(data []byte) error {
 		return unmarshalScheduleRecord(data, r)
 	case RecordTypeInstallment:
 		return unmarshalInstallmentRecord(data, r)
+	case RecordTypeSecurityOp:
+		return unmarshalSecurityOpRecord(data, r)
 	case RecordTypeError:
 		return unmarshalErrorRecord(data, r)
 	case RecordTypeEnd:
@@ -401,6 +460,21 @@ func marshalInstallmentRecord(recordType RecordType, record *InstallmentRecord) 
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("encode installment record: %w", err)
+	}
+	return data, nil
+}
+
+func marshalSecurityOpRecord(recordType RecordType, record *SecurityOpRecord) ([]byte, error) {
+	if record == nil {
+		return nil, fmt.Errorf("security_op payload is required for type %q", recordType)
+	}
+	payload := struct {
+		Type RecordType `json:"type"`
+		SecurityOpRecord
+	}{Type: recordType, SecurityOpRecord: *record}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("encode security_op record: %w", err)
 	}
 	return data, nil
 }
@@ -510,6 +584,19 @@ func unmarshalInstallmentRecord(data []byte, out *Record) error {
 	}
 	record := payload.InstallmentRecord
 	*out = Record{Type: payload.Type, Installment: &record}
+	return nil
+}
+
+func unmarshalSecurityOpRecord(data []byte, out *Record) error {
+	var payload struct {
+		Type RecordType `json:"type"`
+		SecurityOpRecord
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return fmt.Errorf("decode security_op record: %w", err)
+	}
+	record := payload.SecurityOpRecord
+	*out = Record{Type: payload.Type, SecurityOp: &record}
 	return nil
 }
 
