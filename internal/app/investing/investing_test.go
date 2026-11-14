@@ -220,7 +220,7 @@ func TestOpsAndCashLink(t *testing.T) {
 		t.Fatal(err)
 	}
 	div, err := e.svc.PlanDividend(ctx, investing.OpRequest{Account: "Broker", CashAccount: "Cash", Security: "VWCE", Date: "2026-03-10", Quantity: "6", Price: "0.5"})
-	if err != nil || div.CashTx.Amount.Minor() != 300 {
+	if err != nil || div.CashTx.Amount.Minor() != 300 || div.CashTx.Kind != domain.KindInterest || sell.CashTx.Kind != domain.KindInvestment {
 		t.Fatalf("dividend = %+v, %v", div, err)
 	}
 

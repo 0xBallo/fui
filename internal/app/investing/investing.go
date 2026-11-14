@@ -432,8 +432,13 @@ func cashTx(sec domain.Security, cash domain.Account, op domain.SecurityOp) (dom
 	if err != nil {
 		return domain.Transaction{}, fmt.Errorf("cash amount: %w", err)
 	}
+	// Dividends and coupons are income and count in reports; only buys and sells are investment movements.
+	kind := domain.KindInvestment
+	if op.Kind != domain.OpBuy && op.Kind != domain.OpSell {
+		kind = domain.KindInterest
+	}
 	return domain.NewTransaction(domain.Transaction{
-		AccountID: cash.ID, Date: op.Date, Amount: amt, Status: domain.StatusBooked, Kind: domain.KindInvestment,
+		AccountID: cash.ID, Date: op.Date, Amount: amt, Status: domain.StatusBooked, Kind: kind,
 		Description: fmt.Sprintf("%s %s %s", op.Kind, op.Quantity, sec.Name),
 	})
 }
