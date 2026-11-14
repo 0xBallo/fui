@@ -1,0 +1,46 @@
+# v0.3 module matrix: every v0.3 command exists only while its module is enabled.
+exec fui init --preset expense --currency EUR
+exec fui help --json
+! stdout '"path":"fui invest"'
+! stdout '"path":"fui asset"'
+! stdout '"path":"fui simulate"'
+! stdout '"path":"fui insights"'
+stdout '"path":"fui undo"'
+! exec fui position list
+stderr 'module_disabled|is disabled'
+
+exec fui reset --yes
+exec fui init --preset full --currency EUR
+exec fui help --json
+stdout '"path":"fui security"'
+stdout '"path":"fui invest"'
+stdout '"path":"fui position"'
+stdout '"path":"fui asset"'
+stdout '"path":"fui simulate"'
+stdout '"path":"fui insights"'
+stdout '"path":"fui report compare"'
+
+exec fui module disable investments --yes
+exec fui help --json
+! stdout '"path":"fui invest"'
+! stdout '"path":"fui position"'
+! exec fui invest buy X --account A
+stderr 'is disabled'
+exec fui module enable investments
+exec fui module disable assets --yes
+exec fui help --json
+! stdout '"path":"fui asset"'
+! exec fui asset list
+stderr 'is disabled'
+exec fui module enable assets
+exec fui module disable simulations --yes
+exec fui help --json
+! stdout '"path":"fui simulate"'
+! exec fui simulate list
+stderr 'is disabled'
+exec fui module enable simulations
+exec fui module disable analytics --yes
+exec fui help --json
+! stdout '"path":"fui insights"'
+! exec fui insights
+stderr 'is disabled'

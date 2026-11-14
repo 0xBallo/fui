@@ -55,6 +55,12 @@ modules.
 | `fui forecast [--horizon DAYS]` | Cash-flow forecast (module `recurring`) |
 | `fui loan add / show / schedule / event / run / confirm` | Loans and mortgages (module `loans`) |
 | `fui report KIND` / `fui report save / list / run / rm` | Analytics and saved reports |
+| `fui import FILE --connector ofx\|camt` | Import an OFX/QFX or ISO 20022 camt.053 statement (built-in connectors) |
+| `fui security add / list / price`, `fui invest buy / sell / dividend`, `fui position list` | Securities, operations and computed positions (module `investments`; `crypto` for crypto) |
+| `fui asset add / list / value`, `fui kpi networth [--at DATE]` | Assets and net worth with its components (module `assets`) |
+| `fui insights [--dismiss KEY\|--accept KEY]`, `fui report compare --a P --b P` | Automatic analyses and period comparison (module `analytics`) |
+| `fui simulate investment / pac / cashflow / save / list / compare / rm` | What-if scenarios; never write transactions (module `simulations`) |
+| `fui undo` | Revert the last transaction write (tx add/edit/rm, transfer, split); preview first |
 | `fui backup` / `fui restore PATH --yes` | Back up or restore the archive |
 | `fui config get/set KEY [VALUE]` | Read or change configuration |
 | `fui skill show` / `fui skill install` | Print or install this skill document |
@@ -98,6 +104,10 @@ category, `fui report run cashflow --json` for monthly inflow/outflow/net, `fui 
 for how many months the current liquidity covers at the recent spending rate. Prefer these
 aggregated reports to dumping every transaction into the conversation.
 
+**Positions and what-ifs** — `fui position list --json` for holdings and unrealized gain,
+`fui kpi networth --json` for net worth by component, `fui simulate pac --monthly 200 --years 20
+--rate 4 --json` for a scenario. Simulations are read-only: they are safe to run without `--dry-run`.
+
 ## Safety rules
 
 1. **Preview before writing.** Run the write command with `--dry-run` first and show the user
@@ -105,7 +115,7 @@ aggregated reports to dumping every transaction into the conversation.
 2. **Confirm, then `--yes`.** Only run the command for real, adding `--yes`, after the user has
    seen the preview and agreed.
 3. **Never delete, reset, or restore without an explicit request.** Do not run `fui tx rm`,
-   `fui category rm`, `fui reset`, or `fui restore`, and do not edit a reconciled transaction,
+   `fui category rm`, `fui reset`, `fui restore`, or `fui undo`, and do not edit a reconciled transaction,
    unless the user asked for exactly that.
 4. **Prefer aggregates to raw rows.** Use reports and totals rather than listing every
    transaction, to keep the user's financial detail out of the model's context when a summary

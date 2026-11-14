@@ -176,9 +176,8 @@ func runWithInvestingCommands(h *harness, mods module.Set, args ...string) (stdo
 	var errw bytes.Buffer
 	h.cfg.Modules.Enabled = mods.IDs()
 	deps := h.deps(&out, &errw)
-	inv := newInvestingService(h.t, h, mods)
+	deps.Investing = newInvestingService(h.t, h, mods)
 	root := cli.NewRoot(deps)
-	root.AddCommand(cli.NewSecurityCmd(deps, inv), cli.NewInvestCmd(deps, inv), cli.NewPositionCmd(deps, inv))
 	root.SetArgs(args)
 	root.SetIn(h.stdin)
 	root.SetOut(&out)
