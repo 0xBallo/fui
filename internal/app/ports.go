@@ -76,6 +76,7 @@ type Repos interface {
 	SavedReports() SavedReportRepo
 	Reconciliations() ReconciliationRepo
 	Assets() AssetRepo
+	Securities() SecurityRepo
 }
 
 // AccountRepo stores accounts. Names are unique case-insensitively.
