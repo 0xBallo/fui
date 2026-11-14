@@ -21,6 +21,8 @@ const (
 	CodeMissingField     Code = "missing_field"
 	CodeInvalidValue     Code = "invalid_value"
 	CodeNotEnoughData    Code = "not_enough_data"
+	// CodeInsufficientQuantity: a sell exceeds the held quantity.
+	CodeInsufficientQuantity Code = "insufficient_quantity"
 )
 
 // Codes returns every domain error code, so the CLI can test that its
@@ -29,7 +31,7 @@ func Codes() []Code {
 	return []Code{
 		CodeAmbiguousName, CodeNotFound, CodeCurrencyMismatch, CodeReconciled,
 		CodeInvalidFilter, CodeOverflow, CodeInvalidAmount, CodeInvalidDate, CodeMissingField, CodeInvalidValue,
-		CodeNotEnoughData,
+		CodeNotEnoughData, CodeInsufficientQuantity,
 	}
 }
 
@@ -64,6 +66,8 @@ var (
 	ErrMissingField     = &Error{Code: CodeMissingField, Message: "missing field"}
 	ErrInvalidValue     = &Error{Code: CodeInvalidValue, Message: "invalid value"}
 	ErrNotEnoughData    = &Error{Code: CodeNotEnoughData, Message: "not enough data"}
+	// ErrInsufficientQuantity matches errors from selling more than is held.
+	ErrInsufficientQuantity = &Error{Code: CodeInsufficientQuantity, Message: "insufficient quantity"}
 )
 
 // newError builds an Error with the code of sentinel and a formatted message.
