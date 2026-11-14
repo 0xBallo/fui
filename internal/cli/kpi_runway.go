@@ -20,6 +20,7 @@ func newKPIRunwayCmd(deps *Deps) *cobra.Command {
 		},
 	}
 	cmd.Flags().String("at", "", "evaluate as of this date (default: today)")
+	cmd.Flags().Bool("include-investments", false, "add investment positions to liquidity")
 	reportAccountFlag(cmd)
 	return cmd
 }
@@ -43,12 +44,21 @@ func runKPIRunway(cmd *cobra.Command, deps *Deps) error {
 	if err != nil {
 		return err
 	}
+	includeInvestments, _ := cmd.Flags().GetBool("include-investments")
 	base, err := deps.BaseCurrency()
 	if err != nil {
 		return err
 	}
-	result, err := deps.Reporting.Runway.Run(ctx, reporting.RunwayParams{
-		AsOf: asOf, MonthStartDay: deps.Config.MonthStartDay, AccountIDs: accountIDs, BaseCurrency: base,
+	runway := deps.Reporting.Runway
+	if includeInvestments {
+		analytics, err := requireAnalytics(deps)
+		if err != nil {
+			return err
+		}
+		runway = runway.WithPositions(analytics)
+	}
+	result, err := runway.Run(ctx, reporting.RunwayParams{
+		AsOf: asOf, MonthStartDay: deps.Config.MonthStartDay, AccountIDs: accountIDs, BaseCurrency: base, IncludeInvestments: includeInvestments,
 	})
 	if err != nil {
 		return err
