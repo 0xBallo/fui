@@ -28,6 +28,7 @@ const (
 	modeReconcileForm
 	modeReconcilePreview
 	modeConfirm
+	modePriceForm
 )
 
 // Model is the accounts screen: a list of balances, the movement detail of one account, and the
@@ -65,6 +66,9 @@ type Model struct {
 	reconcilePlan         app.ReconcilePlan
 	reconcileNotice       string
 	reconcileBackMode     mode
+
+	positionsUC PositionsUseCases
+	positions   positionState
 }
 
 var _ screens.Screen = (*Model)(nil)
@@ -83,6 +87,7 @@ func New(uc UseCases, loc domain.Locale, th theme.Theme) *Model {
 		{Title: "Amount", Width: 14, Align: lipgloss.Right},
 	}, th)
 	m.confirm = components.NewConfirmDialog(th)
+	m.initPositions()
 	return m
 }
 
@@ -97,16 +102,19 @@ func (m *Model) SetSize(w, h int) {
 	m.table.SetWidth(w)
 	m.detailTbl.SetHeight(rows)
 	m.detailTbl.SetWidth(w)
+	m.resizePositions(w, h)
 }
 
 // Title identifies the screen in the tab bar.
 func (m *Model) Title() string { return "Accounts" }
 
 // KeyMap exposes the bindings for the global help view.
-func (m *Model) KeyMap() []key.Binding { return m.km.Bindings() }
+func (m *Model) KeyMap() []key.Binding { return m.keyBindings() }
 
 // InputActive reports whether the add-account form is capturing keystrokes.
-func (m *Model) InputActive() bool { return m.mode == modeForm || m.mode == modeReconcileForm }
+func (m *Model) InputActive() bool {
+	return m.mode == modeForm || m.mode == modeReconcileForm || m.mode == modePriceForm
+}
 
 // loadedMsg carries a fresh account listing back into Update.
 type loadedMsg struct{ balances []app.AccountBalance }
@@ -123,8 +131,9 @@ func (m *Model) load() tea.Cmd {
 
 // detailLoadedMsg carries one account and its movements back into Update.
 type detailLoadedMsg struct {
-	bal  app.AccountBalance
-	page app.TxPage
+	bal       app.AccountBalance
+	page      app.TxPage
+	positions []positionViewRow
 }
 
 type reconcilePlannedMsg struct {
@@ -146,7 +155,11 @@ func (m *Model) loadDetail(name string) tea.Cmd {
 		if err != nil {
 			return screens.ErrorMsg{Err: err}
 		}
-		return detailLoadedMsg{bal: bal, page: page}
+		positions, err := m.loadDetailPositions(ctx, bal.Account)
+		if err != nil {
+			return screens.ErrorMsg{Err: err}
+		}
+		return detailLoadedMsg{bal: bal, page: page, positions: positions}
 	}
 }
 
@@ -161,6 +174,7 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	case detailLoadedMsg:
 		m.detail = msg.bal
 		m.detailTbl.SetRows(m.txRows(msg.page.Items))
+		m.setPositions(msg.positions)
 		m.mode = modeDetail
 		return m, nil
 	case reconcilePlannedMsg:
@@ -188,6 +202,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		return m.handleReconcilePreviewKey(msg)
 	case modeConfirm:
 		return m.handleConfirmKey(msg)
+	case modePriceForm:
+		return m.handlePriceFormKey(msg)
 	case modeDetail:
 		return m.handleDetailKey(msg)
 	case modeList:
@@ -234,10 +250,14 @@ func (m *Model) handleDetailKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		m.mode = modeList
 	case key.Matches(msg, m.km.Up):
 		m.detailTbl.MoveUp(1)
+		m.positions.table.MoveUp(1)
 	case key.Matches(msg, m.km.Down):
 		m.detailTbl.MoveDown(1)
+		m.positions.table.MoveDown(1)
 	case key.Matches(msg, m.km.Reconcile):
 		m.openReconcileForm(m.detail.Account.Name, modeDetail)
+	case key.Matches(msg, m.km.Price):
+		m.openPriceForm()
 	}
 	return m, nil
 }
@@ -450,6 +470,8 @@ func (m *Model) View() string {
 		return m.viewReconcilePreview()
 	case modeConfirm:
 		return components.Modal(m.th, m.width, m.height, m.confirm.View())
+	case modePriceForm:
+		return components.Modal(m.th, m.width, m.height, m.viewPriceForm())
 	case modeDetail:
 		return m.viewDetail()
 	case modeList:
@@ -465,7 +487,11 @@ func (m *Model) viewList() string {
 func (m *Model) viewDetail() string {
 	title := m.th.Title.Render("Movements — " + m.detail.Account.Name)
 	bal := m.th.Base.Render("Balance: " + domain.FormatAmount(m.detail.Balance, m.loc))
-	return title + "\n" + bal + "\n\n" + m.detailTbl.View()
+	out := title + "\n" + bal + "\n\n" + m.detailTbl.View()
+	if pos := m.viewPositions(); pos != "" {
+		out += "\n\n" + pos
+	}
+	return out
 }
 
 func (m *Model) viewForm() string {

@@ -26,3 +26,9 @@ type UseCases interface {
 	// (the median outflow is taken over up to 12 complete months).
 	Runway(ctx context.Context, params reporting.RunwayParams) (reporting.RunwayResult, error)
 }
+
+// NetWorthUseCases is the optional reporting subset this screen can use to show the net-worth
+// breakdown (positions and assets) when those modules are enabled.
+type NetWorthUseCases interface {
+	NetWorthAt(ctx context.Context, at domain.Date) (reporting.NetWorthPoint, error)
+}

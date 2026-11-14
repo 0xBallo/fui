@@ -11,6 +11,7 @@ type KeyMap struct {
 	Add       key.Binding
 	Archive   key.Binding
 	Reconcile key.Binding
+	Price     key.Binding
 }
 
 // DefaultKeyMap returns the canonical key bindings for accounts.
@@ -23,10 +24,11 @@ func DefaultKeyMap() KeyMap {
 		Add:       key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add")),
 		Archive:   key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "archive")),
 		Reconcile: key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reconcile")),
+		Price:     key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "set price")),
 	}
 }
 
 // Bindings returns all keys as a slice for help generation and collision checks.
 func (k KeyMap) Bindings() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Open, k.Back, k.Add, k.Archive, k.Reconcile}
+	return []key.Binding{k.Up, k.Down, k.Open, k.Back, k.Add, k.Archive, k.Reconcile, k.Price}
 }
