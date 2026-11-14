@@ -22,6 +22,28 @@ type Account struct {
 	Iban                sql.NullString
 }
 
+type Asset struct {
+	ID            int64
+	Name          string
+	Kind          string
+	PurchaseDate  string
+	PurchaseMinor int64
+	Currency      string
+	LoanID        sql.NullInt64
+	CreatedAt     string
+	UpdatedAt     string
+}
+
+type AssetValuation struct {
+	ID         int64
+	AssetID    int64
+	Date       string
+	ValueMinor int64
+	Currency   string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
 type Budget struct {
 	ID            int64
 	Name          string
