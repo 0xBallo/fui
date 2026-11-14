@@ -49,6 +49,7 @@ func Defaults() Config {
 		Forecast: ForecastConfig{
 			Horizon: DefaultForecastDays,
 		},
+		Insights: defaultInsights(),
 		Import: ImportConfig{
 			Profiles: make(map[string]CSVProfile),
 		},

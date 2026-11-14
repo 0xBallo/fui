@@ -162,5 +162,6 @@ type Config struct {
 	Backup        BackupConfig     `toml:"backup"`
 	Connectors    ConnectorsConfig `toml:"connectors"`
 	Forecast      ForecastConfig   `toml:"forecast"`
+	Insights      InsightsConfig   `toml:"insights"`
 	Import        ImportConfig     `toml:"import"`
 }
