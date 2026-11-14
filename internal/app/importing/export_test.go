@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/importing"
@@ -205,7 +206,23 @@ func (m memFiles) create(name string) (io.WriteCloser, error) {
 func TestDump(t *testing.T) {
 	e := seedExport(t)
 	e.importAll(t, stream("bank", "abc", account("r", "Imported", "EUR"), txRec("r", "a", "2026-10-01", -100, "x")))
-	wantFiles := []string{"accounts", "categories", "transactions", "transfers", "fx_rates", "import_batches"}
+	if err := e.store.WithTx(context.Background(), func(r app.Repos) error {
+		if _, err := r.SavedSimulations().Insert(context.Background(), app.SavedSimulation{
+			Name:       "Plan A",
+			Kind:       "investment",
+			ParamsJSON: `{"years":20}`,
+		}); err != nil {
+			return err
+		}
+		return r.DismissedInsights().Dismiss(context.Background(), app.DismissedInsight{
+			Key:         "ins-1",
+			Kind:        domain.InsightSubscript,
+			DismissedAt: time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC),
+		})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	wantFiles := []string{"accounts", "categories", "transactions", "transfers", "fx_rates", "import_batches", "saved_simulations", "dismissed_insights"}
 	t.Run("json", func(t *testing.T) {
 		files := memFiles{}
 		if err := e.svc.Dump(context.Background(), importing.DumpJSON, files.create); err != nil {
@@ -239,6 +256,14 @@ func TestDump(t *testing.T) {
 		batches, _ := csv.NewReader(files["import_batches.csv"]).ReadAll()
 		if len(batches) != 2 || batches[1][3] != "abc" {
 			t.Fatalf("import_batches.csv = %q", batches)
+		}
+		sims, _ := csv.NewReader(files["saved_simulations.csv"]).ReadAll()
+		if len(sims) != 2 || sims[1][1] != "Plan A" {
+			t.Fatalf("saved_simulations.csv = %q", sims)
+		}
+		dismissed, _ := csv.NewReader(files["dismissed_insights.csv"]).ReadAll()
+		if len(dismissed) != 2 || dismissed[1][0] != "ins-1" {
+			t.Fatalf("dismissed_insights.csv = %q", dismissed)
 		}
 	})
 	t.Run("unknown format", func(t *testing.T) {

@@ -22,7 +22,7 @@ const (
 	sqliteDriverName           = "sqlite"
 	defaultReadPoolSize        = 4
 	defaultBusyTimeoutMS       = 5000
-	currentSchemaVersion int64 = 13
+	currentSchemaVersion int64 = 14
 )
 
 // Options configures opening a SQLite store.

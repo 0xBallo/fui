@@ -71,6 +71,8 @@ type Repos interface {
 	Loans() LoanRepo
 	Budgets() BudgetRepo
 	Recurrences() RecurrenceRepo
+	SavedSimulations() SavedSimulationRepo
+	DismissedInsights() DismissedInsightRepo
 	SavedReports() SavedReportRepo
 	Reconciliations() ReconciliationRepo
 	Assets() AssetRepo
@@ -307,6 +309,42 @@ type RecurrenceRepo interface {
 	Due(ctx context.Context, until domain.Date) ([]Recurrence, error)
 	// PendingOf returns pending transactions linked to recurrence id ordered by due_date/date then ID.
 	PendingOf(ctx context.Context, id RecurrenceID) ([]domain.Transaction, error)
+}
+
+// SavedSimulationID identifies a saved simulation row.
+type SavedSimulationID int64
+
+// SavedSimulation is one saved simulation definition.
+type SavedSimulation struct {
+	ID         SavedSimulationID
+	Name       string
+	Kind       string
+	ParamsJSON string
+}
+
+// SavedSimulationRepo stores saved simulation definitions. Names are unique case-insensitively.
+type SavedSimulationRepo interface {
+	Insert(ctx context.Context, s SavedSimulation) (SavedSimulation, error)
+	Delete(ctx context.Context, id SavedSimulationID) error
+	Get(ctx context.Context, id SavedSimulationID) (SavedSimulation, error)
+	GetByName(ctx context.Context, name string) (SavedSimulation, error)
+	// List returns every saved simulation ordered by name (case-insensitive), then ID.
+	List(ctx context.Context) ([]SavedSimulation, error)
+}
+
+// DismissedInsight is one dismissed automatic insight.
+type DismissedInsight struct {
+	Key         string
+	Kind        domain.InsightKind
+	DismissedAt time.Time
+}
+
+// DismissedInsightRepo stores dismissed insight keys.
+type DismissedInsightRepo interface {
+	// Dismiss inserts or updates one dismissed key.
+	Dismiss(ctx context.Context, in DismissedInsight) error
+	// List returns every dismissed insight ordered by key.
+	List(ctx context.Context) ([]DismissedInsight, error)
 }
 
 // SavedReportID identifies a saved report row.
