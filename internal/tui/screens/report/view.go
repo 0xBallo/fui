@@ -15,6 +15,8 @@ func (m *Model) View() string {
 		return components.Modal(m.th, m.width, m.height, m.confirm.View())
 	case modeCompare:
 		return m.viewCompare()
+	case modeSim:
+		return m.viewSim()
 	case modeSaved:
 		return m.viewSaved()
 	case modeReport:
@@ -56,6 +58,9 @@ func (m *Model) viewFooter() string {
 	if m.compareEnabled() {
 		footer += "   c compare"
 	}
+	if m.simEnabled() {
+		footer += "   i simulations"
+	}
 	return m.th.Base.Render(footer)
 }
 
@@ -75,7 +80,7 @@ func (m *Model) formTitle() string {
 		return "Save report"
 	case modeExportForm:
 		return "Export transactions"
-	case modeParamsForm, modeReport, modeSaved, modeConfirmRemove, modeCompare:
+	case modeParamsForm, modeReport, modeSaved, modeConfirmRemove, modeCompare, modeSim:
 		return "Report params"
 	}
 	return "Report params"

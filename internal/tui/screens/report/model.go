@@ -25,6 +25,7 @@ const (
 	modeExportForm
 	modeConfirmRemove
 	modeCompare
+	modeSim
 )
 
 // reportResult is the currently displayed report: its kind, a title label, the saved report name
@@ -76,6 +77,7 @@ type Model struct {
 	confirm components.ConfirmDialog
 
 	cmp compareState
+	sim simState
 }
 
 var _ screens.Screen = (*Model)(nil)
@@ -118,18 +120,21 @@ func (m *Model) SetSize(w, h int) {
 	m.cmp.table.SetHeight(max(3, h-10))
 	m.cmp.table.SetWidth(w)
 	m.chart.SetWidth(w)
+	m.sizeSim()
 }
 
 // Title identifies the screen in the tab bar.
 func (m *Model) Title() string { return "Reports" }
 
 // KeyMap exposes the bindings for the global help view.
-func (m *Model) KeyMap() []key.Binding { return append(m.km.Bindings(), m.compareBindings()...) }
+func (m *Model) KeyMap() []key.Binding {
+	return append(append(m.km.Bindings(), m.compareBindings()...), m.simBindings()...)
+}
 
 // InputActive reports whether a form is capturing keystrokes.
 func (m *Model) InputActive() bool {
 	return m.mode == modeParamsForm || m.mode == modeSaveForm || m.mode == modeExportForm ||
-		(m.mode == modeCompare && m.cmp.formActive)
+		(m.mode == modeCompare && m.cmp.formActive) || m.simInputActive()
 }
 
 // accountsLoadedMsg carries the accounts back into Update, for the account field's suggestions
@@ -172,6 +177,9 @@ type exportDoneMsg struct {
 
 // Update advances the screen state; it performs no I/O itself.
 func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
+	if cmd, ok := m.updateSim(msg); ok {
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case accountsLoadedMsg:
 		m.accounts = msg.rows
@@ -216,6 +224,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		return m.handleConfirmKey(msg)
 	case modeCompare:
 		return m.handleCompareKey(msg)
+	case modeSim:
+		return m.handleSimKey(msg)
 	case modeSaved:
 		return m.handleSavedKey(msg)
 	case modeReport:
@@ -246,6 +256,8 @@ func (m *Model) handleReportKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		m.openExportForm()
 	case m.compareEnabled() && key.Matches(msg, m.cmp.km.Open):
 		return m, m.openCompare()
+	case m.simEnabled() && key.Matches(msg, m.sim.km.Open):
+		return m, m.openSim()
 	}
 	return m, nil
 }
