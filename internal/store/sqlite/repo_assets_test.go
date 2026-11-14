@@ -16,12 +16,10 @@ import (
 	"github.com/0xballo/fui/internal/domain"
 )
 
-type assetRepos interface{ Assets() app.AssetRepo }
-
 func withAssets(t *testing.T, s *Store, fn func(ctx context.Context, repo app.AssetRepo) error) error {
 	t.Helper()
 	ctx := context.Background()
-	return s.WithTx(ctx, func(r app.Repos) error { return fn(ctx, r.(assetRepos).Assets()) })
+	return s.WithTx(ctx, func(r app.Repos) error { return fn(ctx, r.Assets()) })
 }
 
 func seedLoan(t *testing.T, s *Store) {
@@ -182,7 +180,7 @@ func TestAssetValuations(t *testing.T) {
 func TestAssetReadOnlyRejectsWrites(t *testing.T) {
 	s, _ := newTestStore(t)
 	err := s.Read(context.Background(), func(r app.Repos) error {
-		_, err := r.(assetRepos).Assets().Insert(context.Background(), domain.Asset{})
+		_, err := r.Assets().Insert(context.Background(), domain.Asset{})
 		return err
 	})
 	if err == nil {

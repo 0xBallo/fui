@@ -73,6 +73,7 @@ type Repos interface {
 	Recurrences() RecurrenceRepo
 	SavedReports() SavedReportRepo
 	Reconciliations() ReconciliationRepo
+	Assets() AssetRepo
 }
 
 // AccountRepo stores accounts. Names are unique case-insensitively.

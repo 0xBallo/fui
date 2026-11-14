@@ -54,6 +54,8 @@ type state struct {
 	Recurs           map[app.RecurrenceID]app.Recurrence
 	SavedReports     map[app.SavedReportID]app.SavedReport
 	Reconciliations  map[reconciliationKey]app.Reconciliation
+	Assets           map[domain.AssetID]domain.Asset
+	Valuations       map[valuationKey]domain.Valuation
 	LastID           map[string]int64
 }
 
@@ -79,6 +81,8 @@ func newState() *state {
 		Recurs:           map[app.RecurrenceID]app.Recurrence{},
 		SavedReports:     map[app.SavedReportID]app.SavedReport{},
 		Reconciliations:  map[reconciliationKey]app.Reconciliation{},
+		Assets:           map[domain.AssetID]domain.Asset{},
+		Valuations:       map[valuationKey]domain.Valuation{},
 		LastID:           map[string]int64{},
 	}
 }
@@ -107,6 +111,8 @@ func (s *state) clone() *state {
 		Recurs:           maps.Clone(s.Recurs),
 		SavedReports:     maps.Clone(s.SavedReports),
 		Reconciliations:  maps.Clone(s.Reconciliations),
+		Assets:           maps.Clone(s.Assets),
+		Valuations:       maps.Clone(s.Valuations),
 	}
 }
 
@@ -181,6 +187,8 @@ func (r *repos) SavedReports() app.SavedReportRepo { return savedReports{r} }
 func (r *repos) Reconciliations() app.ReconciliationRepo {
 	return reconciliations{r}
 }
+
+func (r *repos) Assets() app.AssetRepo { return assets{r} }
 
 func (r *repos) writable() error {
 	if r.readOnly {
