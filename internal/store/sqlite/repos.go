@@ -42,6 +42,7 @@ func (r *repos) SavedReports() app.SavedReportRepo { return savedReportRepo{repo
 func (r *repos) Reconciliations() app.ReconciliationRepo {
 	return reconciliationRepo{repos: r}
 }
+func (r *repos) Securities() app.SecurityRepo { return securityRepo{repos: r} }
 
 func (r *repos) writable() error {
 	if r.readOnly {

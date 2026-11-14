@@ -209,6 +209,45 @@ type SavedReport struct {
 	UpdatedAt string
 }
 
+type Security struct {
+	ID            int64
+	Name          string
+	Ticker        sql.NullString
+	Isin          sql.NullString
+	Kind          string
+	Currency      string
+	QuantityScale int64
+	CreatedAt     string
+	UpdatedAt     string
+}
+
+type SecurityOp struct {
+	ID                int64
+	Date              string
+	AccountID         int64
+	SecurityID        int64
+	Kind              string
+	QuantityUnits     int64
+	QuantityScale     int64
+	UnitPriceMinor    int64
+	UnitPriceCurrency string
+	FeesMinor         int64
+	FeesCurrency      string
+	CashTxID          sql.NullInt64
+	CreatedAt         string
+	UpdatedAt         string
+}
+
+type SecurityPrice struct {
+	ID         int64
+	SecurityID int64
+	Date       string
+	PriceMinor int64
+	Currency   string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
 type Tag struct {
 	ID        int64
 	Name      string

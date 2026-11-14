@@ -350,3 +350,27 @@ type ReconciliationRepo interface {
 	// LastClosed returns the most recent closed reconciliation of account.
 	LastClosed(ctx context.Context, accountID domain.AccountID) (Reconciliation, error)
 }
+
+// SecurityRepo stores securities, their manual prices, and operations.
+type SecurityRepo interface {
+	Insert(ctx context.Context, s domain.Security) (domain.Security, error)
+	Update(ctx context.Context, s domain.Security) error
+	Delete(ctx context.Context, id domain.SecurityID) error
+	Get(ctx context.Context, id domain.SecurityID) (domain.Security, error)
+	// List returns every security ordered by ID.
+	List(ctx context.Context) ([]domain.Security, error)
+	// UpsertPrice stores p, replacing the price of the same security and date.
+	UpsertPrice(ctx context.Context, p domain.SecurityPrice) error
+	DeletePrice(ctx context.Context, securityID domain.SecurityID, date domain.Date) error
+	// ListPrices returns the prices of security ordered by date.
+	ListPrices(ctx context.Context, securityID domain.SecurityID) ([]domain.SecurityPrice, error)
+	// PriceOnOrBefore returns the latest price of security dated on or before date, or ErrNotFound.
+	PriceOnOrBefore(ctx context.Context, securityID domain.SecurityID, date domain.Date) (domain.SecurityPrice, error)
+	InsertOp(ctx context.Context, op domain.SecurityOp) (domain.SecurityOp, error)
+	UpdateOp(ctx context.Context, op domain.SecurityOp) error
+	DeleteOp(ctx context.Context, id domain.SecurityOpID) error
+	GetOp(ctx context.Context, id domain.SecurityOpID) (domain.SecurityOp, error)
+	// ListOpsBySecurity returns operations of security in [from,to], ordered by date then ID.
+	// A zero from or to means unbounded on that side.
+	ListOpsBySecurity(ctx context.Context, securityID domain.SecurityID, from, to domain.Date) ([]domain.SecurityOp, error)
+}
