@@ -1,9 +1,14 @@
 package cli_test
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/0xballo/fui/internal/app/assetting"
+	"github.com/0xballo/fui/internal/app/investing"
+	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/module"
 )
 
@@ -90,5 +95,77 @@ func TestKPINetWorthIncludesLoanDebtWhenLoansEnabled(t *testing.T) {
 	out, _ := h.mustRun("kpi", "networth", "--json")
 	if !strings.Contains(out, `"total":70000`) {
 		t.Fatalf("stdout = %q, want total 70000 with loan debt included", out)
+	}
+}
+
+func TestKPINetWorthIncludesPositionsAndAssetsComponents(t *testing.T) {
+	h := newHarness(t)
+	enableModules(t, h, module.Investments, module.Crypto, module.Assets)
+	h.account("Broker", "investment", "EUR", "0")
+	h.account("Cash", "checking", "EUR", "1000")
+
+	inv := newInvestingService(t, h, investingModules(t, true))
+	ctx := context.Background()
+	secPlan, err := inv.PlanAddSecurity(ctx, investing.AddSecurityRequest{
+		Name: "VWCE ETF", Kind: "etf", Ticker: "VWCE", Currency: "EUR",
+	})
+	if err != nil {
+		t.Fatalf("PlanAddSecurity: %v", err)
+	}
+	if _, err := inv.ApplyAddSecurity(ctx, secPlan); err != nil {
+		t.Fatalf("ApplyAddSecurity: %v", err)
+	}
+	pricePlan, err := inv.PlanSetPrice(ctx, investing.SetPriceRequest{Security: "VWCE", Date: "2026-03-01", Price: "50"})
+	if err != nil {
+		t.Fatalf("PlanSetPrice: %v", err)
+	}
+	if err := inv.ApplySetPrice(ctx, pricePlan); err != nil {
+		t.Fatalf("ApplySetPrice: %v", err)
+	}
+	buyPlan, err := inv.PlanBuy(ctx, investing.OpRequest{
+		Kind: domain.OpBuy, Account: "Broker", Security: "VWCE", Date: "2026-03-01", Quantity: "10", Price: "40", Fees: "0",
+	})
+	if err != nil {
+		t.Fatalf("PlanBuy: %v", err)
+	}
+	if _, err := inv.ApplyOp(ctx, buyPlan); err != nil {
+		t.Fatalf("ApplyOp buy: %v", err)
+	}
+
+	enabled, err := h.cfg.ModulesEnabled()
+	if err != nil {
+		t.Fatalf("ModulesEnabled: %v", err)
+	}
+	assetSvc := assetting.New(h.store, fixedClock{time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)}, h.backup, assetting.Config{
+		Locale: "en-US", Location: time.UTC, BaseCurrency: currency(t, "EUR"),
+	})
+	addPlan, err := assetSvc.PlanAdd(ctx, enabled, assetting.AddRequest{
+		Name: "House", Kind: "property", Value: "200000", PurchaseDate: "2026-01-01",
+	})
+	if err != nil {
+		t.Fatalf("PlanAdd asset: %v", err)
+	}
+	if _, err := assetSvc.ApplyAdd(ctx, addPlan); err != nil {
+		t.Fatalf("ApplyAdd asset: %v", err)
+	}
+	valPlan, err := assetSvc.PlanValue(ctx, enabled, assetting.ValueRequest{
+		Asset: "House", Date: "2026-03-01", Value: "210000",
+	})
+	if err != nil {
+		t.Fatalf("PlanValue asset: %v", err)
+	}
+	if err := assetSvc.ApplyValue(ctx, valPlan); err != nil {
+		t.Fatalf("ApplyValue asset: %v", err)
+	}
+
+	out, _ := h.mustRun("kpi", "networth", "--at", "2026-03-01", "--json")
+	if !strings.Contains(out, `"positions":{"minor":50000,"currency":"EUR"}`) {
+		t.Fatalf("stdout = %q, want positions component", out)
+	}
+	if !strings.Contains(out, `"assets":{"minor":21000000,"currency":"EUR"}`) {
+		t.Fatalf("stdout = %q, want assets component", out)
+	}
+	if !strings.Contains(out, `"total":21150000`) {
+		t.Fatalf("stdout = %q, want total 21150000 with positions and assets", out)
 	}
 }

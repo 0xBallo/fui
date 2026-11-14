@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 
 	"github.com/0xballo/fui/internal/app"
-	"github.com/0xballo/fui/internal/cli/render"
+	"github.com/0xballo/fui/internal/app/reporting"
+	"github.com/0xballo/fui/internal/domain"
 )
 
 // newKPINetWorthCmd computes UC-04's net worth: every account balance converted to the base
@@ -34,5 +37,40 @@ func runKPINetWorth(cmd *cobra.Command, deps *Deps) error {
 	if err != nil {
 		return err
 	}
-	return render.WriteNetWorth(deps.Stdout, rt.format, deps.Locale(), rt.color, nw)
+	point, err := netWorthPoint(cmd, deps, at)
+	if err != nil {
+		return err
+	}
+	return writeKPINetWorth(deps.Stdout, rt.format, deps.Locale(), rt.color, nw, point)
+}
+
+func netWorthPoint(cmd *cobra.Command, deps *Deps, at string) (reporting.NetWorthPoint, error) {
+	analytics, err := requireAnalytics(deps)
+	if err != nil {
+		return reporting.NetWorthPoint{}, err
+	}
+	asOf := at
+	if asOf == "" {
+		point, err := analytics.NetWorthAt(cmd.Context(), domain.Date{})
+		if err != nil {
+			return reporting.NetWorthPoint{}, err
+		}
+		asOf = point.Date
+	}
+	date, err := domain.ParseDate(asOf)
+	if err != nil {
+		return reporting.NetWorthPoint{}, err
+	}
+	period, err := domain.NewPeriod(date, date)
+	if err != nil {
+		return reporting.NetWorthPoint{}, err
+	}
+	series, err := analytics.NetWorthReport(cmd.Context(), reporting.ReportRequest{Period: period})
+	if err != nil {
+		return reporting.NetWorthPoint{}, err
+	}
+	if len(series.Points) != 1 {
+		return reporting.NetWorthPoint{}, fmt.Errorf("net worth report at %s: expected one point, got %d", date, len(series.Points))
+	}
+	return series.Points[0], nil
 }
