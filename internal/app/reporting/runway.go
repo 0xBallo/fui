@@ -10,7 +10,20 @@ import (
 
 // Runway computes the runway KPI.
 type Runway struct {
-	deps dependencies
+	deps      dependencies
+	positions PositionsValuer
+}
+
+// PositionsValuer values the security positions at a date in the base currency.
+type PositionsValuer interface {
+	// PositionsValue returns the market value of the priced positions at date.
+	PositionsValue(ctx context.Context, at domain.Date) (domain.Money, error)
+}
+
+// WithPositions returns a Runway able to honour RunwayParams.IncludeInvestments.
+func (useCase Runway) WithPositions(valuer PositionsValuer) Runway {
+	useCase.positions = valuer
+	return useCase
 }
 
 // NewRunway creates a Runway use case.
@@ -28,6 +41,8 @@ type RunwayParams struct {
 	MonthStartDay int
 	AccountIDs    []domain.AccountID
 	BaseCurrency  domain.Currency
+	// IncludeInvestments adds the positions value to the liquidity; it requires WithPositions.
+	IncludeInvestments bool
 }
 
 // RunwayResult is the structured runway KPI.
@@ -55,6 +70,10 @@ func (useCase Runway) Run(ctx context.Context, params RunwayParams) (RunwayResul
 	if err != nil {
 		return RunwayResult{}, err
 	}
+	balances, err = useCase.withPositions(ctx, asOf, params, balances)
+	if err != nil {
+		return RunwayResult{}, err
+	}
 	missing := mergeMissingRates(missingFromBalances, missingFromMovements)
 	if len(missing) > 0 {
 		return RunwayResult{}, missingRates(missing)
@@ -72,6 +91,21 @@ func (useCase Runway) Run(ctx context.Context, params RunwayParams) (RunwayResul
 		Days:                     computed.Days,
 		ZeroDate:                 computed.ZeroDate,
 	}, nil
+}
+
+func (useCase Runway) withPositions(ctx context.Context, asOf domain.Date, params RunwayParams, balances []domain.RunwayBalance) ([]domain.RunwayBalance, error) {
+	if !params.IncludeInvestments {
+		return balances, nil
+	}
+	if useCase.positions == nil {
+		return nil, fmt.Errorf("missing positions valuer: %w", domain.ErrMissingField)
+	}
+	value, err := useCase.positions.PositionsValue(ctx, asOf)
+	if err != nil {
+		return nil, fmt.Errorf("positions value: %w", err)
+	}
+	// Positions are liquid assets for the KPI, so they count like a savings balance.
+	return append(balances, domain.RunwayBalance{Kind: domain.AccountSavings, Balance: value}), nil
 }
 
 func (useCase Runway) resolveAsOf(asOf domain.Date) (domain.Date, error) {
