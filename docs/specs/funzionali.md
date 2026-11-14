@@ -122,15 +122,20 @@ Il binario si chiama `fui`: senza argomenti apre la TUI, con un sottocomando ese
 | `fui budget set / list / status / assign / move` | Imposta e controlla i budget; con le buste assegna e sposta importi | `fui budget set Spesa 400 --month 2026-11` |
 | `fui recurring add / list / run / skip / confirm` | Gestisce le ricorrenze | `fui recurring run --until today` |
 | `fui loan add / show / schedule / event` | Gestisce mutui e prestiti, i piani di ammortamento e i loro eventi | `fui loan event Mutuo --rate 3,15 --from 2027-01-01` |
+| `fui security add / list / price` | Gestisce titoli e cripto e i loro prezzi manuali (moduli investments, crypto) | `fui security add 'VWCE ETF' --kind etf --ticker VWCE --currency EUR` |
+| `fui invest buy / sell / dividend` | Registra acquisti, vendite e dividendi, con liquidità collegata opzionale | `fui invest buy VWCE --account Broker --quantity 10 --price 100` |
+| `fui position list` | Mostra le posizioni calcolate (costo medio ponderato, valore, utile) | `fui position list --date 2026-03-31 --json` |
+| `fui undo` | Annulla l'ultima scrittura su transazioni (add, edit, rm, transfer, split); mostra sempre l'anteprima | `fui undo --yes` |
 | `fui asset add / list / value` | Gestisce i beni e le loro valutazioni | `fui asset value Casa 320000 --date 2026-12-31` |
 | `fui rule add / list / test / apply` | Gestisce le regole di categorizzazione | `fui rule test "AMAZON"` |
 | `fui connector list / show / test` | Elenca i connettori installati, ne mostra i parametri e ne prova l'output senza importare | `fui connector test fineco-pdf estratto.pdf` |
 | `fui import` | Importa movimenti tramite un connettore | `fui import ott.csv --connector csv --profile fineco --dry-run` |
 | `fui export` | Esporta transazioni in CSV, JSON o formato FUI, oppure l'intero archivio | `fui export --format json --all` |
 | `fui report run / save / list` | Esegue un report predefinito o salvato, ne salva uno nuovo | `fui report run categories --month 2026-10` |
-| `fui insights` | Mostra le segnalazioni delle analisi automatiche | `fui insights --json` |
+| `fui insights` | Mostra le segnalazioni delle analisi automatiche; `--dismiss KEY` le nasconde, `--accept KEY` trasforma un abbonamento in ricorrenza | `fui insights --json` |
+| `fui report compare` | Confronta la spesa di due periodi per categoria | `fui report compare --a last-month --b this-month --by category` |
 | `fui forecast` | Mostra la previsione del flusso di cassa | `fui forecast --horizon 12m` |
-| `fui kpi` | Mostra i KPI, a partire dall'autonomia | `fui kpi runway --json` |
+| `fui kpi runway / networth` | Mostra l'autonomia (con `--include-investments`) e il patrimonio netto con le sue componenti | `fui kpi networth --json` |
 | `fui simulate investment / pac / cashflow / save / list / compare` | Calcola, salva e confronta scenari ipotetici senza toccare i dati | `fui simulate pac --monthly 200 --years 20 --rate 4,5` |
 | `fui reconcile` | Riconcilia un conto con un saldo noto | `fui reconcile Fineco --balance 2340,18 --date 2026-10-31` |
 | `fui backup / restore` | Copia e ripristina l'archivio | `fui backup` |
