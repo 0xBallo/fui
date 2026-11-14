@@ -435,6 +435,16 @@ func (s *Service) PlanEditTx(ctx context.Context, req EditTxRequest) (EditTxPlan
 		if err != nil {
 			return err
 		}
+		if edited.Amount != cur.Amount {
+			rows, err := r.Splits().SplitsOf(ctx, cur.ID)
+			if err != nil {
+				return fmt.Errorf("get splits of %d: %w", cur.ID, err)
+			}
+			if len(rows) > 0 {
+				return newError(domain.ErrInvalidValue, map[string]any{"field": "amount", "reason": "split"},
+					"transaction %d is split: unsplit it before changing the amount", cur.ID)
+			}
+		}
 		v := newViewer(accts, cats).view(edited)
 		out = EditTxPlan{Plan: Plan{Changes: []Change{txChange(OpUpdate, edited, v.Account, v.Category)}}, Tx: edited}
 		return nil

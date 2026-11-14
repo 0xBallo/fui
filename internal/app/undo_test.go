@@ -249,7 +249,17 @@ func TestUndoRandomSequences(t *testing.T) {
 			case k == 0 || len(ids) == 0:
 				ids = append(ids, e.tx(rt, app.AddTxRequest{Account: "A", Amount: amt, Date: "2026-10-01", Category: "C1"}).ID)
 			case k == 1:
-				e.edit(rt, rapid.SampledFrom(ids).Draw(rt, "id"), app.EditTxRequest{Description: &amt, Category: ptr("C2")}) // not the amount: edit leaves split rows stale, which undo cannot restore
+				id := rapid.SampledFrom(ids).Draw(rt, "id")
+				p, err := e.svc.PlanEditTx(ctx, app.EditTxRequest{ID: id, Amount: &amt, Category: ptr("C2")})
+				if errors.Is(err, domain.ErrInvalidValue) { // split transaction: amount is locked
+					continue
+				}
+				if err != nil {
+					rt.Fatalf("PlanEditTx: %v", err)
+				}
+				if _, err := e.svc.ApplyEditTx(ctx, p); err != nil {
+					rt.Fatalf("ApplyEditTx: %v", err)
+				}
 			case k == 2:
 				e.transfer(rt, app.TransferRequest{From: "A", To: "B", Amount: amt[1:], Date: "2026-10-02"})
 			case k == 3:
@@ -286,4 +296,25 @@ func TestUndoRandomSequences(t *testing.T) {
 			rt.Fatalf("final PlanUndo err = %v, want not_found", err)
 		}
 	})
+}
+
+func TestEditAmountOfSplitTxRejected(t *testing.T) {
+	e, tx := splitEnv(t)
+	ctx := t.Context()
+	sp, err := e.svc.PlanSplitTx(ctx, app.SplitTxRequest{ID: tx.ID, Rows: []app.SplitRowRequest{
+		{Category: "Groceries", Amount: "-20"}, {Category: "Household", Amount: "-10"},
+	}})
+	wantNoErr(t, err)
+	wantNoErr(t, e.svc.ApplySplitTx(ctx, sp))
+
+	_, err = e.svc.PlanEditTx(ctx, app.EditTxRequest{ID: tx.ID, Amount: ptr("-40")})
+	wantCode(t, err, domain.ErrInvalidValue)
+	// Same amount and other fields stay editable, and undoing that edit works on a split tx.
+	e.edit(t, tx.ID, app.EditTxRequest{Amount: ptr("-30"), Notes: ptr("x")})
+	before := e.state(t)
+	e.edit(t, tx.ID, app.EditTxRequest{Description: ptr("d")})
+	e.undo(t)
+	if got := e.state(t); got != before {
+		t.Fatalf("undo edit of split tx:\n%s\nwant\n%s", got, before)
+	}
 }
