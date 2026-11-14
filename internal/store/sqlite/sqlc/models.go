@@ -176,6 +176,14 @@ type LoanSchedule struct {
 	UpdatedAt       string
 }
 
+type OpLog struct {
+	ID        int64
+	Kind      string
+	Payload   string
+	CreatedAt string
+	UndoneAt  sql.NullString
+}
+
 type Payee struct {
 	ID        int64
 	Name      string

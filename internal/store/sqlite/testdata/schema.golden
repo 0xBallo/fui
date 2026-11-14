@@ -212,6 +212,13 @@ table|loans|loans|CREATE TABLE loans (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 , name TEXT NOT NULL DEFAULT '', liability_account_id INTEGER REFERENCES accounts (id) ON DELETE RESTRICT) STRICT
+table|op_log|op_log|CREATE TABLE op_log (
+    id INTEGER PRIMARY KEY,
+    kind TEXT NOT NULL,
+    payload TEXT NOT NULL CHECK (json_valid(payload)),
+    created_at TEXT NOT NULL,
+    undone_at TEXT
+) STRICT
 table|payee_aliases|payee_aliases|CREATE TABLE payee_aliases (
     id INTEGER PRIMARY KEY,
     payee_id INTEGER NOT NULL REFERENCES payees (id) ON DELETE CASCADE,

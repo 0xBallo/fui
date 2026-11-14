@@ -61,6 +61,7 @@ type state struct {
 	Securities       map[domain.SecurityID]domain.Security
 	SecPrices        map[secPriceKey]domain.SecurityPrice
 	SecOps           map[domain.SecurityOpID]domain.SecurityOp
+	OpLog            []app.OpEntry
 	LastID           map[string]int64
 }
 
@@ -128,6 +129,7 @@ func (s *state) clone() *state {
 		Securities:       maps.Clone(s.Securities),
 		SecPrices:        maps.Clone(s.SecPrices),
 		SecOps:           maps.Clone(s.SecOps),
+		OpLog:            slices.Clone(s.OpLog),
 	}
 }
 
@@ -212,6 +214,7 @@ func (r *repos) Reconciliations() app.ReconciliationRepo {
 
 func (r *repos) Assets() app.AssetRepo        { return assets{r} }
 func (r *repos) Securities() app.SecurityRepo { return securities{r} }
+func (r *repos) OpLog() app.OpLogRepo         { return opLog{r} }
 
 func (r *repos) writable() error {
 	if r.readOnly {

@@ -426,3 +426,11 @@ CREATE TABLE asset_valuations (
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     UNIQUE (asset_id, date)
 ) STRICT;
+
+CREATE TABLE op_log (
+    id INTEGER PRIMARY KEY,
+    kind TEXT NOT NULL,
+    payload TEXT NOT NULL CHECK (json_valid(payload)),
+    created_at TEXT NOT NULL,
+    undone_at TEXT
+) STRICT;
