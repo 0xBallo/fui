@@ -11,6 +11,7 @@ import (
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 	"github.com/0xballo/fui/pkg/fuiproto"
 )
 
@@ -301,6 +302,81 @@ func TestPlanAndApplySplitRows(t *testing.T) {
 		}
 		if len(splits) != 2 || splits[0].Note != "food" || splits[1].Note != "home" {
 			t.Fatalf("splits = %+v", splits)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPlanSecurityOpsModuleGate(t *testing.T) {
+	e := newEnv(nil)
+	src := stream("fui", "", account("r1", "Broker", "EUR"),
+		txRec("r1", "cash-1", "2026-10-01", -100, "buy cash leg"),
+		fuiproto.Record{Type: fuiproto.RecordTypeSecurityOp, SecurityOp: &fuiproto.SecurityOpRecord{
+			Account:   "r1",
+			Date:      "2026-10-01",
+			Kind:      fuiproto.SecurityOpKindBuy,
+			Quantity:  1000000,
+			UnitPrice: 100,
+			Fees:      0,
+			CashTx:    "cash-1",
+			Security: fuiproto.SecurityMeta{
+				Name: "World ETF", Ticker: "VWCE", Kind: fuiproto.SecurityKindETF, Currency: "EUR", QuantityScale: 6,
+			},
+		}},
+	)
+	plan := e.plan(t, src, createAccounts)
+	if len(plan.SecurityOps) != 0 {
+		t.Fatalf("security ops = %+v, want none when investments is off", plan.SecurityOps)
+	}
+	if len(plan.Warnings) != 1 || plan.Warnings[0].Line == 0 {
+		t.Fatalf("warnings = %+v, want one line warning", plan.Warnings)
+	}
+}
+
+func TestPlanAndApplySecurityOps(t *testing.T) {
+	e := newEnv(nil)
+	investments := must(module.Validate([]module.ID{module.Core, module.Investments}))
+	src := stream("fui", "", account("r1", "Broker", "EUR"),
+		txRec("r1", "cash-1", "2026-10-01", -100, "buy cash leg", kind(fuiproto.TransactionKindInvestment)),
+		fuiproto.Record{Type: fuiproto.RecordTypeSecurityOp, SecurityOp: &fuiproto.SecurityOpRecord{
+			Account:   "r1",
+			Date:      "2026-10-01",
+			Kind:      fuiproto.SecurityOpKindBuy,
+			Quantity:  1000000,
+			UnitPrice: 100,
+			Fees:      1,
+			CashTx:    "cash-1",
+			Security: fuiproto.SecurityMeta{
+				Name: "World ETF", Ticker: "VWCE", Kind: fuiproto.SecurityKindETF, Currency: "EUR", QuantityScale: 6,
+			},
+		}},
+	)
+	plan := e.plan(t, src, createAccounts, withModules(investments))
+	if len(plan.NewSecurities) != 1 || len(plan.SecurityOps) != 1 || !plan.SecurityOps[0].Include {
+		t.Fatalf("plan securities=%+v ops=%+v", plan.NewSecurities, plan.SecurityOps)
+	}
+	res := must(e.svc.ApplyImport(context.Background(), plan))
+	if res.Transactions != 1 || res.Securities != 1 || res.SecurityOps != 1 {
+		t.Fatalf("result = %+v", res)
+	}
+
+	err := e.store.Read(context.Background(), func(r app.Repos) error {
+		secs, err := r.Securities().List(context.Background())
+		if err != nil {
+			return err
+		}
+		if len(secs) != 1 || secs[0].Ticker != "VWCE" {
+			t.Fatalf("securities = %+v", secs)
+		}
+		ops, err := r.Securities().ListOpsBySecurity(context.Background(), secs[0].ID, domain.Date{}, domain.Date{})
+		if err != nil {
+			return err
+		}
+		if len(ops) != 1 || ops[0].CashTx == 0 {
+			t.Fatalf("security ops = %+v", ops)
 		}
 		return nil
 	})

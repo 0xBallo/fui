@@ -69,6 +69,18 @@ func seedExport(t *testing.T) env {
 		}); err != nil {
 			return err
 		}
+		sec, err := r.Securities().Insert(context.Background(), domain.Security{
+			Name: "World ETF", Ticker: "VWCE", Kind: domain.SecurityETF, Currency: eur(), QuantityScale: 6,
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := r.Securities().InsertOp(context.Background(), domain.SecurityOp{
+			Date: date("2026-10-04"), Account: a.ID, Security: sec.ID, Kind: domain.OpBuy,
+			Quantity: must(domain.NewQuantity(1000000, 6)), UnitPrice: money(100), Fees: money(1), CashTx: firstID,
+		}); err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
@@ -142,6 +154,7 @@ func TestExportFUIIsAValidStream(t *testing.T) {
 		t.Fatalf("export is not a valid stream: %v %+v", err, res.RowErrors)
 	}
 	var txs []*fuiproto.TransactionRecord
+	var secOps []*fuiproto.SecurityOpRecord
 	balances := map[string]int64{}
 	for _, r := range res.Records {
 		switch {
@@ -151,6 +164,8 @@ func TestExportFUIIsAValidStream(t *testing.T) {
 			txs = append(txs, r.Transaction)
 		case r.Balance != nil:
 			balances[r.Balance.Account] = r.Balance.Amount
+		case r.SecurityOp != nil:
+			secOps = append(secOps, r.SecurityOp)
 		}
 	}
 	if n != 4 || len(txs) != 4 || res.End.Transactions != 4 {
@@ -171,6 +186,9 @@ func TestExportFUIIsAValidStream(t *testing.T) {
 	}
 	if balances["Main, the \"first\""] != -1250-1100+500 || balances["Savings"] != 1000 {
 		t.Fatalf("balances = %v", balances)
+	}
+	if len(secOps) != 1 || secOps[0].CashTx != "bank-1" || secOps[0].Security.Ticker != "VWCE" {
+		t.Fatalf("security ops = %+v", secOps)
 	}
 }
 

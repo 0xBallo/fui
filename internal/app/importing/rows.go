@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 	"github.com/0xballo/fui/pkg/fuiproto"
 )
 
@@ -57,7 +58,185 @@ func (b *builder) addRow(ctx context.Context, rec *fuiproto.TransactionRecord) e
 	b.noteTags(&row)
 	b.ibans[len(b.plan.Rows)] = rec.CounterpartyIBAN
 	b.plan.Rows = append(b.plan.Rows, row)
+	if rec.ID != "" {
+		if _, seen := b.txIndex[rec.ID]; !seen {
+			b.txIndex[rec.ID] = len(b.plan.Rows) - 1
+		}
+	}
 	return nil
+}
+
+func (b *builder) addSecurityOp(_ context.Context, rec *fuiproto.SecurityOpRecord) error {
+	line := b.st.sec[rec]
+	if !b.req.Modules.Has(module.Investments) {
+		b.warn(line, "security_op ignored because module investments is disabled")
+		return nil
+	}
+
+	info, ok := b.securityOpAccount(rec.Account, line)
+	if !ok {
+		return nil
+	}
+
+	sec, err := parseSecurity(rec.Security)
+	if err != nil {
+		b.err(line, "security: %v", err)
+		return nil
+	}
+	sec = b.resolveSecurity(sec)
+
+	op, err := parseSecurityOp(rec, info.id, sec)
+	if err != nil {
+		b.err(line, "security_op: %v", err)
+		return nil
+	}
+
+	b.plan.SecurityOps = append(b.plan.SecurityOps, SecurityOpPlanRow{
+		Line:       line,
+		AccountRef: rec.Account,
+		Security:   sec,
+		Op:         op,
+		CashTx:     rec.CashTx,
+		Include:    b.includeSecurityOp(line, rec.CashTx, op),
+	})
+	return nil
+}
+
+func (b *builder) includeSecurityOp(line int, cashTx string, op domain.SecurityOp) bool {
+	if cashTx != "" {
+		i, ok := b.txIndex[cashTx]
+		if !ok || !b.plan.Rows[i].Include {
+			b.warn(line, "security_op skipped because cash_tx %q is not imported", cashTx)
+			return false
+		}
+		return true
+	}
+	key := securityOpKey(op, "")
+	if b.existingOps[key] {
+		b.warn(line, "security_op skipped because it already exists")
+		return false
+	}
+	b.existingOps[key] = true
+	return true
+}
+
+func (b *builder) securityOpAccount(ref string, line int) (*acctInfo, bool) {
+	info := b.accts[ref]
+	if info == nil {
+		b.err(line, "unknown account ref %q", ref)
+		return nil, false
+	}
+	if !info.resolved() {
+		b.warn(line, "security_op ignored because account %q is unresolved", ref)
+		return nil, false
+	}
+	return info, true
+}
+
+func (b *builder) warn(line int, format string, args ...any) {
+	b.plan.Warnings = append(b.plan.Warnings, RowWarning{Line: line, Message: fmt.Sprintf(format, args...)})
+}
+
+func (b *builder) err(line int, format string, args ...any) {
+	b.plan.Errors = append(b.plan.Errors, RowError{Line: line, Message: fmt.Sprintf(format, args...)})
+}
+
+func securityKeys(sec domain.Security) []string {
+	keys := []string{
+		"n:" + strings.ToLower(sec.Name) + "|" + string(sec.Kind) + "|" + sec.Currency.Code() + "|" + fmt.Sprintf("%d", sec.QuantityScale),
+	}
+	if sec.ISIN != "" {
+		keys = append(keys, "i:"+sec.ISIN)
+	}
+	if sec.Ticker != "" {
+		keys = append(keys, "t:"+sec.Ticker)
+	}
+	return keys
+}
+
+func (b *builder) noteSecurity(sec domain.Security) {
+	for _, key := range securityKeys(sec) {
+		if _, ok := b.secs[key]; !ok {
+			b.secs[key] = sec
+		}
+	}
+}
+
+func (b *builder) resolveSecurity(sec domain.Security) domain.Security {
+	for _, key := range securityKeys(sec) {
+		if existing, ok := b.secs[key]; ok {
+			return existing
+		}
+	}
+	b.pseudo--
+	sec.ID = domain.SecurityID(b.pseudo)
+	b.plan.NewSecurities = append(b.plan.NewSecurities, sec)
+	b.noteSecurity(sec)
+	return sec
+}
+
+func parseSecurity(meta fuiproto.SecurityMeta) (domain.Security, error) {
+	cur, err := domain.ParseCurrency(meta.Currency)
+	if err != nil {
+		return domain.Security{}, fmt.Errorf("currency: %w", err)
+	}
+	kind, err := domain.ParseSecurityKind(string(meta.Kind))
+	if err != nil {
+		return domain.Security{}, fmt.Errorf("kind: %w", err)
+	}
+	sec, err := domain.NewSecurity(domain.Security{
+		Name:          meta.Name,
+		Ticker:        meta.Ticker,
+		ISIN:          meta.ISIN,
+		Kind:          kind,
+		Currency:      cur,
+		QuantityScale: meta.QuantityScale,
+	})
+	if err != nil {
+		return domain.Security{}, err
+	}
+	return sec, nil
+}
+
+func parseSecurityOp(rec *fuiproto.SecurityOpRecord, accountID domain.AccountID, sec domain.Security) (domain.SecurityOp, error) {
+	date, err := domain.ParseDate(rec.Date)
+	if err != nil {
+		return domain.SecurityOp{}, fmt.Errorf("date: %w", err)
+	}
+	kind, err := domain.ParseSecurityOpKind(string(rec.Kind))
+	if err != nil {
+		return domain.SecurityOp{}, fmt.Errorf("kind: %w", err)
+	}
+	qty, err := domain.NewQuantity(rec.Quantity, sec.QuantityScale)
+	if err != nil {
+		return domain.SecurityOp{}, fmt.Errorf("quantity: %w", err)
+	}
+	price, err := domain.NewMoney(rec.UnitPrice, sec.Currency)
+	if err != nil {
+		return domain.SecurityOp{}, fmt.Errorf("unit price: %w", err)
+	}
+	fees, err := domain.NewMoney(rec.Fees, sec.Currency)
+	if err != nil {
+		return domain.SecurityOp{}, fmt.Errorf("fees: %w", err)
+	}
+	op, err := domain.NewSecurityOp(domain.SecurityOp{
+		Date:      date,
+		Account:   accountID,
+		Security:  sec.ID,
+		Kind:      kind,
+		Quantity:  qty,
+		UnitPrice: price,
+		Fees:      fees,
+	})
+	if err != nil {
+		return domain.SecurityOp{}, err
+	}
+	return op, nil
+}
+
+func securityOpKey(op domain.SecurityOp, cashRef string) string {
+	return fmt.Sprintf("%d|%d|%s|%s|%d|%d|%d|%s",
+		op.Account, op.Security, op.Date, op.Kind, op.Quantity.Units(), op.UnitPrice.Minor(), op.Fees.Minor(), cashRef)
 }
 
 func convert(rec *fuiproto.TransactionRecord, info *acctInfo) (domain.Transaction, error) {

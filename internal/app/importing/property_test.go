@@ -13,6 +13,7 @@ import (
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 	"github.com/0xballo/fui/pkg/fuiproto"
 )
 
@@ -166,12 +167,33 @@ func TestPropertyFUIExportRoundTrips(t *testing.T) {
 		src, _ := drawStream(t, true)
 		a := newEnv(nil)
 		a.importAll(t, src)
+		investments := must(module.Validate([]module.ID{module.Core, module.Investments}))
+		err := a.store.WithTx(context.Background(), func(r app.Repos) error {
+			accts := must(r.Accounts().List(context.Background()))
+			if len(accts) == 0 {
+				return nil
+			}
+			sec, err := r.Securities().Insert(context.Background(), domain.Security{
+				Name: "World ETF", Ticker: "VWCE", Kind: domain.SecurityETF, Currency: eur(), QuantityScale: 6,
+			})
+			if err != nil {
+				return err
+			}
+			_, err = r.Securities().InsertOp(context.Background(), domain.SecurityOp{
+				Account: accts[0].ID, Security: sec.ID, Date: date("2026-11-01"),
+				Kind: domain.OpBuy, Quantity: must(domain.NewQuantity(1000000, 6)), UnitPrice: money(100), Fees: money(1),
+			})
+			return err
+		})
+		if err != nil {
+			t.Fatalf("seed security op: %v", err)
+		}
 		var buf bytes.Buffer
 		n := must(a.svc.Export(context.Background(), importing.ExportRequest{Format: importing.FormatFUI, Filter: domain.TxFilter{}}, &buf))
 
 		b := newEnv(nil)
 		file := fuiSource(t, buf.Bytes())
-		res := must(b.svc.ApplyImport(context.Background(), b.plan(t, file, createAccounts)))
+		res := must(b.svc.ApplyImport(context.Background(), b.plan(t, file, createAccounts, withModules(investments))))
 		if res.Transactions != n {
 			t.Fatalf("reimported %d of %d exported transactions", res.Transactions, n)
 		}
@@ -179,9 +201,9 @@ func TestPropertyFUIExportRoundTrips(t *testing.T) {
 			t.Fatalf("round trip differs\n got: %q\nwant: %q", got, want)
 		}
 		// The same file into the archive it came from creates nothing.
-		again := must(a.svc.ApplyImport(context.Background(), a.plan(t, file)))
-		if again.Transactions != 0 {
-			t.Fatalf("reimport into the source archive created %d transactions", again.Transactions)
+		again := must(a.svc.ApplyImport(context.Background(), a.plan(t, file, withModules(investments))))
+		if again.Transactions != 0 || again.SecurityOps != 0 {
+			t.Fatalf("reimport into the source archive created tx=%d security_ops=%d", again.Transactions, again.SecurityOps)
 		}
 	})
 }
@@ -258,6 +280,19 @@ func (e env) view(t tb) []string {
 				l += " linked=" + strings.Join(sorted, " ~ ")
 			}
 			out = append(out, l)
+		}
+		securities := must(r.Securities().List(ctx))
+		secByID := map[domain.SecurityID]domain.Security{}
+		for _, sec := range securities {
+			secByID[sec.ID] = sec
+			out = append(out, fmt.Sprintf("security %q %q %q %s %s scale=%d", sec.Name, sec.Ticker, sec.ISIN, sec.Kind, sec.Currency, sec.QuantityScale))
+		}
+		for _, sec := range securities {
+			ops := must(r.Securities().ListOpsBySecurity(ctx, sec.ID, domain.Date{}, domain.Date{}))
+			for _, op := range ops {
+				out = append(out, fmt.Sprintf("security_op %s %q %s %s qty=%d@%d fees=%d cash=%s",
+					name[op.Account], secByID[op.Security].Ticker, op.Date, op.Kind, op.Quantity.Units(), op.UnitPrice.Minor(), op.Fees.Minor(), lines[op.CashTx]))
+			}
 		}
 		return nil
 	})
