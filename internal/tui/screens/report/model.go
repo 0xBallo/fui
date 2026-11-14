@@ -24,6 +24,7 @@ const (
 	modeSaveForm
 	modeExportForm
 	modeConfirmRemove
+	modeCompare
 )
 
 // reportResult is the currently displayed report: its kind, a title label, the saved report name
@@ -73,6 +74,8 @@ type Model struct {
 	fields formFields
 
 	confirm components.ConfirmDialog
+
+	cmp compareState
 }
 
 var _ screens.Screen = (*Model)(nil)
@@ -112,6 +115,8 @@ func (m *Model) SetSize(w, h int) {
 	m.table.SetWidth(w)
 	m.savedTable.SetHeight(max(3, h-10))
 	m.savedTable.SetWidth(w)
+	m.cmp.table.SetHeight(max(3, h-10))
+	m.cmp.table.SetWidth(w)
 	m.chart.SetWidth(w)
 }
 
@@ -119,11 +124,12 @@ func (m *Model) SetSize(w, h int) {
 func (m *Model) Title() string { return "Reports" }
 
 // KeyMap exposes the bindings for the global help view.
-func (m *Model) KeyMap() []key.Binding { return m.km.Bindings() }
+func (m *Model) KeyMap() []key.Binding { return append(m.km.Bindings(), m.compareBindings()...) }
 
 // InputActive reports whether a form is capturing keystrokes.
 func (m *Model) InputActive() bool {
-	return m.mode == modeParamsForm || m.mode == modeSaveForm || m.mode == modeExportForm
+	return m.mode == modeParamsForm || m.mode == modeSaveForm || m.mode == modeExportForm ||
+		(m.mode == modeCompare && m.cmp.formActive)
 }
 
 // accountsLoadedMsg carries the accounts back into Update, for the account field's suggestions
@@ -175,6 +181,9 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		m.refreshResultView()
 		m.mode = modeReport
 		return m, nil
+	case compareLoadedMsg:
+		m.applyCompare(msg.report)
+		return m, nil
 	case savedListLoadedMsg:
 		m.saved = msg.rows
 		m.refreshSavedTable()
@@ -205,6 +214,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		return m.handleFormKey(msg)
 	case modeConfirmRemove:
 		return m.handleConfirmKey(msg)
+	case modeCompare:
+		return m.handleCompareKey(msg)
 	case modeSaved:
 		return m.handleSavedKey(msg)
 	case modeReport:
@@ -233,6 +244,8 @@ func (m *Model) handleReportKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		return m, m.loadSaved()
 	case key.Matches(msg, m.km.Export):
 		m.openExportForm()
+	case m.compareEnabled() && key.Matches(msg, m.cmp.km.Open):
+		return m, m.openCompare()
 	}
 	return m, nil
 }
