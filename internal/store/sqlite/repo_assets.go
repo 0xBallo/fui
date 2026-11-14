@@ -15,7 +15,7 @@ type assetRepo struct {
 	repos *repos
 }
 
-// Assets returns the asset repository. It is not part of app.Repos until the asset use cases land.
+// Assets returns the asset repository.
 func (r *repos) Assets() app.AssetRepo { return assetRepo{repos: r} }
 
 func (r assetRepo) Insert(ctx context.Context, a domain.Asset) (domain.Asset, error) {

@@ -146,6 +146,12 @@ func (l loans) Delete(_ context.Context, id domain.LoanID) error {
 		return notFound("loan", id)
 	}
 	delete(l.st.Loans, id)
+	for aid, a := range l.st.Assets {
+		if a.LoanID == id {
+			a.LoanID = 0
+			l.st.Assets[aid] = a
+		}
+	}
 	for key := range maps.Keys(l.st.LoanSchedules) {
 		if key.loanID == id {
 			delete(l.st.LoanSchedules, key)
