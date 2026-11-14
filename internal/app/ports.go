@@ -374,3 +374,23 @@ type SecurityRepo interface {
 	// A zero from or to means unbounded on that side.
 	ListOpsBySecurity(ctx context.Context, securityID domain.SecurityID, from, to domain.Date) ([]domain.SecurityOp, error)
 }
+
+// AssetRepo stores manually valued assets and their valuation history. Asset names are unique
+// case-insensitively. A linked loan, when set, must exist; deleting the loan unlinks the asset.
+// Callers validate with domain.NewAsset and domain.NewValuation.
+type AssetRepo interface {
+	// Insert stores a and returns it with its ID assigned.
+	Insert(ctx context.Context, a domain.Asset) (domain.Asset, error)
+	Update(ctx context.Context, a domain.Asset) error
+	// Delete removes the asset and its valuations.
+	Delete(ctx context.Context, id domain.AssetID) error
+	Get(ctx context.Context, id domain.AssetID) (domain.Asset, error)
+	// List returns every asset ordered by ID.
+	List(ctx context.Context) ([]domain.Asset, error)
+	// SetValuation stores v, replacing any valuation of the same asset on the same date.
+	SetValuation(ctx context.Context, v domain.Valuation) error
+	// ListValuations returns the asset valuations ordered by date.
+	ListValuations(ctx context.Context, assetID domain.AssetID) ([]domain.Valuation, error)
+	// DeleteValuation removes the valuation on date; ErrNotFound when there is none.
+	DeleteValuation(ctx context.Context, assetID domain.AssetID, date domain.Date) error
+}

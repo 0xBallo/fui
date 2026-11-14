@@ -1,3 +1,4 @@
+index|idx_assets_loan|assets|CREATE INDEX idx_assets_loan ON assets (loan_id) WHERE loan_id IS NOT NULL
 index|idx_budget_moves_date|budget_moves|CREATE INDEX idx_budget_moves_date ON budget_moves (date, id)
 index|idx_budget_targets_budget|budget_targets|CREATE INDEX idx_budget_targets_budget ON budget_targets (budget_id, id)
 index|idx_budget_targets_category|budget_targets|CREATE UNIQUE INDEX idx_budget_targets_category ON budget_targets (category_id) WHERE category_id IS NOT NULL
@@ -59,6 +60,27 @@ table|accounts|accounts|CREATE TABLE accounts (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 , iban TEXT CHECK (iban IS NULL OR length(iban) BETWEEN 15 AND 34)) STRICT
+table|asset_valuations|asset_valuations|CREATE TABLE asset_valuations (
+    id INTEGER PRIMARY KEY,
+    asset_id INTEGER NOT NULL REFERENCES assets (id) ON DELETE CASCADE,
+    date TEXT NOT NULL CHECK (length(date) = 10),
+    value_minor INTEGER NOT NULL CHECK (value_minor >= 0),
+    currency TEXT NOT NULL CHECK (length(currency) = 3),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE (asset_id, date)
+) STRICT
+table|assets|assets|CREATE TABLE assets (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    kind TEXT NOT NULL CHECK (kind IN ('property', 'vehicle', 'other')),
+    purchase_date TEXT NOT NULL CHECK (length(purchase_date) = 10),
+    purchase_minor INTEGER NOT NULL CHECK (purchase_minor >= 0),
+    currency TEXT NOT NULL CHECK (length(currency) = 3),
+    loan_id INTEGER REFERENCES loans (id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+) STRICT
 table|budget_amounts|budget_amounts|CREATE TABLE budget_amounts (
     id INTEGER PRIMARY KEY,
     budget_id INTEGER NOT NULL REFERENCES budgets (id) ON DELETE CASCADE,
