@@ -41,12 +41,12 @@ func TestRegistryList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"csv", "fui", "revolut", "widiba"}; !slices.Equal(names(got), want) {
+	if want := []string{"camt", "csv", "fui", "ofx", "revolut", "widiba"}; !slices.Equal(names(got), want) {
 		t.Fatalf("names = %v, want %v", names(got), want)
 	}
 	for _, c := range got {
 		switch c.Name {
-		case "csv", "fui":
+		case "camt", "csv", "fui", "ofx":
 			if c.Kind != importing.ConnectorBuiltin || c.Path != "" {
 				t.Errorf("%+v", c)
 			}

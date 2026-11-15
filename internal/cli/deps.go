@@ -9,12 +9,15 @@ import (
 	"io"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/assetting"
 	"github.com/0xballo/fui/internal/app/budgeting"
 	"github.com/0xballo/fui/internal/app/importing"
+	"github.com/0xballo/fui/internal/app/investing"
 	"github.com/0xballo/fui/internal/app/lending"
 	"github.com/0xballo/fui/internal/app/recurring"
 	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/app/rules"
+	"github.com/0xballo/fui/internal/app/simulating"
 	"github.com/0xballo/fui/internal/config"
 	"github.com/0xballo/fui/internal/domain"
 )
@@ -40,6 +43,13 @@ type Deps struct {
 	// Loans runs the loan use cases: add, show, schedule, events, pending installments and
 	// their confirmation.
 	Loans *lending.Service
+	// Investing runs the security, invest and position use cases (modules investments, crypto);
+	// nil makes those commands fail cleanly.
+	Investing *investing.Service
+	// Assets runs the asset use cases (module assets).
+	Assets *assetting.Service
+	// Simulating runs the simulation use cases (module simulations).
+	Simulating *simulating.Service
 	// Config is the resolved configuration; AgentMode reflects FUI_AGENT, Locale and Currency
 	// drive parsing and formatting.
 	Config *config.Config

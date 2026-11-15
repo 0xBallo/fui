@@ -1,0 +1,65 @@
+# v0.3: investments flow (buy/sell/dividend/position), assets and net worth, simulate writes
+# nothing, insights dismiss/accept.
+exec fui init --preset full --currency EUR
+exec fui account add Broker --kind investment --currency EUR
+exec fui account add Cash --kind checking --currency EUR --opening-balance 10000
+exec fui security add 'VWCE ETF' --kind etf --ticker VWCE --currency EUR
+exec fui security list --json
+stdout '"ticker":"VWCE"'
+
+exec fui invest buy VWCE --account Broker --quantity 10 --price 100 --fees 1 --date 2026-01-02
+exec fui invest sell VWCE --account Broker --quantity 4 --price 110 --date 2026-01-10
+exec fui invest dividend VWCE --account Broker --quantity 6 --price 0,5 --cash-account Cash --date 2026-01-12
+exec fui security price VWCE 120 --date 2026-01-14
+exec fui position list --json
+stdout '"quantity":"6".*"realized":3960,"income":300.*"market_value":72000'
+exec fui position list --csv
+stdout 'VWCE'
+
+# Assets and net worth.
+exec fui asset add House --kind property --value 200000 --purchase-date 2020-01-01
+exec fui asset value House 210000 --date 2026-01-01
+exec fui asset list --json
+stdout '"name":"House"'
+exec fui kpi networth --json
+stdout '210000'
+exec fui kpi networth
+
+# Simulations never write transactions.
+exec fui tx list --json
+cp stdout txbefore.json
+exec fui simulate pac --monthly 200 --years 5 --rate 4,5 --json
+exec fui simulate save plan-a pac --monthly 100 --years 5 --rate 4
+exec fui simulate list --json
+stdout 'plan-a'
+exec fui tx list --json
+cmp stdout txbefore.json
+
+# Insights: three monthly charges of the same payee make a subscription.
+exec fui account add Checking --kind checking --currency EUR
+exec fui add -9,99 Netflix -a Checking --date 2025-11-05
+exec fui add -9,99 Netflix -a Checking --date 2025-12-05
+exec fui add -9,99 Netflix -a Checking --date 2026-01-05
+exec fui insights --json
+stdout '"kind":"subscription","key":"ca896989302d09d8"'
+exec fui insights --accept ca896989302d09d8 --dry-run --json
+exec fui insights --accept ca896989302d09d8 --yes --json
+exec fui recurring list --json
+stdout '(?i)netflix'
+exec fui add -50 Gym -a Checking --date 2025-11-07
+exec fui add -50 Gym -a Checking --date 2025-12-07
+exec fui add -50 Gym -a Checking --date 2026-01-07
+exec fui insights --json
+stdout '"label":"gym"'
+exec fui insights --dismiss 276ce7295a3e265d --yes
+exec fui insights --json
+! stdout 'gym'
+exec fui report compare --a last-month --b this-month --json
+
+# Disabling a v0.3 module hides and blocks its commands.
+exec fui module disable simulations --yes
+! exec fui simulate list
+stderr 'module_disabled|is disabled'
+exec fui module disable investments --yes
+! exec fui position list
+stderr 'module_disabled|is disabled'

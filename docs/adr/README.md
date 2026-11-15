@@ -21,3 +21,8 @@ Architectural decisions are immutable once accepted: if a decision is reconsider
 | [0011](0011-reset-via-rebuild-and-atomic-rename.md) | Archive reset by rebuild in temp file and atomic rename | Accepted | 2026-11-12 |
 | [0012](0012-catppuccin-themes-via-semantic-tokens.md) | Catppuccin-based TUI themes through semantic tokens | Accepted | 2026-11-12 |
 | [0013](0013-git-flow-with-develop-and-squash-merges.md) | Git flow with develop and squash merges | Accepted | 2026-11-13 |
+| [0014](0014-v03-commands-registered-per-module.md) | v0.3 services built in the composition root and commands gated by module | Accepted | 2026-11-15 |
+| [0015](0015-average-cost-positions.md) | Positions by weighted average cost, computed from operations | Accepted | 2026-11-15 |
+| [0016](0016-undo-scope-transaction-writes.md) | Generic undo limited to transaction writes | Accepted | 2026-11-15 |
+| [0017](0017-insights-keys-and-thresholds.md) | Insights with stable keys and integer permille thresholds | Accepted | 2026-11-15 |
+| [0018](0018-simulations-are-read-only.md) | Simulations never write transactions | Accepted | 2026-11-15 |

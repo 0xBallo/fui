@@ -7,6 +7,13 @@ All notable changes to FUI are listed here, newest first. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Built-in OFX and CAMT.053 import connectors.
+- Investments (`security`, `invest`, `position`), assets and net worth (`asset`, `kpi networth`), simulations
+  (`simulate`), automatic insights and period comparison (`insights`, `report compare`), generic `undo`.
+- TUI: positions and net worth breakdown, insights panel, period comparison and simulations views.
+
 ## [0.2.1] - 2026-11-13
 
 ### Added

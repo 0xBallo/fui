@@ -19,12 +19,15 @@ import (
 	"github.com/mattn/go-isatty"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/assetting"
 	"github.com/0xballo/fui/internal/app/budgeting"
 	"github.com/0xballo/fui/internal/app/importing"
+	"github.com/0xballo/fui/internal/app/investing"
 	"github.com/0xballo/fui/internal/app/lending"
 	"github.com/0xballo/fui/internal/app/recurring"
 	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/app/rules"
+	"github.com/0xballo/fui/internal/app/simulating"
 	"github.com/0xballo/fui/internal/cli"
 	"github.com/0xballo/fui/internal/cli/render"
 	"github.com/0xballo/fui/internal/clock"
@@ -159,6 +162,12 @@ func wireStore(ctx context.Context, cfg *config.Config, appClock app.Clock, deps
 	})
 	deps.Recurring = recurring.New(store, appClock, store, recurring.Config{Locale: domain.Locale(cfg.Locale)})
 	deps.Loans = lending.New(store, appClock, store, lending.Config{Locale: domain.Locale(cfg.Locale)})
+	loc := domain.Locale(cfg.Locale)
+	deps.Investing = investing.New(store, appClock, investing.Config{Locale: loc, BaseCurrency: baseCurrency, Modules: modules})
+	deps.Assets = assetting.New(store, appClock, store, assetting.Config{Locale: loc, BaseCurrency: baseCurrency})
+	deps.Simulating = simulating.New(store, appClock, simulating.Config{
+		Locale: loc, BaseCurrency: baseCurrency, MonthStartDay: cfg.MonthStartDay,
+	})
 	deps.RunTUI = func(ctx context.Context) error {
 		return tui.Run(ctx, newTUIUseCases(deps.Service, rep), tuiConfig(cfg, deps, store, appClock, baseCurrency))
 	}
@@ -178,6 +187,12 @@ func tuiConfig(cfg *config.Config, deps *cli.Deps, store *sqlite.Store, clk app.
 	}
 	loc := domain.Locale(cfg.Locale)
 	set := modules()
+	analytics := func() *reporting.Analytics {
+		return reporting.NewAnalytics(store, clk, store, reporting.Config{
+			Locale: loc, BaseCurrency: base, MonthStartDay: cfg.MonthStartDay,
+			HorizonDays: cfg.Forecast.Horizon, Modules: modules(),
+		})
+	}
 	return tui.Config{
 		Locale: loc, Theme: cfg.Theme, ThemeLight: cfg.ThemeLight, ThemeDark: cfg.ThemeDark,
 		MonthStartDay: cfg.MonthStartDay, Modules: set,
@@ -188,19 +203,23 @@ func tuiConfig(cfg *config.Config, deps *cli.Deps, store *sqlite.Store, clk app.
 			})
 		}},
 		Report: reportUseCases{
-			analytics: func() *reporting.Analytics {
-				return reporting.NewAnalytics(store, clk, store, reporting.Config{
-					Locale: loc, BaseCurrency: base, MonthStartDay: cfg.MonthStartDay,
-					HorizonDays: cfg.Forecast.Horizon, Modules: modules(),
-				})
-			},
-			svc: deps.Service, importing: deps.Importing,
+			analytics: analytics,
+			svc:       deps.Service, importing: deps.Importing,
 		},
 		Importer:     importUseCases{Service: deps.Importing, svc: deps.Service},
 		Settings:     deps.Service,
 		ModuleConfig: cfg,
 		ThemeConfig:  cfg,
 		Lists:        settingsLists(cfg, deps),
+		Positions: positionsUseCases{build: func() *investing.Service {
+			return investing.New(store, clk, investing.Config{Locale: loc, BaseCurrency: base, Modules: modules()})
+		}},
+		NetWorth: netWorthUseCases{analytics: analytics},
+		Compare:  compareUseCases{analytics: analytics},
+		Insights: insightUseCases{build: func() *reporting.Insights {
+			return reporting.NewInsights(analytics(), deps.Recurring, cli.InsightConfigFrom(cfg))
+		}},
+		Simulations: simUseCases{svc: deps.Simulating, modules: modules, base: base},
 	}
 }
 

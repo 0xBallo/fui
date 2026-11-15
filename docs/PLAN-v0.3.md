@@ -102,15 +102,15 @@ medium; Antigravity quota exhausted.
 | W14 App insights/compare | merged | #18 |
 | W15 App net worth/runway | merged | #23 |
 | W16 CLI security/invest/position | merged | #22 |
-| W17 CLI asset, kpi networth, runway `--include-investments` | **not started** | — |
+| W17 CLI asset, kpi networth, runway `--include-investments` | merged | #28 |
 | W18 CLI simulate | merged | #25 |
 | W19 CLI insights/compare + `insights.*` config | merged | #24 |
 | W20 CLI undo | merged | #21 |
 | W21 Proto fui/1 security ops | merged | #19 |
-| W22 TUI insights/compare | **not started** | — |
-| W23 TUI simulations | **not started** | — |
-| W24 TUI positions/net worth | **not started** | — |
-| W25 Integration | **not started** | — |
+| W22 TUI insights/compare | merged | #27 |
+| W23 TUI simulations | merged | #29 |
+| W24 TUI positions/net worth | merged | #30 |
+| W25 Integration | done on `feat/w-integration` | — |
 | Release `release/v0.3.0` | **not started** | — |
 
 Review fixes applied during the run: new-loan capital credited and simulation params bounded (W03); zero-quantity
@@ -121,10 +121,8 @@ fixes a v0.2 invariant break).
 
 ### Known gaps
 
-- **Nothing new is reachable from the `fui` binary yet**: commands from W16/W18/W19/W20 are only constructors
-  (`NewSecurityCmd`, `NewInvestCmd`, `NewPositionCmd`, `NewSimulateCmd`, `NewInsightsCmd`, `NewReportCompareCmd`,
-  `newUndoCmd`) and OFX/CAMT (`NewOFX`, `NewCAMT`) are not in `internal/connector/registry.go`; W25 must register
-  them per module, build the services in `cmd/fui`, add `help --json` schema entries/goldens and e2e testscripts.
+- Resolved by W25: the v0.3 commands, services, OFX/CAMT connectors and TUI features are composed in `cmd/fui`
+  and registered per module (ADR 0014); e2e scripts `v03_*` and the `help --json` goldens cover them.
 - `report run <saved>` does not dispatch `compare`; saved reports of kind net worth still use the old
   `Analytics.NetWorth` instead of `NetWorthReport` (W15 kept both for golden compatibility).
 - Full JSON dump (`export --all`) lacks the v0.2 entities (budgets, loans, recurrences, rules) and the v0.3 securities,
@@ -138,7 +136,7 @@ fixes a v0.2 invariant break).
   security currency; positions are per (account, security).
 - Assets: no update/delete use cases. Simulations: no per-account cash-flow scenarios.
 - CAMT error records use the entry ordinal as line; batch split only when `TxDtls` amounts sum to the entry amount.
-- Specs not yet updated for the v0.3 choices below (CLI names, undo scope, fui/1 `security_op` record): W25/docs.
+- Specs updated by W25 for the v0.3 choices (CLI names, undo scope in ADR 0016, fui/1 `security_op` record).
 
 ### Open points (product decisions; defaults in place)
 
@@ -150,4 +148,4 @@ fixes a v0.2 invariant break).
    subscription_min_occurrences,trend_permille,trend_min_amount}`: OK as permille integers?
 6. Simulation `--rate` with one value uses base ± 2 pp for pessimistic/optimistic: acceptable default?
 7. `ai` module and Monte Carlo stay out of v0.3 until the local model is chosen.
-8. Next step: W25 + W17 first (usable CLI), then W22–W24 (TUI), then release v0.3.0.
+8. Next step: release v0.3.0 (`release/v0.3.0`, CHANGELOG, CI on GitHub). Choices 1–6 above are recorded in ADRs 0014–0018.

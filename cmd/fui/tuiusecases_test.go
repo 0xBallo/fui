@@ -2,15 +2,20 @@ package main
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/0xballo/fui/internal/app/investing"
+	"github.com/0xballo/fui/internal/app/recurring"
 	"github.com/0xballo/fui/internal/app/reporting"
+	"github.com/0xballo/fui/internal/app/simulating"
 	"github.com/0xballo/fui/internal/cli"
 	"github.com/0xballo/fui/internal/clock"
 	"github.com/0xballo/fui/internal/config"
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/module"
+	"github.com/0xballo/fui/internal/store/sqlite"
 )
 
 // emptySource is a reporting.Source over an archive with no data.
@@ -92,5 +97,52 @@ func TestTUIConfigWiresV02Screens(t *testing.T) {
 	}
 	if !tc.Modules.Has(module.Budget) {
 		t.Fatalf("default modules should include budget: %v", tc.Modules.IDs())
+	}
+}
+
+// TestTUIConfigWiresV03Features drives every v0.3 adapter over a real, empty archive: each call
+// must reach its service (module gate open under the full preset) and succeed.
+func TestTUIConfigWiresV03Features(t *testing.T) {
+	ctx := context.Background()
+	clk := clock.NewFixed(time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC))
+	store, err := sqlite.Open(ctx, sqlite.Options{Path: filepath.Join(t.TempDir(), "fui.db"), BackupDir: t.TempDir(), BackupKeep: 3, Clock: clk})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+	cfg := config.Defaults()
+	full, err := module.Preset("full")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Modules.Enabled = full.IDs()
+	eur, err := domain.ParseCurrency("EUR")
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps := &cli.Deps{}
+	deps.Simulating = simulating.New(store, clk, simulating.Config{BaseCurrency: eur})
+	deps.Recurring = recurring.New(store, clk, store, recurring.Config{})
+	tc := tuiConfig(&cfg, deps, store, clk, eur)
+	if tc.Positions == nil || tc.NetWorth == nil || tc.Insights == nil || tc.Compare == nil || tc.Simulations == nil {
+		t.Fatalf("tuiConfig left a v0.3 port unset: %+v", tc)
+	}
+	if _, err := tc.Positions.ListPositions(ctx, investing.PositionsRequest{}); err != nil {
+		t.Errorf("ListPositions: %v", err)
+	}
+	if _, err := tc.NetWorth.NetWorthAt(ctx, domain.Date{}); err != nil {
+		t.Errorf("NetWorthAt: %v", err)
+	}
+	if _, err := tc.Insights.Run(ctx); err != nil {
+		t.Errorf("Insights.Run: %v", err)
+	}
+	if _, err := tc.Compare.ComparePeriods(ctx, reporting.CompareRequest{A: "last-month", B: "this-month"}); err != nil {
+		t.Errorf("ComparePeriods: %v", err)
+	}
+	if _, err := tc.Simulations.List(ctx); err != nil {
+		t.Errorf("Simulations.List: %v", err)
+	}
+	if tc.Simulations.BaseCurrency() != eur {
+		t.Errorf("BaseCurrency = %v", tc.Simulations.BaseCurrency())
 	}
 }

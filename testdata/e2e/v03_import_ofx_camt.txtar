@@ -1,0 +1,110 @@
+# v0.3: OFX and CAMT.053 built-in connectors import, deduplicate, and undo; `fui undo` reverts
+# the last transaction write.
+exec fui init --preset full --currency EUR
+exec fui connector list --json
+stdout '"name":"ofx"'
+stdout '"name":"camt"'
+
+# OFX: preview, apply, re-import is a duplicate, import undo removes the batch.
+exec fui import bank.ofx --connector ofx --create-accounts --dry-run --json
+stdout '"counts":\{"new":2,'
+exec fui import bank.ofx --connector ofx --create-accounts --yes --json
+stdout '"batch_id":1,"transactions":2'
+exec fui tx list --json
+stdout '"description":"Coffee bar'
+exec fui import bank.ofx --connector ofx --dry-run --json
+stdout '"counts":\{"new":0,"duplicate":2,'
+exec fui import undo 1 --yes --json
+stdout '"removed_transactions":2'
+exec fui tx list --json
+stdout '"items":\[\]'
+
+# CAMT.053: two statements, one account each.
+exec fui import stmt.xml --connector camt --create-accounts --yes --json
+stdout '"batch_id":1,"transactions":2,"accounts":1'
+exec fui import stmt.xml --connector camt --dry-run --json
+stdout '"counts":\{"new":0,"duplicate":2,'
+exec fui import undo 1 --yes --json
+stdout '"removed_transactions":2'
+
+# fui undo reverts the last transaction write.
+exec fui account add Cash --kind cash --currency EUR
+exec fui add -5 Coffee -a Cash
+exec fui undo --dry-run
+exec fui undo --yes --json
+stdout '"kind":"tx.add"'
+exec fui tx list -a Cash --json
+stdout '"items":\[\]'
+
+-- bank.ofx --
+OFXHEADER:100
+DATA:OFXSGML
+VERSION:102
+SECURITY:NONE
+ENCODING:USASCII
+CHARSET:1252
+COMPRESSION:NONE
+OLDFILEUID:NONE
+NEWFILEUID:NONE
+
+<OFX>
+<BANKMSGSRSV1>
+<STMTTRNRS>
+<STMTRS>
+<CURDEF>EUR
+<BANKACCTFROM>
+<BANKID>100100
+<ACCTID>IT60X0542811101000000123456
+</BANKACCTFROM>
+<BANKTRANLIST>
+<DTSTART>20261001000000
+<DTEND>20261031120000
+<STMTTRN>
+<TRNTYPE>DEBIT
+<DTPOSTED>20261003120000
+<TRNAMT>-12.50
+<FITID>TRX-1
+<NAME>Coffee bar
+</STMTTRN>
+<STMTTRN>
+<TRNTYPE>CREDIT
+<DTPOSTED>20261004110000
+<TRNAMT>1020.25
+<FITID>TRX-2
+<NAME>Salary
+</STMTTRN>
+</BANKTRANLIST>
+</STMTRS>
+</STMTTRNRS>
+</BANKMSGSRSV1>
+</OFX>
+-- stmt.xml --
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
+  <BkToCstmrStmt>
+    <GrpHdr><MsgId>SYNTH-1</MsgId><CreDtTm>2026-02-01T08:00:00</CreDtTm></GrpHdr>
+    <Stmt>
+      <Id>S1</Id>
+      <Acct><Id><IBAN>DE89 3704 0044 0532 0130 00</IBAN></Id><Ccy>EUR</Ccy><Nm>Synthetic Current</Nm></Acct>
+      <Ntry>
+        <NtryRef>N1</NtryRef>
+        <Amt Ccy="EUR">2500.00</Amt><CdtDbtInd>CRDT</CdtDbtInd><Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-01-05</Dt></BookgDt><ValDt><Dt>2026-01-06</Dt></ValDt>
+        <AcctSvcrRef>REF-0001</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <RltdPties><Dbtr><Nm>Acme Payroll Ltd</Nm></Dbtr></RltdPties>
+          <RmtInf><Ustrd>Salary January</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">45.90</Amt><CdtDbtInd>DBIT</CdtDbtInd><Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-01-12</Dt></BookgDt>
+        <AcctSvcrRef>REF-0002</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <RltdPties><Cdtr><Nm>Corner Grocery</Nm></Cdtr></RltdPties>
+          <RmtInf><Ustrd>Card payment</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+    </Stmt>
+  </BkToCstmrStmt>
+</Document>

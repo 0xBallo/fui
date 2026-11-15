@@ -93,9 +93,8 @@ func runWithAssetCommands(h *harness, mods module.Set, args ...string) (stdout, 
 	var errw bytes.Buffer
 	h.cfg.Modules.Enabled = mods.IDs()
 	deps := h.deps(&out, &errw)
-	svc := newAssetService(h.t, h)
+	deps.Assets = newAssetService(h.t, h)
 	root := cli.NewRoot(deps)
-	root.AddCommand(cli.NewAssetCmd(deps, svc))
 	root.SetArgs(args)
 	root.SetIn(h.stdin)
 	root.SetOut(&out)

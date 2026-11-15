@@ -336,6 +336,12 @@ Connettori integrati ed esterni producono lo stesso flusso di record `fui/1`; da
 
 I passi 1–7 non scrivono nulla e sono funzioni del dominio o dell'applicazione testate senza database dove possibile.
 
+**Connettori integrati OFX e CAMT.053 (v0.3)** — `ofx` (OFX 1.x SGML e 2.x XML, `.ofx`/`.qfx`) e `camt` (ISO 20022 camt.053, layout 02/08, `.xml`) sono `Source` in-process registrate in `connector.Registry` accanto a `csv` e `fui`; `fui import FILE --connector ofx|camt [--since DATA]` e `fui connector list` li trattano come gli altri. Un conto per IBAN/ACCTID (`--create-accounts` o `--map`); la deduplicazione usa l'id esterno (`FITID`, riferimento della voce) e poi l'impronta.
+
+**Record `security_op` di fui/1 (v0.3)** — il protocollo ha un tipo di record `security_op` con `account` (ref), `date`, `kind` (`buy`, `sell`, `dividend`, `coupon`), `quantity` e `unit_price` come interi (quantità nella scala del titolo, prezzo in unità minime), `fees`, `cash_tx` opzionale e i metadati del titolo (`security`: nome, ticker/ISIN, tipo, valuta, scala). Resta nella major 1: i consumatori che non lo conoscono lo ignorano.
+
+**Annullamento generico (v0.3)** — `fui undo` ripristina l'ultima voce non annullata del diario `op_log`. Il perimetro è limitato alle scritture su transazioni (add, edit, rm, transfer, split/unsplit); categorizzazioni, tag, budget, regole e le operazioni su titoli non sono nel diario (ADR 0016). `import undo` resta separato.
+
 **Connettori Revolut e Widiba** — scritti in Go nello stesso repository (`cmd/fui-connector-revolut`, `cmd/fui-connector-widiba`) e rilasciati insieme a `fui`. Ognuno ha una cartella `testdata` con export reali resi anonimi (nomi, IBAN, descrizioni sostituiti in modo coerente) e l'output `.jsonl` atteso come golden file. Le colonne Widiba si trovano cercando il testo dell'intestazione, mai per posizione.
 
 **Suite di conformità** — `fuiproto/conformance` esegue un connettore qualsiasi su file di prova e verifica `describe`, codici di uscita, struttura dello stream e stabilità degli id tra due esecuzioni. La usano i connettori del repository e la possono usare quelli di terzi.

@@ -59,6 +59,14 @@ func newTxCmdWithTags(deps *Deps) *cobra.Command {
 	return cmd
 }
 
+// newReportCmdWithCompare is the report group plus `report compare` (W19), which report.go does
+// not register itself.
+func newReportCmdWithCompare(deps *Deps) *cobra.Command {
+	cmd := newReportCmd(deps)
+	cmd.AddCommand(NewReportCompareCmd(deps))
+	return cmd
+}
+
 // topLevelCommands lists every top-level command with the module that owns it.
 func topLevelCommands(deps *Deps) []topLevelModuleCommand {
 	return []topLevelModuleCommand{
@@ -76,7 +84,7 @@ func topLevelCommands(deps *Deps) []topLevelModuleCommand {
 		{command: newConfigCmd(deps), module: module.Core},
 		{command: newHelpJSONCmd(deps), module: module.Core},
 		{command: newForecastCmd(deps), module: module.Recurring},
-		{command: newReportCmd(deps), module: module.Core},
+		{command: newReportCmdWithCompare(deps), module: module.Core},
 		{command: newKPICmd(deps), module: module.Core},
 		{command: newCompletionCmd(), module: module.Core},
 		{command: newImportCmd(deps), module: module.Core},
@@ -90,6 +98,13 @@ func topLevelCommands(deps *Deps) []topLevelModuleCommand {
 		{command: newBudgetCmd(deps), module: module.Budget},
 		{command: newRecurringCmd(deps), module: module.Recurring},
 		{command: newLoanCmd(deps), module: module.Loans},
+		{command: NewSecurityCmd(deps, deps.Investing), module: module.Investments},
+		{command: NewInvestCmd(deps, deps.Investing), module: module.Investments},
+		{command: NewPositionCmd(deps, deps.Investing), module: module.Investments},
+		{command: NewAssetCmd(deps, deps.Assets), module: module.Assets},
+		{command: NewSimulateCmd(deps, deps.Simulating), module: SimulateModule},
+		{command: NewInsightsCmd(deps), module: InsightsModule},
+		{command: newUndoCmd(deps), module: module.Core},
 	}
 }
 
