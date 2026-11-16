@@ -36,6 +36,8 @@ exec fui tx list --json
 cmp stdout txbefore.json
 
 # Insights: three monthly charges of the same payee make a subscription.
+# Keys are asserted literally on purpose: dismissed keys are persisted, so a change in how they are
+# derived would resurface every dismissed insight.
 exec fui account add Checking --kind checking --currency EUR
 exec fui add -9,99 Netflix -a Checking --date 2025-11-05
 exec fui add -9,99 Netflix -a Checking --date 2025-12-05
@@ -51,10 +53,14 @@ exec fui add -50 Gym -a Checking --date 2025-12-07
 exec fui add -50 Gym -a Checking --date 2026-01-07
 exec fui insights --json
 stdout '"label":"gym"'
+stdout '"key":"276ce7295a3e265d","subject":"description:gym"'
 exec fui insights --dismiss 276ce7295a3e265d --yes
 exec fui insights --json
 ! stdout 'gym'
 exec fui report compare --a last-month --b this-month --json
+cp stdout compare.json
+exec fui report run compare --a last-month --b this-month --json
+cmp stdout compare.json
 
 # Disabling a v0.3 module hides and blocks its commands.
 exec fui module disable simulations --yes

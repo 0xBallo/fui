@@ -123,8 +123,9 @@ fixes a v0.2 invariant break).
 
 - Resolved by W25: the v0.3 commands, services, OFX/CAMT connectors and TUI features are composed in `cmd/fui`
   and registered per module (ADR 0014); e2e scripts `v03_*` and the `help --json` goldens cover them.
-- `report run <saved>` does not dispatch `compare`; saved reports of kind net worth still use the old
-  `Analytics.NetWorth` instead of `NetWorthReport` (W15 kept both for golden compatibility).
+- `report run compare` runs the period comparison, but a comparison cannot be saved (`report save NAME
+  compare`); saved reports of kind net worth still use the old `Analytics.NetWorth` instead of
+  `NetWorthReport` (W15 kept both for golden compatibility).
 - Full JSON dump (`export --all`) lacks the v0.2 entities (budgets, loans, recurrences, rules) and the v0.3 securities,
   assets and op log; only saved simulations and dismissed insights were added (W09). Pre-existing gap.
 - Subscription insights only skip transactions linked to a recurrence (`RecurrenceID`); a subscription with an existing

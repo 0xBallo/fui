@@ -84,12 +84,15 @@ func newReportListCmd(deps *Deps) *cobra.Command {
 func newReportRunSavedCmd(deps *Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "run NAME",
-		Short:   "Run a saved report (or categories/cashflow legacy report)",
+		Short:   "Run a saved report (or the categories/cashflow/compare built-in reports)",
 		Args:    exactArgs(1),
 		Example: "  fui report run monthly-networth",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if args[0] == "categories" || args[0] == "cashflow" {
 				return runLegacyReport(cmd, deps, args[0])
+			}
+			if args[0] == "compare" {
+				return RunReportCompare(cmd, deps)
 			}
 			rt, err := runtimeOf(cmd, deps)
 			if err != nil {
@@ -110,6 +113,7 @@ func newReportRunSavedCmd(deps *Deps) *cobra.Command {
 	reportChartFlag(cmd)
 	reportPeriodFlags(cmd)
 	reportAccountFlag(cmd)
+	ReportCompareFlags(cmd)
 	return cmd
 }
 
