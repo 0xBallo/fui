@@ -55,6 +55,9 @@ exec fui insights --dismiss 276ce7295a3e265d --yes
 exec fui insights --json
 ! stdout 'gym'
 exec fui report compare --a last-month --b this-month --json
+cp stdout compare.json
+exec fui report run compare --a last-month --b this-month --json
+cmp stdout compare.json
 
 # Disabling a v0.3 module hides and blocks its commands.
 exec fui module disable simulations --yes
