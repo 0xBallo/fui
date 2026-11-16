@@ -22,6 +22,28 @@ type Account struct {
 	Iban                sql.NullString
 }
 
+type Asset struct {
+	ID            int64
+	Name          string
+	Kind          string
+	PurchaseDate  string
+	PurchaseMinor int64
+	Currency      string
+	LoanID        sql.NullInt64
+	CreatedAt     string
+	UpdatedAt     string
+}
+
+type AssetValuation struct {
+	ID         int64
+	AssetID    int64
+	Date       string
+	ValueMinor int64
+	Currency   string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
 type Budget struct {
 	ID            int64
 	Name          string
@@ -75,6 +97,12 @@ type ConnectorAccountRef struct {
 	AccountID int64
 	CreatedAt string
 	UpdatedAt string
+}
+
+type DismissedInsight struct {
+	Key         string
+	Kind        string
+	DismissedAt string
 }
 
 type FxRate struct {
@@ -148,6 +176,14 @@ type LoanSchedule struct {
 	UpdatedAt       string
 }
 
+type OpLog struct {
+	ID        int64
+	Kind      string
+	Payload   string
+	CreatedAt string
+	UndoneAt  sql.NullString
+}
+
 type Payee struct {
 	ID        int64
 	Name      string
@@ -207,6 +243,53 @@ type SavedReport struct {
 	Params    string
 	CreatedAt string
 	UpdatedAt string
+}
+
+type SavedSimulation struct {
+	ID        int64
+	Name      string
+	Kind      string
+	Params    string
+	CreatedAt string
+}
+
+type Security struct {
+	ID            int64
+	Name          string
+	Ticker        sql.NullString
+	Isin          sql.NullString
+	Kind          string
+	Currency      string
+	QuantityScale int64
+	CreatedAt     string
+	UpdatedAt     string
+}
+
+type SecurityOp struct {
+	ID                int64
+	Date              string
+	AccountID         int64
+	SecurityID        int64
+	Kind              string
+	QuantityUnits     int64
+	QuantityScale     int64
+	UnitPriceMinor    int64
+	UnitPriceCurrency string
+	FeesMinor         int64
+	FeesCurrency      string
+	CashTxID          sql.NullInt64
+	CreatedAt         string
+	UpdatedAt         string
+}
+
+type SecurityPrice struct {
+	ID         int64
+	SecurityID int64
+	Date       string
+	PriceMinor int64
+	Currency   string
+	CreatedAt  string
+	UpdatedAt  string
 }
 
 type Tag struct {

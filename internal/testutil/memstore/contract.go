@@ -35,6 +35,7 @@ func RunContract(t *testing.T, newStore func(t *testing.T) app.Store) {
 		"recurrences":     contractRecurrences,
 		"saved reports":   contractSavedReports,
 		"reconciliations": contractReconciliations,
+		"assets":          contractAssets,
 		"unit of work":    contractUnitOfWork,
 	} {
 		t.Run(name, func(t *testing.T) {

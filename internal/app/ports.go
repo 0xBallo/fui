@@ -71,8 +71,13 @@ type Repos interface {
 	Loans() LoanRepo
 	Budgets() BudgetRepo
 	Recurrences() RecurrenceRepo
+	SavedSimulations() SavedSimulationRepo
+	DismissedInsights() DismissedInsightRepo
 	SavedReports() SavedReportRepo
 	Reconciliations() ReconciliationRepo
+	Assets() AssetRepo
+	Securities() SecurityRepo
+	OpLog() OpLogRepo
 }
 
 // AccountRepo stores accounts. Names are unique case-insensitively.
@@ -308,6 +313,42 @@ type RecurrenceRepo interface {
 	PendingOf(ctx context.Context, id RecurrenceID) ([]domain.Transaction, error)
 }
 
+// SavedSimulationID identifies a saved simulation row.
+type SavedSimulationID int64
+
+// SavedSimulation is one saved simulation definition.
+type SavedSimulation struct {
+	ID         SavedSimulationID
+	Name       string
+	Kind       string
+	ParamsJSON string
+}
+
+// SavedSimulationRepo stores saved simulation definitions. Names are unique case-insensitively.
+type SavedSimulationRepo interface {
+	Insert(ctx context.Context, s SavedSimulation) (SavedSimulation, error)
+	Delete(ctx context.Context, id SavedSimulationID) error
+	Get(ctx context.Context, id SavedSimulationID) (SavedSimulation, error)
+	GetByName(ctx context.Context, name string) (SavedSimulation, error)
+	// List returns every saved simulation ordered by name (case-insensitive), then ID.
+	List(ctx context.Context) ([]SavedSimulation, error)
+}
+
+// DismissedInsight is one dismissed automatic insight.
+type DismissedInsight struct {
+	Key         string
+	Kind        domain.InsightKind
+	DismissedAt time.Time
+}
+
+// DismissedInsightRepo stores dismissed insight keys.
+type DismissedInsightRepo interface {
+	// Dismiss inserts or updates one dismissed key.
+	Dismiss(ctx context.Context, in DismissedInsight) error
+	// List returns every dismissed insight ordered by key.
+	List(ctx context.Context) ([]DismissedInsight, error)
+}
+
 // SavedReportID identifies a saved report row.
 type SavedReportID int64
 
@@ -349,4 +390,48 @@ type ReconciliationRepo interface {
 	Get(ctx context.Context, accountID domain.AccountID, date domain.Date) (Reconciliation, error)
 	// LastClosed returns the most recent closed reconciliation of account.
 	LastClosed(ctx context.Context, accountID domain.AccountID) (Reconciliation, error)
+}
+
+// SecurityRepo stores securities, their manual prices, and operations.
+type SecurityRepo interface {
+	Insert(ctx context.Context, s domain.Security) (domain.Security, error)
+	Update(ctx context.Context, s domain.Security) error
+	Delete(ctx context.Context, id domain.SecurityID) error
+	Get(ctx context.Context, id domain.SecurityID) (domain.Security, error)
+	// List returns every security ordered by ID.
+	List(ctx context.Context) ([]domain.Security, error)
+	// UpsertPrice stores p, replacing the price of the same security and date.
+	UpsertPrice(ctx context.Context, p domain.SecurityPrice) error
+	DeletePrice(ctx context.Context, securityID domain.SecurityID, date domain.Date) error
+	// ListPrices returns the prices of security ordered by date.
+	ListPrices(ctx context.Context, securityID domain.SecurityID) ([]domain.SecurityPrice, error)
+	// PriceOnOrBefore returns the latest price of security dated on or before date, or ErrNotFound.
+	PriceOnOrBefore(ctx context.Context, securityID domain.SecurityID, date domain.Date) (domain.SecurityPrice, error)
+	InsertOp(ctx context.Context, op domain.SecurityOp) (domain.SecurityOp, error)
+	UpdateOp(ctx context.Context, op domain.SecurityOp) error
+	DeleteOp(ctx context.Context, id domain.SecurityOpID) error
+	GetOp(ctx context.Context, id domain.SecurityOpID) (domain.SecurityOp, error)
+	// ListOpsBySecurity returns operations of security in [from,to], ordered by date then ID.
+	// A zero from or to means unbounded on that side.
+	ListOpsBySecurity(ctx context.Context, securityID domain.SecurityID, from, to domain.Date) ([]domain.SecurityOp, error)
+}
+
+// AssetRepo stores manually valued assets and their valuation history. Asset names are unique
+// case-insensitively. A linked loan, when set, must exist; deleting the loan unlinks the asset.
+// Callers validate with domain.NewAsset and domain.NewValuation.
+type AssetRepo interface {
+	// Insert stores a and returns it with its ID assigned.
+	Insert(ctx context.Context, a domain.Asset) (domain.Asset, error)
+	Update(ctx context.Context, a domain.Asset) error
+	// Delete removes the asset and its valuations.
+	Delete(ctx context.Context, id domain.AssetID) error
+	Get(ctx context.Context, id domain.AssetID) (domain.Asset, error)
+	// List returns every asset ordered by ID.
+	List(ctx context.Context) ([]domain.Asset, error)
+	// SetValuation stores v, replacing any valuation of the same asset on the same date.
+	SetValuation(ctx context.Context, v domain.Valuation) error
+	// ListValuations returns the asset valuations ordered by date.
+	ListValuations(ctx context.Context, assetID domain.AssetID) ([]domain.Valuation, error)
+	// DeleteValuation removes the valuation on date; ErrNotFound when there is none.
+	DeleteValuation(ctx context.Context, assetID domain.AssetID, date domain.Date) error
 }

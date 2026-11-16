@@ -85,19 +85,22 @@ type builder struct {
 	today domain.Date
 	plan  *ImportPlan
 
-	accts     map[string]*acctInfo
-	order     []string         // refs in stream order
-	active    []domain.Account // active accounts, for IBAN-based transfer matching
-	cats      map[string]domain.Category
-	newCats   map[string]bool
-	payees    map[string]domain.Payee // by NormalizePayee of the name or an alias
-	newPayees map[string]bool
-	tags      map[string]domain.Tag // by Tag.Key
-	newTags   map[string]bool
-	seenExt   map[string]bool
-	ibans     map[int]string // counterparty IBAN by row index
-	bal       map[string][]balPoint
-	pseudo    domain.AccountID
+	accts       map[string]*acctInfo
+	order       []string         // refs in stream order
+	active      []domain.Account // active accounts, for IBAN-based transfer matching
+	cats        map[string]domain.Category
+	newCats     map[string]bool
+	payees      map[string]domain.Payee // by NormalizePayee of the name or an alias
+	newPayees   map[string]bool
+	tags        map[string]domain.Tag // by Tag.Key
+	newTags     map[string]bool
+	secs        map[string]domain.Security // by security identity key
+	existingOps map[string]bool            // security operation keys without cash link
+	seenExt     map[string]bool
+	ibans       map[int]string // counterparty IBAN by row index
+	bal         map[string][]balPoint
+	txIndex     map[string]int // stream transaction id -> plan row index
+	pseudo      domain.AccountID
 }
 
 func newBuilder(r app.Repos, req PlanRequest, st stream, today domain.Date) *builder {
@@ -106,7 +109,8 @@ func newBuilder(r app.Repos, req PlanRequest, st stream, today domain.Date) *bui
 		accts: map[string]*acctInfo{}, cats: map[string]domain.Category{}, newCats: map[string]bool{},
 		payees: map[string]domain.Payee{}, newPayees: map[string]bool{},
 		tags: map[string]domain.Tag{}, newTags: map[string]bool{},
-		seenExt: map[string]bool{}, ibans: map[int]string{}, bal: map[string][]balPoint{},
+		secs: map[string]domain.Security{}, existingOps: map[string]bool{},
+		seenExt: map[string]bool{}, ibans: map[int]string{}, bal: map[string][]balPoint{}, txIndex: map[string]int{},
 	}
 }
 
@@ -129,6 +133,10 @@ func (b *builder) build(ctx context.Context, plan *ImportPlan) error {
 			plan.Errors = append(plan.Errors, RowError{Line: rec.Error.Line, Message: "source: " + rec.Error.Message})
 		case rec.Balance != nil:
 			balances = append(balances, *rec.Balance)
+		case rec.SecurityOp != nil:
+			if err := b.addSecurityOp(ctx, rec.SecurityOp); err != nil {
+				return err
+			}
 		}
 	}
 	for _, e := range b.st.result.RowErrors {
@@ -178,6 +186,23 @@ func (b *builder) loadLookups(ctx context.Context) error {
 	}
 	for _, t := range tags {
 		b.tags[t.Key()] = t
+	}
+	secs, err := b.r.Securities().List(ctx)
+	if err != nil {
+		return fmt.Errorf("list securities: %w", err)
+	}
+	for _, sec := range secs {
+		b.noteSecurity(sec)
+		ops, err := b.r.Securities().ListOpsBySecurity(ctx, sec.ID, domain.Date{}, domain.Date{})
+		if err != nil {
+			return fmt.Errorf("list security operations of %q: %w", sec.Name, err)
+		}
+		for _, op := range ops {
+			if op.CashTx != 0 {
+				continue
+			}
+			b.existingOps[securityOpKey(op, "")] = true
+		}
 	}
 	return nil
 }

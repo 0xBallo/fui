@@ -70,6 +70,15 @@ type Config struct {
 	Settings     settings.UseCases
 	ModuleConfig settings.ModuleConfig
 	ThemeConfig  settings.ThemeConfig
+	// Optional v0.3 features: each is shown only when its use cases are set (and its module is
+	// enabled): Positions (module investments) on Accounts, NetWorth (module analytics) and
+	// Insights (module analytics) on the dashboard, Compare (module analytics) and Simulations
+	// (module simulations) on Reports.
+	Positions   accounts.PositionsUseCases
+	NetWorth    dashboard.NetWorthUseCases
+	Insights    dashboard.InsightUseCases
+	Compare     report.CompareUseCases
+	Simulations report.SimUseCases
 	// Lists adds the CRUD sections (categories, tags, rules, recurrences, import profiles) to Settings.
 	Lists settings.Lists
 }
@@ -119,14 +128,14 @@ func (r *Root) rebuild() {
 		Theme: cfg.Theme, ThemeLight: cfg.ThemeLight, ThemeDark: cfg.ThemeDark,
 	}, theme.LipglossDetector{})
 	r.tabs = [len(tabNames)]screens.Screen{}
-	r.tabs[screens.TabDashboard] = dashboard.New(r.uc, r.loc, r.th, cfg.MonthStartDay)
+	r.tabs[screens.TabDashboard] = r.newDashboard()
 	r.tabs[screens.TabTransactions] = transactions.New(r.uc, r.loc, r.th)
-	r.tabs[screens.TabAccounts] = accounts.New(r.uc, r.loc, r.th)
+	r.tabs[screens.TabAccounts] = r.newAccounts()
 	if cfg.Budget != nil && cfg.Modules.Has(module.Budget) {
 		r.tabs[screens.TabBudget] = budget.New(cfg.Budget, r.loc, r.th)
 	}
 	if cfg.Report != nil {
-		r.tabs[screens.TabReports] = report.New(cfg.Report, r.loc, cfg.MonthStartDay, r.th)
+		r.tabs[screens.TabReports] = r.newReport()
 	}
 	if cfg.Importer != nil {
 		r.tabs[screens.TabImport] = importer.New(cfg.Importer, r.loc, r.th)
@@ -142,6 +151,42 @@ func (r *Root) rebuild() {
 	if r.height > 0 {
 		r.resize()
 	}
+}
+
+// newDashboard builds the dashboard with the v0.3 net worth and insights features whose module is
+// enabled and whose use cases are wired.
+func (r *Root) newDashboard() *dashboard.Model {
+	m := dashboard.New(r.uc, r.loc, r.th, r.cfg.MonthStartDay)
+	if r.cfg.Modules.Has(module.Analytics) {
+		if r.cfg.NetWorth != nil {
+			m.SetNetWorthUseCases(r.cfg.NetWorth)
+		}
+		if r.cfg.Insights != nil {
+			m.SetInsights(r.cfg.Insights)
+		}
+	}
+	return m
+}
+
+// newAccounts builds the accounts screen, with the positions panel when investments is enabled.
+func (r *Root) newAccounts() *accounts.Model {
+	m := accounts.New(r.uc, r.loc, r.th)
+	if r.cfg.Positions != nil && r.cfg.Modules.Has(module.Investments) {
+		m.SetPositionsUseCases(r.cfg.Positions)
+	}
+	return m
+}
+
+// newReport builds the reports screen with the comparison (analytics) and simulations views.
+func (r *Root) newReport() *report.Model {
+	m := report.New(r.cfg.Report, r.loc, r.cfg.MonthStartDay, r.th)
+	if r.cfg.Compare != nil && r.cfg.Modules.Has(module.Analytics) {
+		m.SetCompare(r.cfg.Compare)
+	}
+	if r.cfg.Simulations != nil && r.cfg.Modules.Has(module.Simulations) {
+		m.SetSimulations(r.cfg.Simulations)
+	}
+	return m
 }
 
 // retheme applies a theme to the running TUI. The settings screen is kept (re-themed in place), as

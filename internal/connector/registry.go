@@ -21,9 +21,14 @@ const executablePrefix = "fui-connector-"
 
 // Names of the built-in connectors.
 const (
-	builtinFUI = "fui"
-	builtinCSV = csvConnector
+	builtinFUI  = "fui"
+	builtinCSV  = csvConnector
+	builtinOFX  = ofxConnector
+	builtinCAMT = camtConnector
 )
+
+// builtinNames are the built-in connectors; the fui/1 stream one reads a .fui.jsonl file.
+var builtinNames = []string{builtinCAMT, builtinCSV, builtinFUI, builtinOFX}
 
 var validName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
 
@@ -59,10 +64,12 @@ func (r Registry) searchPath() []string {
 
 // List implements importing.Connectors.
 func (r Registry) List(context.Context) ([]importing.ConnectorInfo, error) {
-	out := []importing.ConnectorInfo{
-		{Name: builtinCSV, Kind: importing.ConnectorBuiltin}, {Name: builtinFUI, Kind: importing.ConnectorBuiltin},
+	out := make([]importing.ConnectorInfo, 0, len(builtinNames))
+	seen := map[string]bool{}
+	for _, n := range builtinNames {
+		out = append(out, importing.ConnectorInfo{Name: n, Kind: importing.ConnectorBuiltin})
+		seen[n] = true
 	}
-	seen := map[string]bool{builtinCSV: true, builtinFUI: true}
 	for _, dir := range append([]string{r.Dir}, r.searchPath()...) {
 		entries, err := os.ReadDir(dir)
 		if err != nil {
@@ -110,6 +117,18 @@ func (r Registry) Describe(ctx context.Context, name string) (fuiproto.DescribeR
 		return fuiproto.DescribeResponse{}, err
 	}
 	switch c.Name {
+	case builtinOFX:
+		return fuiproto.DescribeResponse{
+			Protocol: fuiproto.ProtocolFUI1, Name: builtinOFX, Version: ofxVersion, AcceptedFileTypes: []string{".ofx", ".qfx"},
+		}, nil
+	case builtinCAMT:
+		return fuiproto.DescribeResponse{
+			Protocol: fuiproto.ProtocolFUI1, Name: builtinCAMT, Version: camtVersion, AcceptedFileTypes: []string{".xml"},
+			ConfigParams: []fuiproto.ConfigParam{
+				{Key: "currency", Type: "string", Description: "ISO 4217 code when the statement names none, default the base currency"},
+				{Key: "kind", Type: "string", Description: "account kind, default checking"},
+			},
+		}, nil
 	case builtinFUI:
 		return fuiproto.DescribeResponse{
 			Protocol: fuiproto.ProtocolFUI1, Name: builtinFUI, Version: csvVersion, AcceptedFileTypes: []string{".fui.jsonl"},
@@ -130,7 +149,7 @@ func (r Registry) Describe(ctx context.Context, name string) (fuiproto.DescribeR
 
 // Open implements importing.Connectors.
 func (r Registry) Open(name string, req fuiproto.FetchRequest) (importing.Source, error) {
-	if name == builtinFUI || name == builtinCSV {
+	if slices.Contains(builtinNames, name) {
 		return r.openBuiltin(name, req)
 	}
 	c, err := r.find(context.Background(), name)
@@ -147,7 +166,19 @@ func (r Registry) openBuiltin(name string, req fuiproto.FetchRequest) (importing
 	if name == builtinFUI {
 		return FileSource{Path: *req.File}, nil
 	}
+	since := ""
+	if req.Since != nil {
+		since = *req.Since
+	}
+	if name == builtinOFX {
+		return NewOFX(*req.File, since), nil
+	}
 	str := func(key string) string { s, _ := req.Config[key].(string); return s }
+	if name == builtinCAMT {
+		return NewCAMT(*req.File, CAMTOptions{
+			Currency: orDefault(str("currency"), r.Currency), Kind: fuiproto.AccountKind(str("kind")), Since: since,
+		}), nil
+	}
 	profile, ok := r.Profiles[str("profile")]
 	if !ok {
 		return nil, &domain.Error{

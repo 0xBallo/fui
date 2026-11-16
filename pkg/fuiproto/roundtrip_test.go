@@ -102,6 +102,25 @@ func TestRoundTripEncodeDecode(t *testing.T) {
 			},
 		},
 		{
+			Type: RecordTypeSecurityOp,
+			SecurityOp: &SecurityOpRecord{
+				Account:   "acc-eur",
+				Date:      "2026-11-16",
+				Kind:      SecurityOpKindBuy,
+				Quantity:  1500000,
+				UnitPrice: 12345,
+				Fees:      99,
+				CashTx:    "tx-1",
+				Security: SecurityMeta{
+					Name:          "VWCE",
+					Ticker:        "VWCE",
+					Kind:          SecurityKindETF,
+					Currency:      "EUR",
+					QuantityScale: 6,
+				},
+			},
+		},
+		{
 			Type: RecordTypeError,
 			Error: &ErrorRecord{
 				Line:    42,

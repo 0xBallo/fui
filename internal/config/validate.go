@@ -47,6 +47,9 @@ func (c *Config) Validate() error {
 	if err := validateForecastHorizon(c.Forecast.Horizon); err != nil {
 		return err
 	}
+	if err := validateInsights(c); err != nil {
+		return err
+	}
 	return validateProfiles(c.Import.Profiles)
 }
 

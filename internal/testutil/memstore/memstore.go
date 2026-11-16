@@ -52,8 +52,16 @@ type state struct {
 	Budgets          map[domain.BudgetID]domain.Budget
 	Moves            []domain.BudgetMove
 	Recurs           map[app.RecurrenceID]app.Recurrence
+	SavedSimulations map[app.SavedSimulationID]app.SavedSimulation
+	Dismissed        map[string]app.DismissedInsight
 	SavedReports     map[app.SavedReportID]app.SavedReport
 	Reconciliations  map[reconciliationKey]app.Reconciliation
+	Assets           map[domain.AssetID]domain.Asset
+	Valuations       map[valuationKey]domain.Valuation
+	Securities       map[domain.SecurityID]domain.Security
+	SecPrices        map[secPriceKey]domain.SecurityPrice
+	SecOps           map[domain.SecurityOpID]domain.SecurityOp
+	OpLog            []app.OpEntry
 	LastID           map[string]int64
 }
 
@@ -77,8 +85,15 @@ func newState() *state {
 		InstallmentLinks: map[loanInstallmentKey]domain.TransactionID{},
 		Budgets:          map[domain.BudgetID]domain.Budget{},
 		Recurs:           map[app.RecurrenceID]app.Recurrence{},
+		SavedSimulations: map[app.SavedSimulationID]app.SavedSimulation{},
+		Dismissed:        map[string]app.DismissedInsight{},
 		SavedReports:     map[app.SavedReportID]app.SavedReport{},
 		Reconciliations:  map[reconciliationKey]app.Reconciliation{},
+		Assets:           map[domain.AssetID]domain.Asset{},
+		Valuations:       map[valuationKey]domain.Valuation{},
+		Securities:       map[domain.SecurityID]domain.Security{},
+		SecPrices:        map[secPriceKey]domain.SecurityPrice{},
+		SecOps:           map[domain.SecurityOpID]domain.SecurityOp{},
 		LastID:           map[string]int64{},
 	}
 }
@@ -105,8 +120,16 @@ func (s *state) clone() *state {
 		Budgets:          maps.Clone(s.Budgets),
 		Moves:            slices.Clone(s.Moves),
 		Recurs:           maps.Clone(s.Recurs),
+		SavedSimulations: maps.Clone(s.SavedSimulations),
+		Dismissed:        maps.Clone(s.Dismissed),
 		SavedReports:     maps.Clone(s.SavedReports),
 		Reconciliations:  maps.Clone(s.Reconciliations),
+		Assets:           maps.Clone(s.Assets),
+		Valuations:       maps.Clone(s.Valuations),
+		Securities:       maps.Clone(s.Securities),
+		SecPrices:        maps.Clone(s.SecPrices),
+		SecOps:           maps.Clone(s.SecOps),
+		OpLog:            slices.Clone(s.OpLog),
 	}
 }
 
@@ -177,10 +200,21 @@ func (r *repos) Splits() app.SplitRepo             { return splits{r} }
 func (r *repos) Loans() app.LoanRepo               { return loans{r} }
 func (r *repos) Budgets() app.BudgetRepo           { return budgets{r} }
 func (r *repos) Recurrences() app.RecurrenceRepo   { return recurrences{r} }
+func (r *repos) SavedSimulations() app.SavedSimulationRepo {
+	return savedSimulations{r}
+}
+
+func (r *repos) DismissedInsights() app.DismissedInsightRepo {
+	return dismissedInsights{r}
+}
 func (r *repos) SavedReports() app.SavedReportRepo { return savedReports{r} }
 func (r *repos) Reconciliations() app.ReconciliationRepo {
 	return reconciliations{r}
 }
+
+func (r *repos) Assets() app.AssetRepo        { return assets{r} }
+func (r *repos) Securities() app.SecurityRepo { return securities{r} }
+func (r *repos) OpLog() app.OpLogRepo         { return opLog{r} }
 
 func (r *repos) writable() error {
 	if r.readOnly {

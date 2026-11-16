@@ -7,6 +7,27 @@ All notable changes to FUI are listed here, newest first. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-16
+
+### Added
+
+- Built-in OFX and CAMT.053 import connectors.
+- Investments: securities, manual prices, buy/sell/dividend operations and positions at average cost
+  (`security`, `invest`, `position`); `security_op` records in the `fui/1` protocol.
+- Assets with valuations, and net worth composed of liquidity, positions, assets and debts (`asset`,
+  `kpi networth`); runway counts investments.
+- Simulations of investments, PAC and cash flow, with saved scenarios and comparison of up to three (`simulate`).
+- Automatic insights (anomalies, subscriptions, trends) with dismiss and subscription-to-recurrence accept
+  (`insights`), configurable through the `insights.*` keys.
+- Period comparison report (`report compare`, `report run compare`).
+- Generic `undo` of the last transaction write (add, edit, remove, transfer, split).
+- TUI: positions and net worth breakdown, insights panel, period comparison and simulations views.
+- ADRs 0014–0018 for the v0.3 decisions.
+
+### Fixed
+
+- Editing the amount of a split transaction is rejected instead of breaking the split invariant.
+
 ## [0.2.1] - 2026-11-13
 
 ### Added
@@ -39,6 +60,7 @@ All notable changes to FUI are listed here, newest first. The format follows
 - TUI screens: Budget, Reports, Import and Settings (modules, theme, categories, tags, rules, recurrences, import
   profiles); dynamic shell completion of names.
 
-[Unreleased]: https://github.com/0xBallo/fui/compare/v0.2.1...develop
+[Unreleased]: https://github.com/0xBallo/fui/compare/v0.3.0...develop
+[0.3.0]: https://github.com/0xBallo/fui/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/0xBallo/fui/compare/v0.2...v0.2.1
 [0.2]: https://github.com/0xBallo/fui/releases/tag/v0.2

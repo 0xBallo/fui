@@ -4,6 +4,7 @@
 # scope optional, header at most 72 characters, no AI-tool attribution. Merge commits are skipped:
 # GitHub checks out a PR as a merge commit, and merging main back into develop is part of the flow.
 set -euo pipefail
+shopt -s extglob
 
 range="${1:?usage: check-commits.sh <rev-range>}"
 
@@ -15,6 +16,8 @@ status=0
 while IFS= read -r sha; do
 	[ -z "$sha" ] && continue
 	header=$(git log -1 --format=%s "$sha")
+	# GitHub appends " (#N)" to squash-merge titles; the 72-character limit applies to the title we wrote.
+	header="${header% (#+([0-9]))}"
 	body=$(git log -1 --format=%b "$sha")
 
 	if ! [[ "$header" =~ $header_re ]]; then

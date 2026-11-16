@@ -1,0 +1,74 @@
+{
+  "period": "2026-01-01..2026-03-31",
+  "points": [
+    {
+      "date": "2026-01-31",
+      "liquidity": {
+        "minor": 160000,
+        "currency": "EUR"
+      },
+      "positions": {
+        "minor": 0,
+        "currency": "EUR"
+      },
+      "assets": {
+        "minor": 1500000,
+        "currency": "EUR"
+      },
+      "debts": {
+        "minor": -1200000,
+        "currency": "EUR"
+      },
+      "total": {
+        "minor": 460000,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-02-28",
+      "liquidity": {
+        "minor": 160000,
+        "currency": "EUR"
+      },
+      "positions": {
+        "minor": 50000,
+        "currency": "EUR"
+      },
+      "assets": {
+        "minor": 2000000,
+        "currency": "EUR"
+      },
+      "debts": {
+        "minor": -1200000,
+        "currency": "EUR"
+      },
+      "total": {
+        "minor": 1010000,
+        "currency": "EUR"
+      }
+    },
+    {
+      "date": "2026-03-31",
+      "liquidity": {
+        "minor": 160000,
+        "currency": "EUR"
+      },
+      "positions": {
+        "minor": 50000,
+        "currency": "EUR"
+      },
+      "assets": {
+        "minor": 2000000,
+        "currency": "EUR"
+      },
+      "debts": {
+        "minor": -1200000,
+        "currency": "EUR"
+      },
+      "total": {
+        "minor": 1010000,
+        "currency": "EUR"
+      }
+    }
+  ]
+}

@@ -79,10 +79,24 @@ type batchDump struct {
 	ImportedAt   string `json:"imported_at"`
 }
 
+type savedSimulationDump struct {
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+	Kind       string `json:"kind"`
+	ParamsJSON string `json:"params"`
+}
+
+type dismissedInsightDump struct {
+	Key         string `json:"key"`
+	Kind        string `json:"kind"`
+	DismissedAt string `json:"dismissed_at"`
+}
+
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 
 // Dump writes every entity of the archive, one file per entity, in the given format: accounts,
-// categories, transactions, transfers, fx_rates and import_batches. Amounts are minor units.
+// categories, transactions, transfers, fx_rates, import_batches, saved_simulations and
+// dismissed_insights. Amounts are minor units.
 func (s *Service) Dump(ctx context.Context, format DumpFormat, create DumpFile) error {
 	if format != DumpJSON && format != DumpCSV {
 		return newError(domain.ErrInvalidValue, map[string]any{"field": "format"}, "unknown dump format %q", format)
@@ -94,6 +108,8 @@ func (s *Service) Dump(ctx context.Context, format DumpFormat, create DumpFile) 
 			func() error { return dumpTransactions(ctx, r, format, create) },
 			func() error { return dumpFX(ctx, r, format, create) },
 			func() error { return dumpBatches(ctx, r, format, create) },
+			func() error { return dumpSavedSimulations(ctx, r, format, create) },
+			func() error { return dumpDismissedInsights(ctx, r, format, create) },
 		}
 		for _, step := range steps {
 			if err := step(); err != nil {
@@ -245,5 +261,44 @@ func dumpBatches(ctx context.Context, r app.Repos, format DumpFormat, create Dum
 	return writeEntity(create, format, "import_batches", []string{"id", "connector", "source", "source_sha256", "imported_at"}, items,
 		func(b batchDump) []string {
 			return []string{itoa(b.ID), b.Connector, b.Source, b.SourceSHA256, b.ImportedAt}
+		})
+}
+
+func dumpSavedSimulations(ctx context.Context, r app.Repos, format DumpFormat, create DumpFile) error {
+	all, err := r.SavedSimulations().List(ctx)
+	if err != nil {
+		return fmt.Errorf("list saved simulations: %w", err)
+	}
+	items := make([]savedSimulationDump, len(all))
+	for i, sim := range all {
+		items[i] = savedSimulationDump{
+			ID:         int64(sim.ID),
+			Name:       sim.Name,
+			Kind:       sim.Kind,
+			ParamsJSON: sim.ParamsJSON,
+		}
+	}
+	return writeEntity(create, format, "saved_simulations", []string{"id", "name", "kind", "params"}, items,
+		func(sim savedSimulationDump) []string {
+			return []string{itoa(sim.ID), sim.Name, sim.Kind, sim.ParamsJSON}
+		})
+}
+
+func dumpDismissedInsights(ctx context.Context, r app.Repos, format DumpFormat, create DumpFile) error {
+	all, err := r.DismissedInsights().List(ctx)
+	if err != nil {
+		return fmt.Errorf("list dismissed insights: %w", err)
+	}
+	items := make([]dismissedInsightDump, len(all))
+	for i, insight := range all {
+		items[i] = dismissedInsightDump{
+			Key:         insight.Key,
+			Kind:        string(insight.Kind),
+			DismissedAt: insight.DismissedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00"),
+		}
+	}
+	return writeEntity(create, format, "dismissed_insights", []string{"key", "kind", "dismissed_at"}, items,
+		func(insight dismissedInsightDump) []string {
+			return []string{insight.Key, insight.Kind, insight.DismissedAt}
 		})
 }

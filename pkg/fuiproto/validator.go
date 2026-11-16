@@ -136,6 +136,8 @@ func (s *validationState) accept(line int, record Record) (bool, *InvalidRow, er
 		return s.acceptSchedule(line, record)
 	case RecordTypeInstallment:
 		return s.acceptInstallment(line, record)
+	case RecordTypeSecurityOp:
+		return s.acceptSecurityOp(line, record)
 	case RecordTypeError:
 		return s.acceptError(line, record)
 	case RecordTypeEnd:
@@ -249,6 +251,19 @@ func (s *validationState) acceptInstallment(line int, record Record) (bool, *Inv
 
 	if msg := validateInstallment(*record.Installment); msg != "" {
 		return false, &InvalidRow{Line: line, Type: RecordTypeInstallment, Message: msg}, nil
+	}
+	return true, nil, nil
+}
+
+func (s *validationState) acceptSecurityOp(line int, record Record) (bool, *InvalidRow, error) {
+	if record.SecurityOp == nil {
+		return false, nil, structural(line, "security_op payload is required")
+	}
+	if _, ok := s.accounts[record.SecurityOp.Account]; !ok {
+		return false, nil, structural(line, "security_op references unknown account %q", record.SecurityOp.Account)
+	}
+	if msg := validateSecurityOp(*record.SecurityOp); msg != "" {
+		return false, &InvalidRow{Line: line, Type: RecordTypeSecurityOp, Message: msg}, nil
 	}
 	return true, nil, nil
 }
@@ -401,6 +416,43 @@ func validateErrorRecord(record ErrorRecord) string {
 	return ""
 }
 
+func validateSecurityOp(record SecurityOpRecord) string {
+	if record.Account == "" {
+		return "security_op account is required"
+	}
+	if err := ValidateDate(record.Date); err != nil {
+		return err.Error()
+	}
+	if !isValidSecurityOpKind(record.Kind) {
+		return fmt.Sprintf("invalid security_op kind %q", record.Kind)
+	}
+	if record.Quantity <= 0 {
+		return "security_op quantity must be > 0"
+	}
+	if record.UnitPrice < 0 {
+		return "security_op unit_price must be >= 0"
+	}
+	if record.Fees < 0 {
+		return "security_op fees must be >= 0"
+	}
+	if strings.TrimSpace(record.Security.Name) == "" {
+		return "security_op security.name is required"
+	}
+	if !isValidSecurityKind(record.Security.Kind) {
+		return fmt.Sprintf("invalid security kind %q", record.Security.Kind)
+	}
+	if strings.TrimSpace(record.Security.Currency) == "" {
+		return "security_op security.currency is required"
+	}
+	if record.Security.QuantityScale < 0 || record.Security.QuantityScale > 8 {
+		return fmt.Sprintf("security_op security.quantity_scale out of range: %d", record.Security.QuantityScale)
+	}
+	if strings.TrimSpace(record.Security.Ticker) == "" && strings.TrimSpace(record.Security.ISIN) == "" {
+		return "security_op security requires ticker or isin"
+	}
+	return ""
+}
+
 func validateOptionalDate(value string) error {
 	if value == "" {
 		return nil
@@ -438,6 +490,24 @@ func isValidTransactionKind(kind TransactionKind) bool {
 func isValidRateType(rateType RateType) bool {
 	switch rateType {
 	case RateTypeFixed, RateTypeVariable, RateTypeMixed:
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidSecurityKind(kind SecurityKind) bool {
+	switch kind {
+	case SecurityKindStock, SecurityKindETF, SecurityKindBond, SecurityKindFund, SecurityKindCrypto:
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidSecurityOpKind(kind SecurityOpKind) bool {
+	switch kind {
+	case SecurityOpKindBuy, SecurityOpKindSell, SecurityOpKindDividend, SecurityOpKindCoupon:
 		return true
 	default:
 		return false

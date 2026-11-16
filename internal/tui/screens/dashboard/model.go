@@ -30,6 +30,7 @@ const (
 // use case call runs inside a tea.Cmd.
 type Model struct {
 	uc            UseCases
+	netWorthUC    NetWorthUseCases
 	loc           domain.Locale
 	th            theme.Theme
 	km            KeyMap
@@ -43,6 +44,7 @@ type Model struct {
 
 	netWorth    app.NetWorth
 	netWorthErr error
+	netWorthPt  *reporting.NetWorthPoint
 
 	spending reporting.SpendingResult
 	chart    components.BarChart
@@ -52,6 +54,8 @@ type Model struct {
 
 	categories []string
 	accounts   []string
+
+	ins insightPanel
 
 	form      components.Form
 	accountF  components.Autocomplete
@@ -80,11 +84,12 @@ func New(uc UseCases, loc domain.Locale, th theme.Theme, monthStartDay int) *Mod
 }
 
 // Init loads the dashboard data.
-func (m *Model) Init() tea.Cmd { return m.load() }
+func (m *Model) Init() tea.Cmd { return tea.Batch(m.load(), m.ins.load()) }
 
 // SetSize adapts the panels to the available terminal size.
 func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h
+	m.ins.width = w
 	rows := len(m.balances)
 	if rows > 8 {
 		rows = 8
@@ -101,7 +106,9 @@ func (m *Model) SetSize(w, h int) {
 func (m *Model) Title() string { return "Dashboard" }
 
 // KeyMap exposes the bindings for the global help view.
-func (m *Model) KeyMap() []key.Binding { return m.km.Bindings() }
+func (m *Model) KeyMap() []key.Binding {
+	return append(m.km.Bindings(), m.ins.keyBindings()...)
+}
 
 // InputActive reports whether the quick-add form is capturing keystrokes.
 func (m *Model) InputActive() bool { return m.mode == modeForm }
@@ -112,6 +119,7 @@ type loadedMsg struct {
 
 	netWorth    app.NetWorth
 	netWorthErr error
+	netWorthPt  *reporting.NetWorthPoint
 
 	spending reporting.SpendingResult
 
@@ -137,6 +145,13 @@ func (m *Model) load() tea.Cmd {
 		// Net worth needs a configured base currency and fx rates; it is shown as "n/a" rather
 		// than failing the whole screen when either is missing.
 		out.netWorth, out.netWorthErr = m.uc.NetWorth(ctx, app.NetWorthRequest{})
+		if m.netWorthUC != nil && out.netWorthErr == nil {
+			point, err := m.netWorthUC.NetWorthAt(ctx, out.netWorth.At)
+			if err != nil {
+				return screens.ErrorMsg{Err: err}
+			}
+			out.netWorthPt = &point
+		}
 
 		cats, err := m.uc.ListCategories(ctx)
 		if err != nil {
@@ -167,11 +182,17 @@ func (m *Model) load() tea.Cmd {
 
 // Update advances the screen state; it performs no I/O itself.
 func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
+	if _, isKey := msg.(tea.KeyMsg); !isKey || m.mode == modeView {
+		if cmd, ok := m.ins.update(msg); ok {
+			return m, cmd
+		}
+	}
 	switch msg := msg.(type) {
 	case loadedMsg:
 		m.balances = msg.balances
 		m.table.SetRows(m.accountRows())
 		m.netWorth, m.netWorthErr = msg.netWorth, msg.netWorthErr
+		m.netWorthPt = msg.netWorthPt
 		m.spending = msg.spending
 		m.chart.SetItems(spendingBars(msg.spending))
 		m.runway, m.runwayAvailable = msg.runway, msg.runwayAvailable
@@ -231,14 +252,14 @@ func (m *Model) viewDashboard() string {
 	out += m.th.Header.Render("Net worth") + "\n" + m.viewNetWorth() + "\n\n"
 	out += m.th.Header.Render("Runway") + "\n" + m.viewRunway() + "\n\n"
 	out += m.th.Header.Render("Spending this month") + "\n" + m.chart.View()
+	if ins := m.ins.view(); ins != "" {
+		out += "\n\n" + ins
+	}
 	return out
 }
 
 func (m *Model) viewNetWorth() string {
-	if m.netWorthErr != nil {
-		return m.th.Muted.Render("n/a (" + m.netWorthErr.Error() + ")")
-	}
-	return m.th.Base.Render(domain.FormatAmount(m.netWorth.Total, m.loc))
+	return m.renderNetWorth()
 }
 
 func (m *Model) viewRunway() string {

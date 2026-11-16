@@ -85,13 +85,17 @@ type stream struct {
 	meta   fuiproto.MetaRecord
 	result fuiproto.ValidationResult
 	lines  map[*fuiproto.TransactionRecord]int
+	sec    map[*fuiproto.SecurityOpRecord]int
 	stderr string
 }
 
 // readStream reads and validates the source. A structural violation, a truncated output or a
 // process failure aborts the import: nothing has been written at this point.
 func readStream(ctx context.Context, src Source) (stream, error) {
-	st := stream{lines: map[*fuiproto.TransactionRecord]int{}}
+	st := stream{
+		lines: map[*fuiproto.TransactionRecord]int{},
+		sec:   map[*fuiproto.SecurityOpRecord]int{},
+	}
 	var srcErr error
 	line := 0
 	tee := func(yield func(fuiproto.Record, error) bool) {
@@ -101,6 +105,8 @@ func readStream(ctx context.Context, src Source) (stream, error) {
 				srcErr = err
 			} else if rec.Transaction != nil {
 				st.lines[rec.Transaction] = line
+			} else if rec.SecurityOp != nil {
+				st.sec[rec.SecurityOp] = line
 			}
 			if !yield(rec, err) {
 				return

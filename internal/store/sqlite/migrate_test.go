@@ -369,6 +369,66 @@ func TestMigrateFromV4AddsRecurrenceColumns(t *testing.T) {
 	}
 }
 
+func TestMigrateFromV11AddsSimAndInsightsTables(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "data", "fui.db")
+	ctx := context.Background()
+
+	db := mustOpenRawDB(t, dbPath)
+	migrationsFS, err := fs.Sub(migrationFS, "migrations")
+	if err != nil {
+		t.Fatalf("fs.Sub: %v", err)
+	}
+	provider, err := goose.NewProvider(goose.DialectSQLite3, db, migrationsFS)
+	if err != nil {
+		t.Fatalf("goose.NewProvider: %v", err)
+	}
+	if _, err := provider.UpTo(ctx, 11); err != nil {
+		t.Fatalf("migrate to v11: %v", err)
+	}
+	mustExec(t, db, `INSERT INTO accounts (name, kind, currency, opening_balance_minor, opened_on)
+		VALUES ('Checking', 'checking', 'EUR', 0, '2026-01-01')`)
+	mustClose(t, db)
+
+	store, err := Open(ctx, Options{
+		Path:       dbPath,
+		BackupDir:  filepath.Join(root, "data", "backups"),
+		BackupKeep: 10,
+		Clock:      clock.NewFixed(time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC)),
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	version, err := pragmaUserVersion(ctx, store.writeDB)
+	if err != nil {
+		t.Fatalf("pragmaUserVersion: %v", err)
+	}
+	if version != currentSchemaVersion {
+		t.Fatalf("user_version = %d, want %d", version, currentSchemaVersion)
+	}
+
+	if _, err := store.writeDB.ExecContext(ctx,
+		`INSERT INTO saved_simulations (name, kind, params) VALUES ('Plan A', 'pac', '{"years":20}')`); err != nil {
+		t.Fatalf("insert saved_simulations: %v", err)
+	}
+	if _, err := store.writeDB.ExecContext(ctx,
+		`INSERT INTO dismissed_insights (key, kind, dismissed_at) VALUES ('k1', 'trend', '2026-02-03T04:05:06Z')`); err != nil {
+		t.Fatalf("insert dismissed_insights: %v", err)
+	}
+	var simCount, insightCount int
+	if err := store.writeDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM saved_simulations`).Scan(&simCount); err != nil {
+		t.Fatalf("count saved_simulations: %v", err)
+	}
+	if err := store.writeDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM dismissed_insights`).Scan(&insightCount); err != nil {
+		t.Fatalf("count dismissed_insights: %v", err)
+	}
+	if simCount != 1 || insightCount != 1 {
+		t.Fatalf("rows = (saved_simulations=%d dismissed_insights=%d), want (1, 1)", simCount, insightCount)
+	}
+}
+
 func TestMigrateFromV9AllowsExhaustedRecurrence(t *testing.T) {
 	root := t.TempDir()
 	dbPath := filepath.Join(root, "data", "fui.db")

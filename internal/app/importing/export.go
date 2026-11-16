@@ -1,6 +1,7 @@
 package importing
 
 import (
+	"cmp"
 	"context"
 	"encoding/csv"
 	"encoding/json"
@@ -67,21 +68,24 @@ func (s *Service) Export(ctx context.Context, req ExportRequest, w io.Writer) (i
 }
 
 type exportData struct {
-	txs      []domain.Transaction // oldest first
-	accounts map[domain.AccountID]domain.Account
-	cats     map[domain.CategoryID]domain.Category
-	payees   map[domain.PayeeID]domain.Payee
-	splits   map[domain.TransactionID][]domain.Split
-	tags     map[domain.TransactionID][]domain.Tag
-	balances map[domain.AccountID]domain.Money // final balance of the accounts involved
-	balDate  domain.Date
+	txs        []domain.Transaction // oldest first
+	accounts   map[domain.AccountID]domain.Account
+	cats       map[domain.CategoryID]domain.Category
+	payees     map[domain.PayeeID]domain.Payee
+	splits     map[domain.TransactionID][]domain.Split
+	tags       map[domain.TransactionID][]domain.Tag
+	securities map[domain.SecurityID]domain.Security
+	secOps     []domain.SecurityOp
+	balances   map[domain.AccountID]domain.Money // final balance of the accounts involved
+	balDate    domain.Date
 }
 
 func (s *Service) loadExport(ctx context.Context, r app.Repos, f domain.TxFilter) (exportData, error) {
 	d := exportData{
 		accounts: map[domain.AccountID]domain.Account{}, cats: map[domain.CategoryID]domain.Category{},
 		payees: map[domain.PayeeID]domain.Payee{}, splits: map[domain.TransactionID][]domain.Split{}, tags: map[domain.TransactionID][]domain.Tag{},
-		balances: map[domain.AccountID]domain.Money{}, balDate: f.To(),
+		securities: map[domain.SecurityID]domain.Security{},
+		balances:   map[domain.AccountID]domain.Money{}, balDate: f.To(),
 	}
 	if err := d.loadLookups(ctx, r); err != nil {
 		return d, err
@@ -96,6 +100,9 @@ func (s *Service) loadExport(ctx context.Context, r app.Repos, f domain.TxFilter
 	if err := d.loadTags(ctx, r); err != nil {
 		return d, err
 	}
+	if err := d.loadSecurityOps(ctx, r); err != nil {
+		return d, err
+	}
 	if d.balDate.IsZero() {
 		if d.balDate, err = domain.FromTime(s.clock.Now()); err != nil {
 			return d, fmt.Errorf("today: %w", err)
@@ -105,6 +112,29 @@ func (s *Service) loadExport(ctx context.Context, r app.Repos, f domain.TxFilter
 		return d, err
 	}
 	return d, nil
+}
+
+// loadSecurityOps fetches securities and their operations.
+func (d *exportData) loadSecurityOps(ctx context.Context, r app.Repos) error {
+	all, err := r.Securities().List(ctx)
+	if err != nil {
+		return fmt.Errorf("list securities: %w", err)
+	}
+	for _, sec := range all {
+		d.securities[sec.ID] = sec
+		ops, err := r.Securities().ListOpsBySecurity(ctx, sec.ID, domain.Date{}, domain.Date{})
+		if err != nil {
+			return fmt.Errorf("list security operations for %q: %w", sec.Name, err)
+		}
+		d.secOps = append(d.secOps, ops...)
+	}
+	slices.SortStableFunc(d.secOps, func(a, b domain.SecurityOp) int {
+		if diff := a.Date.Cmp(b.Date); diff != 0 {
+			return diff
+		}
+		return cmp.Compare(a.ID, b.ID)
+	})
+	return nil
 }
 
 // loadLookups loads the accounts, categories and payees referenced by the archive.
@@ -270,6 +300,14 @@ func protoKind(k domain.AccountKind) fuiproto.AccountKind {
 	return fuiproto.AccountKind(k)
 }
 
+func protoSecurityKind(k domain.SecurityKind) fuiproto.SecurityKind {
+	return fuiproto.SecurityKind(k)
+}
+
+func protoSecurityOpKind(k domain.SecurityOpKind) fuiproto.SecurityOpKind {
+	return fuiproto.SecurityOpKind(k)
+}
+
 func (d exportData) writeFUI(w io.Writer) error {
 	recs := []fuiproto.Record{{
 		Type: fuiproto.RecordTypeMeta,
@@ -281,6 +319,11 @@ func (d exportData) writeFUI(w io.Writer) error {
 			involved = append(involved, d.accounts[t.AccountID])
 		}
 	}
+	for _, op := range d.secOps {
+		if !slices.ContainsFunc(involved, func(a domain.Account) bool { return a.ID == op.Account }) {
+			involved = append(involved, d.accounts[op.Account])
+		}
+	}
 	for _, a := range involved {
 		recs = append(recs, fuiproto.Record{Type: fuiproto.RecordTypeAccount, Account: &fuiproto.AccountRecord{
 			Ref: accountRef(a), Name: a.Name, Currency: a.Currency.Code(), Kind: protoKind(a.Kind),
@@ -289,9 +332,16 @@ func (d exportData) writeFUI(w io.Writer) error {
 	for _, t := range d.txs {
 		recs = append(recs, fuiproto.Record{Type: fuiproto.RecordTypeTransaction, Transaction: d.fuiTx(t)})
 	}
+	for _, op := range d.secOps {
+		recs = append(recs, fuiproto.Record{Type: fuiproto.RecordTypeSecurityOp, SecurityOp: d.fuiSecurityOp(op)})
+	}
 	for _, a := range involved {
+		bal, ok := d.balances[a.ID]
+		if !ok {
+			continue
+		}
 		recs = append(recs, fuiproto.Record{Type: fuiproto.RecordTypeBalance, Balance: &fuiproto.BalanceRecord{
-			Account: accountRef(a), Date: d.balDate.String(), Amount: d.balances[a.ID].Minor(),
+			Account: accountRef(a), Date: d.balDate.String(), Amount: bal.Minor(),
 		}})
 	}
 	recs = append(recs, fuiproto.Record{Type: fuiproto.RecordTypeEnd, End: &fuiproto.EndRecord{Transactions: len(d.txs)}})
@@ -299,6 +349,35 @@ func (d exportData) writeFUI(w io.Writer) error {
 		return fmt.Errorf("write fui stream: %w", err)
 	}
 	return nil
+}
+
+func (d exportData) fuiSecurityOp(op domain.SecurityOp) *fuiproto.SecurityOpRecord {
+	sec := d.securities[op.Security]
+	rec := &fuiproto.SecurityOpRecord{
+		Account:   accountRef(d.accounts[op.Account]),
+		Date:      op.Date.String(),
+		Kind:      protoSecurityOpKind(op.Kind),
+		Quantity:  op.Quantity.Units(),
+		UnitPrice: op.UnitPrice.Minor(),
+		Fees:      op.Fees.Minor(),
+		Security: fuiproto.SecurityMeta{
+			Name:          sec.Name,
+			Ticker:        sec.Ticker,
+			ISIN:          sec.ISIN,
+			Kind:          protoSecurityKind(sec.Kind),
+			Currency:      sec.Currency.Code(),
+			QuantityScale: sec.QuantityScale,
+		},
+	}
+	if op.CashTx != 0 {
+		for _, tx := range d.txs {
+			if tx.ID == op.CashTx {
+				rec.CashTx = d.fuiTx(tx).ID
+				break
+			}
+		}
+	}
+	return rec
 }
 
 // fuiTx converts a transaction keeping its external id, or giving it fui-<id>; reconciled

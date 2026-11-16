@@ -43,6 +43,9 @@ func (c *Config) Get(key string) (string, error) {
 	case "forecast.horizon":
 		return strconv.Itoa(c.Forecast.Horizon), nil
 	default:
+		if v, ok := c.getInsight(key); ok {
+			return v, nil
+		}
 		if strings.HasPrefix(key, "import.profiles.") {
 			return c.getProfileField(key)
 		}
@@ -160,6 +163,12 @@ func (c *Config) applyKey(key, value string) error {
 	}
 	if !handled {
 		handled, err = c.setComplexField(key, value)
+		if err != nil {
+			return err
+		}
+	}
+	if !handled {
+		handled, err = c.setInsight(key, value)
 		if err != nil {
 			return err
 		}

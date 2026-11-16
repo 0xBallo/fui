@@ -65,6 +65,22 @@ type RowError struct {
 	Message string
 }
 
+// RowWarning is a non-fatal warning tied to one source line.
+type RowWarning struct {
+	Line    int
+	Message string
+}
+
+// SecurityOpPlanRow is one security operation to apply.
+type SecurityOpPlanRow struct {
+	Line       int
+	AccountRef string
+	Security   domain.Security
+	Op         domain.SecurityOp
+	CashTx     string // stream transaction id in SecurityOpRecord.cash_tx
+	Include    bool
+}
+
 // TransferProposal suggests linking an incoming leg to another movement as a transfer. It is
 // applied only when Accept is set. The partner is another row (Other >= 0) or a transaction
 // already in the archive (Other == -1).
@@ -99,8 +115,11 @@ type ImportPlan struct {
 	NewCategories   []domain.Category
 	NewPayees       []domain.Payee
 	NewTags         []domain.Tag
+	NewSecurities   []domain.Security
 	Rows            []Row
+	SecurityOps     []SecurityOpPlanRow
 	Errors          []RowError
+	Warnings        []RowWarning
 	Transfers       []TransferProposal
 	Discrepancies   []BalanceDiscrepancy
 	// Stderr is what the connector wrote on stderr, for --verbose.
@@ -144,7 +163,37 @@ func (p *ImportPlan) SetInclude(i int, include bool) error {
 // refresh recomputes Changes from the other fields. Importing always asks for confirmation:
 // Bulk is set, and ApplyImport takes the backup itself.
 func (p *ImportPlan) refresh() {
-	changes := make([]app.Change, 0, len(p.NewAccounts)+len(p.NewCategories)+len(p.NewPayees)+len(p.NewTags)+2)
+	changes := make([]app.Change, 0, len(p.NewAccounts)+len(p.NewCategories)+len(p.NewPayees)+len(p.NewTags)+len(p.NewSecurities)+3)
+	changes = p.appendEntityCreates(changes)
+	secOps := p.includedSecurityOps()
+	n := p.Counts()
+	changes = append(changes,
+		app.Change{
+			Op: app.OpCreate, Entity: EntityImportBatch,
+			Fields:  map[string]any{"connector": p.Connector, "source": p.Source, "source_sha256": p.SourceSHA256},
+			Summary: fmt.Sprintf("create import batch from %q", p.Source),
+		},
+		app.Change{
+			Op: app.OpCreate, Entity: app.EntityTransaction,
+			Fields: map[string]any{
+				"count": n.Included, "new": n.New, "duplicate": n.Duplicate, "doubtful": n.Doubtful, "errors": n.Errors,
+			},
+			Summary: fmt.Sprintf("create %d transactions (%d new, %d duplicate, %d doubtful, %d errors)",
+				n.Included, n.New, n.Duplicate, n.Doubtful, n.Errors),
+		})
+	if len(p.SecurityOps) > 0 {
+		changes = append(changes, app.Change{
+			Op: app.OpCreate, Entity: "security_op",
+			Fields: map[string]any{
+				"count": secOps,
+			},
+			Summary: fmt.Sprintf("create %d security operations", secOps),
+		})
+	}
+	p.Changes, p.Bulk = changes, true
+}
+
+func (p *ImportPlan) appendEntityCreates(changes []app.Change) []app.Change {
 	for _, a := range p.NewAccounts {
 		f := map[string]any{"name": a.Account.Name, "kind": string(a.Account.Kind)}
 		moneyFields(f, "opening_balance", a.Account.OpeningBalance)
@@ -171,22 +220,27 @@ func (p *ImportPlan) refresh() {
 			Summary: fmt.Sprintf("create tag %q", t.Name),
 		})
 	}
-	n := p.Counts()
-	changes = append(changes,
-		app.Change{
-			Op: app.OpCreate, Entity: EntityImportBatch,
-			Fields:  map[string]any{"connector": p.Connector, "source": p.Source, "source_sha256": p.SourceSHA256},
-			Summary: fmt.Sprintf("create import batch from %q", p.Source),
-		},
-		app.Change{
-			Op: app.OpCreate, Entity: app.EntityTransaction,
+	for _, s := range p.NewSecurities {
+		changes = append(changes, app.Change{
+			Op: app.OpCreate, Entity: "security",
 			Fields: map[string]any{
-				"count": n.Included, "new": n.New, "duplicate": n.Duplicate, "doubtful": n.Doubtful, "errors": n.Errors,
+				"name": s.Name, "ticker": s.Ticker, "isin": s.ISIN, "kind": string(s.Kind),
+				"currency": s.Currency.Code(), "quantity_scale": s.QuantityScale,
 			},
-			Summary: fmt.Sprintf("create %d transactions (%d new, %d duplicate, %d doubtful, %d errors)",
-				n.Included, n.New, n.Duplicate, n.Doubtful, n.Errors),
+			Summary: fmt.Sprintf("create security %q", s.Name),
 		})
-	p.Changes, p.Bulk = changes, true
+	}
+	return changes
+}
+
+func (p *ImportPlan) includedSecurityOps() int {
+	n := 0
+	for _, row := range p.SecurityOps {
+		if row.Include {
+			n++
+		}
+	}
+	return n
 }
 
 func moneyFields(fields map[string]any, prefix string, m domain.Money) {

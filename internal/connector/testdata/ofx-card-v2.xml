@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OFX>
+  <CREDITCARDMSGSRSV1>
+    <CCSTMTTRNRS>
+      <CCSTMTRS>
+        <CURDEF>EUR</CURDEF>
+        <CCACCTFROM>
+          <ACCTID>CC-9988</ACCTID>
+        </CCACCTFROM>
+        <BANKTRANLIST>
+          <DTSTART>20261001</DTSTART>
+          <DTEND>20261031</DTEND>
+          <STMTTRN>
+            <TRNTYPE>POS</TRNTYPE>
+            <DTPOSTED>20261003</DTPOSTED>
+            <TRNAMT>-5.20</TRNAMT>
+            <FITID>CC-TX-1</FITID>
+            <NAME>Bookshop</NAME>
+            <MEMO>Card</MEMO>
+          </STMTTRN>
+          <STMTTRN>
+            <TRNTYPE>FEE</TRNTYPE>
+            <DTPOSTED>20261004</DTPOSTED>
+            <TRNAMT>-2.00</TRNAMT>
+            <NAME>Monthly fee</NAME>
+          </STMTTRN>
+        </BANKTRANLIST>
+      </CCSTMTRS>
+    </CCSTMTTRNRS>
+  </CREDITCARDMSGSRSV1>
+</OFX>

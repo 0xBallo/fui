@@ -13,6 +13,10 @@ func (m *Model) View() string {
 		return components.Modal(m.th, m.width, m.height, m.viewForm())
 	case modeConfirmRemove:
 		return components.Modal(m.th, m.width, m.height, m.confirm.View())
+	case modeCompare:
+		return m.viewCompare()
+	case modeSim:
+		return m.viewSim()
 	case modeSaved:
 		return m.viewSaved()
 	case modeReport:
@@ -50,7 +54,14 @@ func (m *Model) reportTitle() string {
 }
 
 func (m *Model) viewFooter() string {
-	return m.th.Base.Render("h/l report   p params   s save   v saved   e export   r refresh")
+	footer := "h/l report   p params   s save   v saved   e export   r refresh"
+	if m.compareEnabled() {
+		footer += "   c compare"
+	}
+	if m.simEnabled() {
+		footer += "   i simulations"
+	}
+	return m.th.Base.Render(footer)
 }
 
 func (m *Model) viewSaved() string {
@@ -69,7 +80,7 @@ func (m *Model) formTitle() string {
 		return "Save report"
 	case modeExportForm:
 		return "Export transactions"
-	case modeParamsForm, modeReport, modeSaved, modeConfirmRemove:
+	case modeParamsForm, modeReport, modeSaved, modeConfirmRemove, modeCompare, modeSim:
 		return "Report params"
 	}
 	return "Report params"

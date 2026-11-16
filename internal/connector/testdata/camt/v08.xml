@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.08">
+  <BkToCstmrStmt>
+    <GrpHdr><MsgId>SYNTH-2</MsgId><CreDtTm>2026-03-01T08:00:00Z</CreDtTm></GrpHdr>
+    <Stmt>
+      <Id>S1</Id>
+      <Acct><Id><IBAN>IT60X0542811101000000123456</IBAN></Id><Ccy>EUR</Ccy></Acct>
+      <Bal>
+        <Tp><CdOrPrtry><Cd>CLBD</Cd></CdOrPrtry></Tp>
+        <Amt Ccy="EUR">90.50</Amt><CdtDbtInd>DBIT</CdtDbtInd><Dt><Dt>2026-02-28</Dt></Dt>
+      </Bal>
+      <Ntry>
+        <NtryRef>B-1</NtryRef>
+        <Amt Ccy="EUR">30.00</Amt><CdtDbtInd>DBIT</CdtDbtInd><Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-02-03</Dt></BookgDt><ValDt><Dt>2026-02-03</Dt></ValDt>
+        <AcctSvcrRef>SVC-100</AcctSvcrRef>
+        <NtryDtls>
+          <TxDtls>
+            <Amt Ccy="EUR">10.00</Amt>
+            <RltdPties><Cdtr><Pty><Nm>Water Utility</Nm></Pty></Cdtr><CdtrAcct><Id><IBAN>DE89370400440532013000</IBAN></Id></CdtrAcct></RltdPties>
+            <RmtInf><Ustrd>Water bill</Ustrd></RmtInf>
+          </TxDtls>
+          <TxDtls>
+            <Amt Ccy="EUR">20.00</Amt>
+            <RltdPties><Cdtr><Pty><Nm>Power Utility</Nm></Pty></Cdtr></RltdPties>
+            <RmtInf><Ustrd>Power bill</Ustrd></RmtInf>
+          </TxDtls>
+        </NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">60.50</Amt><CdtDbtInd>DBIT</CdtDbtInd><Sts><Cd>PDNG</Cd></Sts>
+        <BookgDt><Dt>2026-02-10</Dt></BookgDt>
+        <NtryDtls><TxDtls><RltdPties><Cdtr><Pty><Nm>Gym Club</Nm></Pty></Cdtr></RltdPties><AddtlTxInf>Membership</AddtlTxInf></TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">5.00</Amt><CdtDbtInd>CRDT</CdtDbtInd><Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-02-11</Dt></BookgDt>
+        <AcctSvcrRef>SVC-101</AcctSvcrRef>
+        <NtryDtls><TxDtls><RltdPties><Dbtr><Pty><Nm>Friend</Nm></Pty></Dbtr></RltdPties><RmtInf><Ustrd>Lunch</Ustrd></RmtInf></TxDtls></NtryDtls>
+      </Ntry>
+    </Stmt>
+    <Stmt>
+      <Id>S2</Id>
+      <Acct><Id><IBAN>IT60X0542811101000000123456</IBAN></Id><Ccy>EUR</Ccy></Acct>
+      <Ntry>
+        <Amt Ccy="EUR">1.00</Amt><CdtDbtInd>CRDT</CdtDbtInd><Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-03-01</Dt></BookgDt><AcctSvcrRef>SVC-102</AcctSvcrRef>
+        <AddtlNtryInf>Interest</AddtlNtryInf>
+      </Ntry>
+    </Stmt>
+  </BkToCstmrStmt>
+</Document>

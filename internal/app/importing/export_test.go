@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/importing"
@@ -65,6 +66,18 @@ func seedExport(t *testing.T) env {
 		if err := r.Splits().ReplaceSplits(context.Background(), firstID, []domain.Split{
 			{Category: cat.ID, Amount: money(-1000), Note: "food"},
 			{Category: catHome.ID, Amount: money(-250), Note: "home"},
+		}); err != nil {
+			return err
+		}
+		sec, err := r.Securities().Insert(context.Background(), domain.Security{
+			Name: "World ETF", Ticker: "VWCE", Kind: domain.SecurityETF, Currency: eur(), QuantityScale: 6,
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := r.Securities().InsertOp(context.Background(), domain.SecurityOp{
+			Date: date("2026-10-04"), Account: a.ID, Security: sec.ID, Kind: domain.OpBuy,
+			Quantity: must(domain.NewQuantity(1000000, 6)), UnitPrice: money(100), Fees: money(1), CashTx: firstID,
 		}); err != nil {
 			return err
 		}
@@ -141,6 +154,7 @@ func TestExportFUIIsAValidStream(t *testing.T) {
 		t.Fatalf("export is not a valid stream: %v %+v", err, res.RowErrors)
 	}
 	var txs []*fuiproto.TransactionRecord
+	var secOps []*fuiproto.SecurityOpRecord
 	balances := map[string]int64{}
 	for _, r := range res.Records {
 		switch {
@@ -150,6 +164,8 @@ func TestExportFUIIsAValidStream(t *testing.T) {
 			txs = append(txs, r.Transaction)
 		case r.Balance != nil:
 			balances[r.Balance.Account] = r.Balance.Amount
+		case r.SecurityOp != nil:
+			secOps = append(secOps, r.SecurityOp)
 		}
 	}
 	if n != 4 || len(txs) != 4 || res.End.Transactions != 4 {
@@ -170,6 +186,9 @@ func TestExportFUIIsAValidStream(t *testing.T) {
 	}
 	if balances["Main, the \"first\""] != -1250-1100+500 || balances["Savings"] != 1000 {
 		t.Fatalf("balances = %v", balances)
+	}
+	if len(secOps) != 1 || secOps[0].CashTx != "bank-1" || secOps[0].Security.Ticker != "VWCE" {
+		t.Fatalf("security ops = %+v", secOps)
 	}
 }
 
@@ -205,7 +224,23 @@ func (m memFiles) create(name string) (io.WriteCloser, error) {
 func TestDump(t *testing.T) {
 	e := seedExport(t)
 	e.importAll(t, stream("bank", "abc", account("r", "Imported", "EUR"), txRec("r", "a", "2026-10-01", -100, "x")))
-	wantFiles := []string{"accounts", "categories", "transactions", "transfers", "fx_rates", "import_batches"}
+	if err := e.store.WithTx(context.Background(), func(r app.Repos) error {
+		if _, err := r.SavedSimulations().Insert(context.Background(), app.SavedSimulation{
+			Name:       "Plan A",
+			Kind:       "investment",
+			ParamsJSON: `{"years":20}`,
+		}); err != nil {
+			return err
+		}
+		return r.DismissedInsights().Dismiss(context.Background(), app.DismissedInsight{
+			Key:         "ins-1",
+			Kind:        domain.InsightSubscript,
+			DismissedAt: time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC),
+		})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	wantFiles := []string{"accounts", "categories", "transactions", "transfers", "fx_rates", "import_batches", "saved_simulations", "dismissed_insights"}
 	t.Run("json", func(t *testing.T) {
 		files := memFiles{}
 		if err := e.svc.Dump(context.Background(), importing.DumpJSON, files.create); err != nil {
@@ -239,6 +274,14 @@ func TestDump(t *testing.T) {
 		batches, _ := csv.NewReader(files["import_batches.csv"]).ReadAll()
 		if len(batches) != 2 || batches[1][3] != "abc" {
 			t.Fatalf("import_batches.csv = %q", batches)
+		}
+		sims, _ := csv.NewReader(files["saved_simulations.csv"]).ReadAll()
+		if len(sims) != 2 || sims[1][1] != "Plan A" {
+			t.Fatalf("saved_simulations.csv = %q", sims)
+		}
+		dismissed, _ := csv.NewReader(files["dismissed_insights.csv"]).ReadAll()
+		if len(dismissed) != 2 || dismissed[1][0] != "ins-1" {
+			t.Fatalf("dismissed_insights.csv = %q", dismissed)
 		}
 	})
 	t.Run("unknown format", func(t *testing.T) {

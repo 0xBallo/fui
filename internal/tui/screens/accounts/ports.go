@@ -6,6 +6,7 @@ import (
 	"context"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/investing"
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/module"
 )
@@ -22,4 +23,12 @@ type UseCases interface {
 	ApplyArchiveAccount(ctx context.Context, p app.ArchiveAccountPlan) (domain.Account, error)
 	PlanReconcile(ctx context.Context, enabled module.Set, req app.ReconcileRequest) (app.ReconcilePlan, error)
 	ApplyReconcile(ctx context.Context, enabled module.Set, p app.ReconcilePlan) error
+}
+
+// PositionsUseCases is the optional investing subset this screen can use to show investment
+// positions and let users set manual prices from the account detail panel.
+type PositionsUseCases interface {
+	ListPositions(ctx context.Context, req investing.PositionsRequest) ([]investing.PositionLine, error)
+	PlanSetPrice(ctx context.Context, req investing.SetPriceRequest) (investing.SetPricePlan, error)
+	ApplySetPrice(ctx context.Context, p investing.SetPricePlan) error
 }
