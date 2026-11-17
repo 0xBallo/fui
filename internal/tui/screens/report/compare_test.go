@@ -48,10 +48,20 @@ func TestCompareHiddenWithoutUseCases(t *testing.T) {
 	}
 }
 
+// offers reports whether s exposes a binding with help key k, which Root shows in its hint line.
+func offers(s scr.Screen, k string) bool {
+	for _, b := range s.KeyMap() {
+		if b.Help().Key == k {
+			return true
+		}
+	}
+	return false
+}
+
 func TestCompareViewAndToggle(t *testing.T) {
 	s := compareScreen(t, theme.Default())
-	if !strings.Contains(s.View(), "c compare") {
-		t.Fatalf("footer should offer compare:\n%s", s.View())
+	if !offers(s, "c") {
+		t.Fatalf("key map should offer compare: %v", s.KeyMap())
 	}
 	s, cmd := sendRunes(s, "c")
 	s = run(t, s, cmd)
@@ -67,7 +77,7 @@ func TestCompareViewAndToggle(t *testing.T) {
 		t.Fatalf("by-category off should show only the total:\n%s", v)
 	}
 	s, _ = sendKey(s, tea.KeyEsc)
-	if !strings.Contains(s.View(), "Reports — Net worth") {
+	if !strings.Contains(s.View(), "Net worth") {
 		t.Fatalf("esc should return to the report:\n%s", s.View())
 	}
 }
@@ -126,7 +136,7 @@ func (m *teaScreen) View() string { return m.scr.View() }
 func TestCompareTeatest(t *testing.T) {
 	s := compareScreen(t, theme.Default())
 	tm := teatest.NewTestModel(t, &teaScreen{scr: s}, teatest.WithInitialTermSize(80, 24))
-	teatest.WaitFor(t, tm.Output(), func(b []byte) bool { return bytes.Contains(b, []byte("c compare")) },
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool { return bytes.Contains(b, []byte("Net worth")) },
 		teatest.WithDuration(3*time.Second))
 	tm.Type("c")
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool { return bytes.Contains(b, []byte("TOTAL")) },

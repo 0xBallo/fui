@@ -33,10 +33,10 @@ const (
 	minHeight = 24
 )
 
-// reservedRows is the vertical space Root reserves for the tab bar (three lines), the status bar
-// and the blank line above it, plus one for the rule under each screen title, leaving the rest to
-// the active screen.
-const reservedRows = 6
+// reservedRows is the vertical space Root reserves for the tab bar (three lines), the key hint
+// line and the blank line below it, the status bar and the blank line above it, leaving the rest
+// to the active screen.
+const reservedRows = 7
 
 // UseCases is the union of every MVP screen's needs: the app layer (shared with the CLI) plus the
 // reporting layer the dashboard uses for spending and runway.
@@ -319,16 +319,54 @@ func (r *Root) View() string {
 			"Terminal too small: %dx%d. FUI needs at least %dx%d.", r.width, r.height, minWidth, minHeight))
 	}
 	body := r.tabs[r.active].View()
-	// Fill the terminal: the body takes every line the tab bar (three), the blank line and the
-	// status bar leave, so the status bar sits on the last row.
-	h := max(1, r.height-5)
+	hints := r.viewHints()
+	// Fill the terminal: the body takes every line the tab bar (three), the hint lines, the two
+	// blank lines and the status bar leave, so the status bar sits on the last row.
+	// ponytail: screens are sized for one hint line; a wrapped one clips their last rows, which
+	// their table slack absorbs. Feed the hint height into SetSize if a screen ever runs short.
+	h := max(1, r.height-reservedRows+1-lipgloss.Height(hints))
 	if r.showHelp {
 		body = components.Modal(r.th, r.width, h, r.viewHelp(h))
 	}
 	if r.height > 0 {
 		body = lipgloss.NewStyle().Height(h).MaxHeight(h).Render(body)
 	}
-	return r.viewTabs() + "\n" + body + "\n\n" + r.viewStatus()
+	return r.viewTabs() + "\n" + hints + "\n\n" + body + "\n\n" + r.viewStatus()
+}
+
+// viewHints renders the active screen's commands, wrapping onto a new line when the width runs
+// out. Plain navigation (cursor, paging, esc) is left to the help overlay since it is the same on
+// every screen.
+func (r *Root) viewHints() string {
+	sep := r.th.HelpDesc.Render(" · ")
+	var out, line string
+	for _, b := range r.ActiveKeyMap() {
+		hb := b.Help()
+		if hb.Key == "" || !b.Enabled() || isNavigation(b) {
+			continue
+		}
+		hint := r.th.HelpKey.Render(hb.Key) + " " + r.th.HelpDesc.Render(hb.Desc)
+		switch {
+		case line == "":
+		case r.width > 0 && lipgloss.Width(line+sep+hint) > r.width:
+			out, line = out+line+"\n", ""
+		default:
+			hint = sep + hint
+		}
+		line += hint
+	}
+	return out + line
+}
+
+// isNavigation reports whether b moves the cursor or backs out rather than running a command.
+func isNavigation(b key.Binding) bool {
+	for _, k := range b.Keys() {
+		switch k {
+		case "up", "down", "pgup", "pgdown", "home", "end", "esc":
+			return true
+		}
+	}
+	return false
 }
 
 // tabNames are the seven screens in tab order; a tab with no Screen is rendered disabled.

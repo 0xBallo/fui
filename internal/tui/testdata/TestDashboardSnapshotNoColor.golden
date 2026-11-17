@@ -1,9 +1,8 @@
 ╭───────────╮╭────────────╮╭────────╮╭──────╮╭───────╮╭──────╮╭────────╮        
 │1 Dashboard││Transactions││Accounts││Budget││Reports││Import││Settings│        
 ┘           └┴────────────┴┴────────┴┴──────┴┴───────┴┴──────┴┴────────┴────────
-Dashboard                                                                       
-─────────                                                                       
-                                                                                
+a quick add
+
 Accounts                                                                        
 ╭────────────────────────────────────────────────┬────────────┬────────────────╮
 │Account                                         │Kind        │         Balance│
@@ -19,6 +18,7 @@ not enough data (needs at least 3 complete months)
                                                                                 
 Spending this month                                                             
 Groceries ██████████████████████████████████████████████████████████████ 42.50  
+                                                                                
                                                                                 
 
 ? help · q quit

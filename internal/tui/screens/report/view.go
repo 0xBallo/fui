@@ -34,7 +34,6 @@ func (m *Model) viewReport() string {
 	if m.note != "" {
 		lines = append(lines, "", m.th.Muted.Render(m.note))
 	}
-	lines = append(lines, "", m.viewFooter())
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
 
@@ -43,7 +42,7 @@ func (m *Model) reportTitle() string {
 	if label == "" {
 		label = predefinedKinds()[m.kindIdx].Label
 	}
-	title := "Reports — " + label
+	title := label
 	if m.result.saved != "" {
 		title += " (saved: " + m.result.saved + ")"
 	}
@@ -51,17 +50,6 @@ func (m *Model) reportTitle() string {
 		title += " — " + m.periodText
 	}
 	return title
-}
-
-func (m *Model) viewFooter() string {
-	footer := "h/l report   p params   s save   v saved   e export   r refresh"
-	if m.compareEnabled() {
-		footer += "   c compare"
-	}
-	if m.simEnabled() {
-		footer += "   i simulations"
-	}
-	return m.th.Base.Render(footer)
 }
 
 func (m *Model) viewSaved() string {

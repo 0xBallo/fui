@@ -481,7 +481,7 @@ func (m *Model) View() string {
 }
 
 func (m *Model) viewList() string {
-	return m.th.Title.Render("Accounts") + "\n\n" + m.table.View()
+	return m.table.View()
 }
 
 func (m *Model) viewDetail() string {

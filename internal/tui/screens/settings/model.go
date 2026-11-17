@@ -478,7 +478,6 @@ func (m *Model) View() string {
 }
 
 func (m *Model) viewSectionTabs() string {
-	title := m.th.Title.Render("Settings")
 	labels := m.sectionLabels()
 	parts := make([]string, len(labels))
 	for i, name := range labels {
@@ -488,7 +487,7 @@ func (m *Model) viewSectionTabs() string {
 			parts[i] = m.th.InactiveTab.Render(name)
 		}
 	}
-	return title + "\n" + strings.Join(parts, "  ")
+	return strings.Join(parts, "  ")
 }
 
 func (m *Model) viewModules() string {
