@@ -8,6 +8,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -41,6 +43,11 @@ func txView(t *testing.T, minor int64, st domain.TxStatus, transfer bool) app.Tx
 	return v
 }
 
+func kindTransfer(v app.TxView) app.TxView {
+	v.Transaction.Kind = domain.KindTransfer
+	return v
+}
+
 func loaded(t *testing.T, items []app.TxView) *recentSection {
 	t.Helper()
 	s := newRecentSection(nil, domain.LocaleENUS, theme.Default())
@@ -59,9 +66,10 @@ func TestRecentRowStyles(t *testing.T) {
 		txView(t, 500, domain.StatusBooked, false),
 		txView(t, -500, domain.StatusPending, false),
 		txView(t, -500, domain.StatusBooked, true),
+		kindTransfer(txView(t, -500, domain.StatusBooked, false)),
 	})
-	want := []theme.Flow{theme.FlowExpense, theme.FlowIncome, theme.FlowExpense, theme.FlowTransfer}
-	pending := []bool{false, false, true, false}
+	want := []theme.Flow{theme.FlowExpense, theme.FlowIncome, theme.FlowExpense, theme.FlowTransfer, theme.FlowTransfer}
+	pending := []bool{false, false, true, false, false}
 	rows := s.rows()
 	for i, r := range rows {
 		got := r.Style.GetForeground()
@@ -120,5 +128,22 @@ func TestRecentKeyAndEmpty(t *testing.T) {
 	}
 	if _, ok := s.update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}); ok {
 		t.Error("x consumed")
+	}
+}
+
+func TestRecentNoRowLooksSelected(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	th := theme.Default()
+	s := loaded(t, []app.TxView{txView(t, -500, domain.StatusBooked, false), txView(t, 500, domain.StatusBooked, false)})
+	bg := lipgloss.NewStyle().Background(th.Selected.GetBackground()).Render("x")
+	seq := strings.SplitN(bg, "x", 2)[0]
+	if seq == "" || seq == "\x1b[0m" {
+		t.Fatal("selected style has no background to look for")
+	}
+	if strings.Contains(s.view(100), seq) {
+		t.Error("a row carries the Selected background")
 	}
 }

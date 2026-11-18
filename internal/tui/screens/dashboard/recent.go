@@ -6,6 +6,8 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -81,16 +83,50 @@ func (s *recentSection) view(width int) string {
 	if len(s.items) == 0 {
 		return out + s.th.Muted.Render("no transactions in this period")
 	}
-	tbl := components.NewTable([]components.Column{
+	return out + s.table(width) + "\n" + s.th.Muted.Render("→ View all transactions (t)")
+}
+
+// table renders the rows with lipgloss directly: components.Table always highlights a cursor row,
+// and this block is read-only.
+func (s *recentSection) table(width int) string {
+	cols := []components.Column{
 		{Title: "Date", Width: 12, Align: lipgloss.Left},
 		{Title: "Description", Width: 30, Align: lipgloss.Left},
 		{Title: "Category", Width: 16, Align: lipgloss.Left},
 		{Title: "Amount", Width: 14, Align: lipgloss.Right},
-	}, s.th)
-	tbl.SetWidth(width)
-	tbl.SetHeight(len(s.items) + 3)
-	tbl.SetRows(s.rows())
-	return out + tbl.View() + "\n" + s.th.Muted.Render("→ View all transactions (t)")
+	}
+	if width > 0 {
+		total := len(cols) + 1
+		for _, c := range cols {
+			total += c.Width
+		}
+		cols[1].Width = max(8, cols[1].Width+width-total)
+	}
+	headers := make([]string, len(cols))
+	for i, c := range cols {
+		headers[i] = ansi.Truncate(c.Title, c.Width, "…")
+	}
+	rows := s.rows()
+	data := make([][]string, len(rows))
+	for i, r := range rows {
+		data[i] = make([]string, len(cols))
+		for j, c := range cols {
+			data[i][j] = ansi.Truncate(r.Cells[j], c.Width, "…")
+		}
+	}
+	cell := func(c components.Column) lipgloss.Style { return lipgloss.NewStyle().Width(c.Width).Align(c.Align) }
+	return table.New().
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(s.th.Tokens.Border)).
+		Headers(headers...).
+		Rows(data...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if row == table.HeaderRow {
+				return s.th.Header.Inherit(cell(cols[col]))
+			}
+			return rows[row].Style.Inherit(cell(cols[col]))
+		}).
+		Render()
 }
 
 func (s *recentSection) rows() []components.Row {
@@ -108,7 +144,7 @@ func (s *recentSection) rows() []components.Row {
 // recentFlow classifies a row for coloring; the sign stays in the amount text so color is never the only cue.
 func recentFlow(v app.TxView) theme.Flow {
 	switch {
-	case v.Transfer != nil:
+	case v.Transfer != nil || v.Transaction.Kind == domain.KindTransfer:
 		return theme.FlowTransfer
 	case v.Transaction.Amount.Sign() < 0:
 		return theme.FlowExpense
