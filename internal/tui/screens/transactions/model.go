@@ -88,6 +88,8 @@ type Model struct {
 	filterAccount, filterCategory, filterStatus, filterKind components.Autocomplete
 	filterUncategorized, filterSign                         components.Autocomplete
 	filterFrom, filterTo, filterMin, filterMax              components.Autocomplete
+	picker                                                  components.DatePicker
+	pickTarget                                              *components.Autocomplete
 	chipFocus                                               int
 
 	searchField  components.Autocomplete
@@ -117,6 +119,7 @@ func New(uc UseCases, loc domain.Locale, th theme.Theme) *Model {
 	m := &Model{uc: uc, loc: loc, th: th, km: DefaultKeyMap(), tick: defaultTick}
 	m.table = components.NewTable(m.columns(), th)
 	m.confirm = components.NewConfirmDialog(th)
+	m.picker = components.NewDatePicker(th)
 	return m
 }
 
