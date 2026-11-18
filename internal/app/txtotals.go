@@ -8,7 +8,7 @@ import (
 )
 
 // TxTotals are the income and expense sums of every transaction matching a filter, in the base currency.
-// Expense is negative. Count is the number of transactions summed (transfers excluded).
+// Expense is negative. Count is the number of transactions summed (transfers, investments and exchanges excluded).
 type TxTotals struct {
 	Base    domain.Currency
 	Income  domain.Money
@@ -16,7 +16,7 @@ type TxTotals struct {
 	Count   int
 }
 
-// TxTotals walks every page of ListTx(req) (After and Limit are ignored), skips transfers and converts
+// TxTotals walks every page of ListTx(req) (After and Limit are ignored), skips transfers, investments and exchanges (not income or expense) and converts
 // each amount at its own date. A missing rate fails with ErrRateMissing, like NetWorth.
 func (s *Service) TxTotals(ctx context.Context, req ListTxRequest) (TxTotals, error) {
 	if err := s.needBase(); err != nil {
@@ -56,7 +56,7 @@ type txRateKey struct {
 func (s *Service) addTotals(ctx context.Context, r Repos, out *TxTotals, items []TxView, rates map[txRateKey]domain.Rate) error {
 	for _, v := range items {
 		t := v.Transaction
-		if t.Kind == domain.KindTransfer {
+		if t.Kind == domain.KindTransfer || t.Kind == domain.KindInvestment || t.Kind == domain.KindExchange {
 			continue
 		}
 		k := txRateKey{t.Amount.Currency(), t.Date}

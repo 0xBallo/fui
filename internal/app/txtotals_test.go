@@ -11,7 +11,7 @@ import (
 func TestTxTotals(t *testing.T) {
 	ctx := t.Context()
 
-	t.Run("mixed signs, transfer excluded, paged", func(t *testing.T) {
+	t.Run("mixed signs; transfer, investment and exchange excluded; paged", func(t *testing.T) {
 		e := newEnv(t)
 		e.account(t, "A", "checking", "EUR", "0")
 		e.account(t, "B", "checking", "EUR", "0")
@@ -22,6 +22,9 @@ func TestTxTotals(t *testing.T) {
 		wantNoErr(t, err)
 		_, err = e.svc.ApplyTransfer(ctx, p)
 		wantNoErr(t, err)
+
+		e.tx(t, app.AddTxRequest{Account: "A", Amount: "-500", Date: "2026-11-05", Kind: "investment"})
+		e.tx(t, app.AddTxRequest{Account: "A", Amount: "-40", Date: "2026-11-05", Kind: "exchange"})
 
 		got, err := e.svc.TxTotals(ctx, app.ListTxRequest{Limit: 1})
 		wantNoErr(t, err)
