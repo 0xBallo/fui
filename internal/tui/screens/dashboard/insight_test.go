@@ -91,15 +91,15 @@ func runBatch(t *testing.T, scr screens.Screen, cmd tea.Cmd) screens.Screen {
 	return scr
 }
 
-func TestInsightPanelHiddenWithoutUseCases(t *testing.T) {
+func TestAlertsAllClearWithoutSources(t *testing.T) {
 	_, scr := newFixture(t)
 	scr = run(t, scr, scr.Init())
-	if strings.Contains(scr.View(), "Insights") {
-		t.Fatalf("panel must be hidden without InsightUseCases:\n%s", scr.View())
+	if v := scr.View(); !strings.Contains(v, "Alerts") || !strings.Contains(v, "all clear") {
+		t.Fatalf("want empty alerts panel:\n%s", v)
 	}
 }
 
-func TestInsightPanelDismissAccept(t *testing.T) {
+func TestInsightAlertsDismissAccept(t *testing.T) {
 	ins := &stubInsights{items: sampleInsights(), created: true}
 	scr := insightScreen(t, ins, theme.Default())
 	view := scr.View()
@@ -131,7 +131,7 @@ func TestInsightPanelDismissAccept(t *testing.T) {
 	}
 }
 
-func TestInsightPanelAcceptRejectsNonSubscription(t *testing.T) {
+func TestInsightAlertsAcceptRejectsNonSubscription(t *testing.T) {
 	ins := &stubInsights{items: sampleInsights()}
 	scr := insightScreen(t, ins, theme.Default())
 	scr, _ = sendRunes(scr, "i")
@@ -142,16 +142,16 @@ func TestInsightPanelAcceptRejectsNonSubscription(t *testing.T) {
 	}
 }
 
-func TestInsightPanelFocusAndLeave(t *testing.T) {
+func TestInsightAlertsFocusAndLeave(t *testing.T) {
 	ins := &stubInsights{items: sampleInsights()}
 	scr := insightScreen(t, ins, theme.Default())
 	scr, _ = sendRunes(scr, "i")
 	scr, _ = sendRunes(scr, "j")
-	if v := scr.View(); !strings.Contains(v, "> [subscription] Netflix") {
+	if v := scr.View(); !strings.Contains(v, "> i info [subscription] Netflix") {
 		t.Fatalf("cursor not on second row:\n%s", v)
 	}
 	scr, _ = sendKey(scr, tea.KeyEsc)
-	if v := scr.View(); strings.Contains(v, "> [") {
+	if v := scr.View(); strings.Contains(v, "> ") {
 		t.Fatalf("still focused after esc:\n%s", v)
 	}
 	// With focus left, "a" opens quick add again.
@@ -161,11 +161,11 @@ func TestInsightPanelFocusAndLeave(t *testing.T) {
 	}
 }
 
-func TestInsightPanelModuleDisabledHides(t *testing.T) {
+func TestInsightAlertsModuleDisabledHides(t *testing.T) {
 	ins := &stubInsights{runErr: app.ErrModuleDisabled}
 	scr := insightScreen(t, ins, theme.Default())
-	if strings.Contains(scr.View(), "Insights") {
-		t.Fatalf("panel must hide when the module is disabled:\n%s", scr.View())
+	if !strings.Contains(scr.View(), "all clear") {
+		t.Fatalf("alerts must be empty when the module is disabled:\n%s", scr.View())
 	}
 }
 
@@ -173,9 +173,9 @@ type noDetector struct{}
 
 func (noDetector) Dark(time.Duration) (dark, ok bool) { return true, true }
 
-// TestInsightPanelThemesAndNoColor checks that the plain text is identical under every theme, so
+// TestInsightAlertsThemesAndNoColor checks that the plain text is identical under every theme, so
 // no information is carried by colour alone, and snapshots it at 80x24.
-func TestInsightPanelThemesAndNoColor(t *testing.T) {
+func TestInsightAlertsThemesAndNoColor(t *testing.T) {
 	var base string
 	for _, name := range []string{"latte", "frappe", "macchiato", "mocha", "terminal", "high-contrast"} {
 		th := theme.Resolve(theme.Config{Theme: name}, noDetector{})
@@ -207,7 +207,7 @@ func (m *teaScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *teaScreen) View() string { return m.scr.View() }
 
-func TestInsightPanelTeatest(t *testing.T) {
+func TestInsightAlertsTeatest(t *testing.T) {
 	ins := &stubInsights{items: sampleInsights()}
 	fx := screentest.New(t)
 	uc := useCases{Service: fx.Service, Reporting: fx.NewReporting(t)}
