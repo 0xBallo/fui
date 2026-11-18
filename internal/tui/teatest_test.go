@@ -70,5 +70,5 @@ func TestTransactionsSnapshot(t *testing.T) {
 }
 
 func TestAccountsSnapshot(t *testing.T) {
-	snapshot(t, "3", "Checking")
+	snapshot(t, "3", "1,207.50 EUR")
 }

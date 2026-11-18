@@ -7,6 +7,12 @@ All notable changes to FUI are listed here, newest first. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- TUI revamp: dashboard with period selector, income/expense/savings chart, runway, last transactions and
+  budget, anomaly and recurrence alerts; transactions period totals; accounts by currency; tiered budget progress;
+  explanation modals on Budget and Reports; series and bar charts on Reports; version in the header.
+
 ## [0.3.0] - 2026-11-16
 
 ### Added

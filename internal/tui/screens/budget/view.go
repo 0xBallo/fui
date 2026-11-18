@@ -11,7 +11,7 @@ import (
 
 func capColumns() []components.Column {
 	return []components.Column{
-		{Title: "Name", Width: 18, Align: lipgloss.Left},
+		{Title: "Name", Width: 16, Align: lipgloss.Left},
 		{Title: "Available", Width: 12, Align: lipgloss.Right},
 		{Title: "Spent", Width: 12, Align: lipgloss.Right},
 		{Title: "Planned", Width: 12, Align: lipgloss.Right},
@@ -22,7 +22,7 @@ func capColumns() []components.Column {
 
 func envelopeColumns() []components.Column {
 	return []components.Column{
-		{Title: "Name", Width: 18, Align: lipgloss.Left},
+		{Title: "Name", Width: 16, Align: lipgloss.Left},
 		{Title: "Carry in", Width: 12, Align: lipgloss.Right},
 		{Title: "Assigned", Width: 12, Align: lipgloss.Right},
 		{Title: "Spent", Width: 12, Align: lipgloss.Right},

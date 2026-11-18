@@ -195,7 +195,15 @@ func tuiConfig(cfg *config.Config, deps *cli.Deps, store *sqlite.Store, clk app.
 	}
 	return tui.Config{
 		Locale: loc, Theme: cfg.Theme, ThemeLight: cfg.ThemeLight, ThemeDark: cfg.ThemeDark,
-		MonthStartDay: cfg.MonthStartDay, Modules: set,
+		MonthStartDay: cfg.MonthStartDay, Modules: set, Version: version,
+		Flow: flowUseCases{run: deps.Reporting.CashFlow.Run},
+		AlertBudget: budgetUseCases{build: func() *budgeting.Service {
+			return budgeting.New(store, clk, budgeting.Config{
+				Locale: loc, BaseCurrency: base, MonthStartDay: cfg.MonthStartDay,
+				Mode: domain.BudgetMode(cfg.Budget.Mode), Modules: modules(),
+			})
+		}},
+		AlertRecurring: recurrenceAlerts{svc: deps.Recurring, modules: modules},
 		Budget: budgetUseCases{build: func() *budgeting.Service {
 			return budgeting.New(store, clk, budgeting.Config{
 				Locale: loc, BaseCurrency: base, MonthStartDay: cfg.MonthStartDay,
