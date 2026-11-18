@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/module"
@@ -33,10 +34,12 @@ const (
 	minHeight = 24
 )
 
-// reservedRows is the vertical space Root reserves for the tab bar (three lines), the key hint
-// line and the blank line below it, the status bar and the blank line above it, leaving the rest
-// to the active screen.
-const reservedRows = 7
+// reservedRows is the vertical space Root reserves besides the body and the help bar: the tab bar
+// (three lines), the blank line below it and the status line. The help bar adds its own height.
+const reservedRows = 5
+
+// maxHelpRows caps the height of the expanded help bar.
+const maxHelpRows = 10
 
 // UseCases is the union of every MVP screen's needs: the app layer (shared with the CLI) plus the
 // reporting layer the dashboard uses for spending and runway.
@@ -84,7 +87,7 @@ type Config struct {
 }
 
 // Root is the top-level Bubble Tea model: it routes between the screens (fixed keys 1..7),
-// surfaces errors and status messages on a status bar, and renders a help overlay from every
+// surfaces errors and status messages on a status line, and renders a help bar from every
 // screen's keymap.
 type Root struct {
 	uc  UseCases
@@ -101,7 +104,7 @@ type Root struct {
 	width, height int
 	status        string
 	err           error
-	showHelp      bool
+	help          components.HelpBar
 }
 
 var _ tea.Model = (*Root)(nil)
@@ -148,6 +151,8 @@ func (r *Root) rebuild() {
 	if r.tabs[r.active] == nil {
 		r.active = screens.TabDashboard
 	}
+	r.help = components.NewHelpBar(r.th)
+	r.help.SetWidth(r.width)
 	if r.height > 0 {
 		r.resize()
 	}
@@ -198,12 +203,31 @@ func (r *Root) retheme(name string) {
 	if prev != nil {
 		prev.SetTheme(r.th)
 		r.tabs[screens.TabSettings] = prev
-		prev.SetSize(r.width, max(1, r.height-reservedRows))
+		prev.SetSize(r.width, r.bodyHeight())
 	}
 }
 
+// helpView renders the help bar for the active screen.
+func (r *Root) helpView() string {
+	maxH := min(maxHelpRows, max(1, r.height/2))
+	out := r.help.View(r.km.Bindings(), r.ActiveKeyMap(), r.tabs[r.active].Title(), maxH)
+	if r.help.Expanded() || r.width == 0 {
+		return out
+	}
+	// bubbles/help overflows the width when the ellipsis itself does not fit after the last
+	// item; cut the line here so the collapsed bar is always one row.
+	return ansi.Truncate(out, r.width, "…")
+}
+
+// bodyHeight is the height left to the active screen below the tab bar and above the status
+// line and the help bar.
+func (r *Root) bodyHeight() int {
+	return max(1, r.height-reservedRows-lipgloss.Height(r.helpView()))
+}
+
 func (r *Root) resize() {
-	h := max(1, r.height-reservedRows)
+	r.help.SetWidth(r.width)
+	h := r.bodyHeight()
 	for _, scr := range r.tabs {
 		if scr != nil {
 			scr.SetSize(r.width, h)
@@ -258,8 +282,9 @@ func (r *Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (r *Root) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if r.showHelp {
-		r.showHelp = false
+	if r.help.Expanded() {
+		r.help.Toggle()
+		r.resize()
 		return r, nil
 	}
 	// A screen with an open form, filter, search box, or categorize field owns every keystroke:
@@ -269,7 +294,8 @@ func (r *Root) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, r.km.Quit):
 			return r, tea.Quit
 		case key.Matches(msg, r.km.Help):
-			r.showHelp = true
+			r.help.Toggle()
+			r.resize()
 			return r, nil
 		case key.Matches(msg, r.km.Dashboard):
 			return r.switchTo(screens.TabDashboard)
@@ -318,55 +344,13 @@ func (r *Root) View() string {
 		return r.th.Warning.Render(fmt.Sprintf(
 			"Terminal too small: %dx%d. FUI needs at least %dx%d.", r.width, r.height, minWidth, minHeight))
 	}
+	helpBar := r.helpView()
+	h := max(1, r.height-reservedRows-lipgloss.Height(helpBar))
 	body := r.tabs[r.active].View()
-	hints := r.viewHints()
-	// Fill the terminal: the body takes every line the tab bar (three), the hint lines, the two
-	// blank lines and the status bar leave, so the status bar sits on the last row.
-	// ponytail: screens are sized for one hint line; a wrapped one clips their last rows, which
-	// their table slack absorbs. Feed the hint height into SetSize if a screen ever runs short.
-	h := max(1, r.height-reservedRows+1-lipgloss.Height(hints))
-	if r.showHelp {
-		body = components.Modal(r.th, r.width, h, r.viewHelp(h))
-	}
 	if r.height > 0 {
 		body = lipgloss.NewStyle().Height(h).MaxHeight(h).Render(body)
 	}
-	return r.viewTabs() + "\n" + hints + "\n\n" + body + "\n\n" + r.viewStatus()
-}
-
-// viewHints renders the active screen's commands, wrapping onto a new line when the width runs
-// out. Plain navigation (cursor, paging, esc) is left to the help overlay since it is the same on
-// every screen.
-func (r *Root) viewHints() string {
-	sep := r.th.HelpDesc.Render(" · ")
-	var out, line string
-	for _, b := range r.ActiveKeyMap() {
-		hb := b.Help()
-		if hb.Key == "" || !b.Enabled() || isNavigation(b) {
-			continue
-		}
-		hint := r.th.HelpKey.Render(hb.Key) + " " + r.th.HelpDesc.Render(hb.Desc)
-		switch {
-		case line == "":
-		case r.width > 0 && lipgloss.Width(line+sep+hint) > r.width:
-			out, line = out+line+"\n", ""
-		default:
-			hint = sep + hint
-		}
-		line += hint
-	}
-	return out + line
-}
-
-// isNavigation reports whether b moves the cursor or backs out rather than running a command.
-func isNavigation(b key.Binding) bool {
-	for _, k := range b.Keys() {
-		switch k {
-		case "up", "down", "pgup", "pgdown", "home", "end", "esc":
-			return true
-		}
-	}
-	return false
+	return r.viewTabs() + "\n\n" + body + "\n" + r.viewStatus() + "\n" + helpBar
 }
 
 // tabNames are the seven screens in tab order; a tab with no Screen is rendered disabled.
@@ -433,9 +417,10 @@ func (r *Root) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return r, nil
 	}
 	switch {
-	case r.showHelp:
+	case r.help.Expanded():
 		if msg.Button == tea.MouseButtonLeft {
-			r.showHelp = false
+			r.help.Toggle()
+			r.resize()
 		}
 	case r.tabs[r.active].InputActive():
 	case msg.Button == tea.MouseButtonLeft && msg.Y < tabBarRows:
@@ -477,41 +462,6 @@ func (r *Root) viewStatus() string {
 	case r.status != "":
 		return r.th.StatusBar.Render(r.status)
 	default:
-		return r.th.StatusBar.Render("? help · q quit")
+		return ""
 	}
-}
-
-// viewHelp lists the global and active-screen bindings, wrapping them into side-by-side columns
-// when they would not fit the h lines of the modal that frames them.
-func (r *Root) viewHelp(h int) string {
-	bindings := append(append([]key.Binding{}, r.km.Bindings()...), r.ActiveKeyMap()...)
-	var keys, descs []string
-	for _, b := range bindings {
-		if hb := b.Help(); hb.Key != "" {
-			keys, descs = append(keys, hb.Key), append(descs, hb.Desc)
-		}
-	}
-	// The modal's border and the title with its rule take four lines.
-	perCol := len(keys)
-	if r.height > 0 {
-		perCol = max(1, h-4)
-	}
-	var cols []string
-	for start := 0; start < len(keys); start += perCol {
-		end := min(start+perCol, len(keys))
-		keyW := 0
-		for _, k := range keys[start:end] {
-			keyW = max(keyW, lipgloss.Width(k))
-		}
-		lines := make([]string, 0, end-start)
-		for i := start; i < end; i++ {
-			lines = append(lines, r.th.HelpKey.Width(keyW).Render(keys[i])+"  "+r.th.HelpDesc.Render(descs[i]))
-		}
-		col := strings.Join(lines, "\n")
-		if end < len(keys) {
-			col = lipgloss.NewStyle().PaddingRight(4).Render(col)
-		}
-		cols = append(cols, col)
-	}
-	return r.th.Title.Render("Help — "+r.tabs[r.active].Title()) + "\n" + lipgloss.JoinHorizontal(lipgloss.Top, cols...)
 }

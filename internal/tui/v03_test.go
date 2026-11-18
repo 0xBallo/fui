@@ -138,7 +138,7 @@ func TestV03FeaturesFollowModules(t *testing.T) {
 		{name: "account without investments", mods: []module.ID{module.Analytics}, keys: []string{"3", "enter"}, notWant: []string{"VWCE ETF"}},
 		{name: "report compare", mods: all, keys: []string{"5", "c"}, want: []string{"Compare periods", "TOTAL"}},
 		{name: "report without analytics", mods: []module.ID{module.Recurring, module.Simulations}, keys: []string{"5", "c"}, notWant: []string{"Compare periods", "c compare"}},
-		{name: "report simulations", mods: all, keys: []string{"5"}, want: []string{"i simulations"}},
+		{name: "report simulations", mods: all, keys: []string{"5", "?"}, want: []string{" simulations"}},
 		{name: "report without simulations", mods: []module.ID{module.Analytics}, keys: []string{"5", "i"}, notWant: []string{"Simulation", "i simulations"}},
 	}
 	for _, tc := range tests {

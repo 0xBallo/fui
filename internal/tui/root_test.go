@@ -163,13 +163,13 @@ func TestRootHelpOverlay(t *testing.T) {
 
 	m, _ = sendRunes(m, "?")
 	view := m.View()
-	if !strings.Contains(view, "quit") {
-		t.Fatalf("expected the help overlay listing global bindings, got:\n%s", view)
+	if !strings.Contains(view, "Global") || !strings.Contains(view, "quit") {
+		t.Fatalf("expected the expanded help listing global bindings, got:\n%s", view)
 	}
 
 	m, _ = sendRunes(m, "?")
-	if strings.Contains(m.View(), "Help —") {
-		t.Fatalf("expected the help overlay to close, got:\n%s", m.View())
+	if strings.Contains(m.View(), "Global") {
+		t.Fatalf("expected the help to collapse, got:\n%s", m.View())
 	}
 }
 
@@ -269,23 +269,29 @@ func TestRootMouse(t *testing.T) {
 	}
 }
 
-// TestRootHelpModal checks that the help opens as a modal that fits the terminal, wrapping into
-// columns at the minimum size, and that a click closes it.
-func TestRootHelpModal(t *testing.T) {
+// TestRootHelpBar checks that the help is the last row and one line high when collapsed, expands in
+// place with both groups keeping the terminal height, and collapses on a click.
+func TestRootHelpBar(t *testing.T) {
 	_, m := newRoot(t)
 	m = run(t, m, m.Init())
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, _ = sendRunes(m, "2")
+	lines := strings.Split(m.View(), "\n")
+	if len(lines) != 24 || !strings.Contains(lines[23], "add") || !strings.Contains(lines[23], "…") {
+		t.Fatalf("expected a one-line help bar cut with an ellipsis as last row, got:\n%s", m.View())
+	}
+	collapsedBody := strings.Count(strings.Join(lines, "\n"), "\n")
+
 	m, _ = sendRunes(m, "?")
 	view := m.View()
-	if !strings.Contains(view, "╭") || !strings.Contains(view, "Help — Transactions") || !strings.Contains(view, "bulk categorize") {
-		t.Fatalf("expected the help modal with every binding, got:\n%s", view)
+	if !strings.Contains(view, "Global") || !strings.Contains(view, "Transactions") || !strings.Contains(view, "bulk categorize") {
+		t.Fatalf("expected both help groups, got:\n%s", view)
 	}
-	if lines := strings.Count(view, "\n") + 1; lines != 24 {
-		t.Fatalf("help view is %d lines, want 24 (the terminal height):\n%s", lines, view)
+	if n := strings.Count(view, "\n"); n != collapsedBody {
+		t.Fatalf("expanded view has %d line breaks, want %d", n, collapsedBody)
 	}
 	m, _ = click(m, tea.MouseButtonLeft, 1, 10)
-	if strings.Contains(m.View(), "Help —") {
-		t.Fatalf("expected a click to close the help, got:\n%s", m.View())
+	if strings.Contains(m.View(), "Global") {
+		t.Fatalf("expected a click to collapse the help, got:\n%s", m.View())
 	}
 }

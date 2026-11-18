@@ -1,9 +1,6 @@
 ╭─────────╮╭──────────────╮╭────────╮╭──────╮╭───────╮╭──────╮╭────────╮        
 │Dashboard││2 Transactions││Accounts││Budget││Reports││Import││Settings│        
 ┴─────────┴┘              └┴────────┴┴──────┴┴───────┴┴──────┴┴────────┴────────
-a add · e/enter edit · d delete · f filter · / search · space select · s split
-t tags · c bulk categorize · ctrl+r reset filter · ← prev filter chip
-→ next filter chip · backspace/x remove filter chip
 
 ╭──────────┬────────────────┬─────────┬──────────────┬──────────┬──────────────╮
 │Date      │Account         │Descript…│Category      │Status    │        Amount│
@@ -20,5 +17,8 @@ t tags · c bulk categorize · ctrl+r reset filter · ← prev filter chip
                                                                                 
                                                                                 
                                                                                 
+                                                                                
+                                                                                
+                                                                                
 
-? help · q quit
+a add · e/enter edit · d delete · f filter · / search · space select · s split …
