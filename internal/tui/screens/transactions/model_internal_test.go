@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -155,4 +156,55 @@ func TestSubmitCmdsDoNotRaceWithUpdate(t *testing.T) {
 		}
 	}()
 	wg.Wait()
+}
+
+// TestTxRowsFlowStyleAndTags checks per-flow styles and the Tags column dropping below 100 columns.
+func TestTxRowsFlowStyleAndTags(t *testing.T) {
+	th := theme.Default()
+	eur, err := domain.ParseCurrency("EUR")
+	if err != nil {
+		t.Fatal(err)
+	}
+	money := func(minor int64) domain.Money {
+		m, err := domain.NewMoney(minor, eur)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	mk := func(minor int64, st domain.TxStatus, transfer bool) app.TxView {
+		v := app.TxView{Transaction: domain.Transaction{Amount: money(minor), Status: st}, Tags: []string{"trip"}}
+		if transfer {
+			v.Transfer = &domain.TransferGroup{}
+		}
+		return v
+	}
+	items := []app.TxView{
+		mk(-500, domain.StatusBooked, false), mk(500, domain.StatusBooked, false),
+		mk(-500, domain.StatusPending, false), mk(500, domain.StatusPending, false),
+		mk(-500, domain.StatusBooked, true),
+		mk(-500, domain.StatusBooked, false),
+	}
+	items[5].Transaction.Kind = domain.KindTransfer
+	want := []lipgloss.Style{
+		th.FlowStyle(theme.FlowExpense, false), th.FlowStyle(theme.FlowIncome, false),
+		th.FlowStyle(theme.FlowExpense, true), th.FlowStyle(theme.FlowIncome, true),
+		th.FlowStyle(theme.FlowTransfer, false), th.FlowStyle(theme.FlowTransfer, false),
+	}
+	m := New(nil, domain.LocaleENUS, th)
+	m.items = items
+	for _, tc := range []struct {
+		width, cells int
+	}{{120, 7}, {99, 6}} {
+		m.SetSize(tc.width, 30)
+		rows := m.txRows()
+		for i, r := range rows {
+			if len(r.Cells) != tc.cells {
+				t.Fatalf("w=%d: want %d cells, got %d", tc.width, tc.cells, len(r.Cells))
+			}
+			if r.Style.GetForeground() != want[i].GetForeground() {
+				t.Errorf("w=%d row %d: style foreground %v, want %v", tc.width, i, r.Style.GetForeground(), want[i].GetForeground())
+			}
+		}
+	}
 }
