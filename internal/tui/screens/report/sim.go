@@ -21,7 +21,7 @@ const maxCompare = 3
 
 // SimUseCases is what the simulations view needs; it matches internal/app/simulating.Service with
 // the enabled-module set already bound, plus the base currency amounts are entered and shown in.
-// It is separate from UseCases so the view stays optional: without it the "i" key is not offered.
+// It is separate from UseCases so the view stays optional: without it the "m" key is not offered.
 type SimUseCases interface {
 	Run(ctx context.Context, req simulating.RunRequest) (simulating.RunResult, error)
 	PlanSave(ctx context.Context, name string, req simulating.RunRequest) (simulating.SavePlan, error)

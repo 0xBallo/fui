@@ -32,7 +32,7 @@ run the selected one and `d` to delete it. Saved reports also cover spending and
 
 ## Compare and simulations
 
-With the `compare` module on, `c` compares two periods side by side and `t` toggles the
+With the `analytics` module on, `c` compares two periods side by side and `t` toggles the
 breakdown by category. With the `simulations` module on, `m` opens what-if scenarios
 (investment, savings plan, cash flow); they never change your transactions.
 
