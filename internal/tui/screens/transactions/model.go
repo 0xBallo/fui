@@ -114,14 +114,7 @@ var _ screens.Screen = (*Model)(nil)
 // New builds the transactions screen over uc, formatting amounts and dates with loc.
 func New(uc UseCases, loc domain.Locale, th theme.Theme) *Model {
 	m := &Model{uc: uc, loc: loc, th: th, km: DefaultKeyMap(), tick: defaultTick}
-	m.table = components.NewTable([]components.Column{
-		{Title: "Date", Width: 10, Align: lipgloss.Left},
-		{Title: "Account", Width: 16, Align: lipgloss.Left},
-		{Title: "Description", Width: 24, Align: lipgloss.Left},
-		{Title: "Category", Width: 14, Align: lipgloss.Left},
-		{Title: "Status", Width: 10, Align: lipgloss.Left},
-		{Title: "Amount", Width: 14, Align: lipgloss.Right},
-	}, th)
+	m.table = components.NewTable(m.columns(), th)
 	m.confirm = components.NewConfirmDialog(th)
 	return m
 }
@@ -133,6 +126,8 @@ func (m *Model) Init() tea.Cmd { return m.load() }
 // SetSize adapts the table to the available terminal size.
 func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h
+	m.table.SetColumns(m.columns())
+	m.table.SetRows(m.txRows())
 	m.table.SetHeight(max(3, h-8))
 	m.table.SetWidth(w)
 }
@@ -453,15 +448,55 @@ func reload(ctx context.Context, uc UseCases, req app.ListTxRequest, clearSelect
 	return loadedMsg{page: page, accounts: names, categories: catNames, tags: tagNames, clearSelection: clearSelection}
 }
 
+// minTagsWidth is the narrowest terminal that still shows the Tags column.
+const minTagsWidth = 100
+
+const tagsColWidth = 16
+
+func (m *Model) showTags() bool { return m.width >= minTagsWidth }
+
+func (m *Model) columns() []components.Column {
+	cols := []components.Column{
+		{Title: "Date", Width: 10, Align: lipgloss.Left},
+		{Title: "Account", Width: 16, Align: lipgloss.Left},
+		{Title: "Description", Width: 24, Align: lipgloss.Left},
+		{Title: "Category", Width: 14, Align: lipgloss.Left},
+	}
+	if m.showTags() {
+		cols = append(cols, components.Column{Title: "Tags", Width: tagsColWidth, Align: lipgloss.Left})
+	}
+	return append(cols,
+		components.Column{Title: "Status", Width: 10, Align: lipgloss.Left},
+		components.Column{Title: "Amount", Width: 14, Align: lipgloss.Right},
+	)
+}
+
+// flowOf classifies a row for coloring; the sign stays in the amount text so color is never the only cue.
+func flowOf(v app.TxView) theme.Flow {
+	switch {
+	case v.Transfer != nil:
+		return theme.FlowTransfer
+	case v.Transaction.Amount.Sign() < 0:
+		return theme.FlowExpense
+	case v.Transaction.Amount.Sign() > 0:
+		return theme.FlowIncome
+	}
+	return theme.FlowTransfer
+}
+
 func (m *Model) txRows() []components.Row {
+	showTags := m.showTags()
 	rows := make([]components.Row, len(m.items))
 	for i, v := range m.items {
+		cells := []string{v.Transaction.Date.Format(m.loc), v.Account, v.Transaction.Description, v.Category}
+		if showTags {
+			cells = append(cells, components.Chips(m.th, v.Tags, tagsColWidth))
+		}
+		cells = append(cells, string(v.Transaction.Status), domain.FormatAmount(v.Transaction.Amount, m.loc))
 		rows[i] = components.Row{
-			ID: strconv.FormatInt(int64(v.Transaction.ID), 10),
-			Cells: []string{
-				v.Transaction.Date.Format(m.loc), v.Account, v.Transaction.Description, v.Category,
-				string(v.Transaction.Status), domain.FormatAmount(v.Transaction.Amount, m.loc),
-			},
+			ID:    strconv.FormatInt(int64(v.Transaction.ID), 10),
+			Cells: cells,
+			Style: m.th.FlowStyle(flowOf(v), v.Transaction.Status == domain.StatusPending),
 		}
 	}
 	return rows
