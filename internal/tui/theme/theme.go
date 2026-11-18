@@ -29,6 +29,15 @@ type Tokens struct {
 	// Warning and Over mark budgets near or past their threshold; always paired with a label.
 	Warning lipgloss.Color
 	Over    lipgloss.Color
+	// Caution marks budgets at 90-99%, between Warning and Over; always paired with a label.
+	Caution lipgloss.Color
+	// Info marks informational alerts.
+	Info lipgloss.Color
+	// IncomeSoft and ExpenseSoft are lighter tones of Income and Expense for pending rows.
+	IncomeSoft  lipgloss.Color
+	ExpenseSoft lipgloss.Color
+	// Chip is the background of tag chips.
+	Chip lipgloss.Color
 	// Pending and Reconciled mark transaction states; always paired with a symbol.
 	Pending    lipgloss.Color
 	Reconciled lipgloss.Color
@@ -60,6 +69,9 @@ type Theme struct {
 	Positive    lipgloss.Style
 	Negative    lipgloss.Style
 	Warning     lipgloss.Style
+	Caution     lipgloss.Style
+	Info        lipgloss.Style
+	Chip        lipgloss.Style
 	Error       lipgloss.Style
 	StatusBar   lipgloss.Style
 	HelpKey     lipgloss.Style
@@ -90,6 +102,9 @@ func fromTokens(name string, t Tokens) Theme {
 		Positive:     lipgloss.NewStyle().Foreground(t.Income),
 		Negative:     lipgloss.NewStyle().Foreground(t.Expense),
 		Warning:      lipgloss.NewStyle().Foreground(t.Warning),
+		Caution:      lipgloss.NewStyle().Foreground(t.Caution),
+		Info:         lipgloss.NewStyle().Foreground(t.Info),
+		Chip:         lipgloss.NewStyle().Background(t.Chip).Foreground(t.Text).Padding(0, 1),
 		Error:        lipgloss.NewStyle().Bold(true).Foreground(t.Expense),
 		StatusBar:    lipgloss.NewStyle().Foreground(t.Muted),
 		HelpKey:      lipgloss.NewStyle().Bold(true).Foreground(t.Accent),
@@ -98,5 +113,36 @@ func fromTokens(name string, t Tokens) Theme {
 		BarFill:      lipgloss.NewStyle().Foreground(t.Series1),
 		Button:       lipgloss.NewStyle().Foreground(t.Base).Background(t.Muted).Padding(0, 3),
 		ActiveButton: lipgloss.NewStyle().Foreground(t.Base).Background(t.Accent).Padding(0, 3).Underline(true),
+	}
+}
+
+// Flow is the direction of a money movement, for coloring.
+type Flow int
+
+// Flow values.
+const (
+	FlowIncome Flow = iota
+	FlowExpense
+	FlowTransfer
+)
+
+// FlowStyle returns the style for a movement of direction f; pending rows use the soft tone.
+// Transfers are plain text in both states.
+func (t Theme) FlowStyle(f Flow, pending bool) lipgloss.Style {
+	switch f {
+	case FlowIncome:
+		if pending {
+			return lipgloss.NewStyle().Foreground(t.Tokens.IncomeSoft)
+		}
+		return t.Positive
+	case FlowExpense:
+		if pending {
+			return lipgloss.NewStyle().Foreground(t.Tokens.ExpenseSoft)
+		}
+		return t.Negative
+	case FlowTransfer:
+		return t.Base
+	default:
+		return t.Base
 	}
 }

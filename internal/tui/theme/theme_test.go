@@ -56,7 +56,7 @@ func TestEveryThemeDefinesEveryToken(t *testing.T) {
 
 // textTokens are the tokens the technical spec requires to meet a WCAG contrast ratio against
 // Base: at least 4.5:1 for every theme, and at least 7:1 for "high-contrast".
-var textTokens = []string{"Text", "Muted", "Income", "Expense", "Warning", "Over", "Pending", "Reconciled"}
+var textTokens = []string{"Text", "Muted", "Income", "Expense", "Warning", "Over", "Pending", "Reconciled", "Caution", "Info", "IncomeSoft", "ExpenseSoft"}
 
 // TestContrastWCAG checks every text token of every theme against Base, failing if any token
 // drops below the required ratio.
@@ -110,4 +110,31 @@ func hexChannel(s string) float64 {
 		panic(fmt.Sprintf("invalid hex channel %q: %v", s, err))
 	}
 	return float64(v) / 255
+}
+
+// TestFlowStyle checks the foreground of every direction/pending combination.
+func TestFlowStyle(t *testing.T) {
+	th := theme.Default()
+	tk := th.Tokens
+	tests := []struct {
+		name    string
+		flow    theme.Flow
+		pending bool
+		want    lipgloss.Color
+	}{
+		{"income", theme.FlowIncome, false, tk.Income},
+		{"income pending", theme.FlowIncome, true, tk.IncomeSoft},
+		{"expense", theme.FlowExpense, false, tk.Expense},
+		{"expense pending", theme.FlowExpense, true, tk.ExpenseSoft},
+		{"transfer", theme.FlowTransfer, false, tk.Text},
+		{"transfer pending", theme.FlowTransfer, true, tk.Text},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := th.FlowStyle(tc.flow, tc.pending).GetForeground()
+			if got != tc.want {
+				t.Errorf("foreground = %v, want %v", got, tc.want)
+			}
+		})
+	}
 }

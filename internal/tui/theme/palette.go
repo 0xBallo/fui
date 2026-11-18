@@ -16,6 +16,7 @@ func tokensFromFlavor(f catppuccingo.Flavor) Tokens {
 		Base:      c(f.Base()),
 		Surface:   c(f.Surface0()),
 		Selection: c(f.Surface1()),
+		Chip:      c(f.Surface1()),
 		Text:      c(f.Text()),
 		Muted:     c(f.Subtext0()),
 		Border:    c(f.Overlay0()),
@@ -24,8 +25,13 @@ func tokensFromFlavor(f catppuccingo.Flavor) Tokens {
 		Income:  c(f.Green()),
 		Expense: c(f.Red()),
 
+		IncomeSoft:  soften(c(f.Green()), c(f.Base())),
+		ExpenseSoft: soften(c(f.Red()), c(f.Base())),
+
 		Warning: c(f.Yellow()),
+		Caution: c(f.Peach()),
 		Over:    c(f.Red()),
+		Info:    c(f.Blue()),
 
 		Pending:    c(f.Peach()),
 		Reconciled: c(f.Teal()),
@@ -65,6 +71,7 @@ func highContrastTheme(dark bool) Theme {
 		Base:      c(f.Crust()),
 		Surface:   c(f.Mantle()),
 		Selection: c(f.Surface2()),
+		Chip:      c(f.Surface2()),
 		Text:      c(f.Text()),
 		Muted:     c(f.Text()),
 		Border:    c(f.Text()),
@@ -73,8 +80,13 @@ func highContrastTheme(dark bool) Theme {
 		Income:  c(f.Green()),
 		Expense: c(f.Red()),
 
+		IncomeSoft:  soften(c(f.Green()), c(f.Crust())),
+		ExpenseSoft: soften(c(f.Red()), c(f.Crust())),
+
 		Warning: c(f.Yellow()),
+		Caution: c(f.Peach()),
 		Over:    c(f.Red()),
+		Info:    c(f.Blue()),
 
 		Pending:    c(f.Peach()),
 		Reconciled: c(f.Teal()),
@@ -121,6 +133,7 @@ func terminalTokens() Tokens {
 		Base:      black,
 		Surface:   black,
 		Selection: brightBlack,
+		Chip:      brightBlack,
 		Text:      brightWhite,
 		Muted:     white,
 		Border:    brightBlack,
@@ -129,8 +142,13 @@ func terminalTokens() Tokens {
 		Income:  brightGreen,
 		Expense: brightRed,
 
+		IncomeSoft:  green,
+		ExpenseSoft: red,
+
 		Warning: brightYellow,
+		Caution: yellow,
 		Over:    brightRed,
+		Info:    brightBlue,
 
 		Pending:    yellow,
 		Reconciled: cyan,
@@ -156,4 +174,14 @@ func terminalTheme() Theme {
 func Default() Theme {
 	th, _ := flavorTheme("mocha")
 	return th
+}
+
+// softenRatio is how far soften blends a color toward the background.
+const softenRatio = 0.4
+
+// soften returns fg blended toward base, the lighter tone used for pending rows.
+func soften(fg, base lipgloss.Color) lipgloss.Color {
+	fr, fgc, fb := hexToRGB(fg)
+	br, bg, bb := hexToRGB(base)
+	return rgbToHex(blend(fr, br, softenRatio), blend(fgc, bg, softenRatio), blend(fb, bb, softenRatio))
 }

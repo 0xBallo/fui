@@ -8,7 +8,7 @@ import (
 )
 
 // ensureTextContrast returns t with every token the technical spec treats as "text" (Text, Muted,
-// Income, Expense, Warning, Over, Pending, Reconciled) nudged in lightness, if needed, so each
+// Income, Expense, Warning, Caution, Info, Over, Pending, Reconciled, IncomeSoft, ExpenseSoft) nudged in lightness, if needed, so each
 // meets at least min contrast against Base. Catppuccin's flavors aren't all designed for
 // text-level contrast on every background (Latte's pastel accents in particular fall short), so
 // FUI enforces the technical spec's WCAG requirement programmatically instead of hoping each
@@ -20,6 +20,10 @@ func ensureTextContrast(t Tokens, minContrast float64) Tokens {
 	t.Income = ensureContrast(t.Base, t.Income, minContrast)
 	t.Expense = ensureContrast(t.Base, t.Expense, minContrast)
 	t.Warning = ensureContrast(t.Base, t.Warning, minContrast)
+	t.Caution = ensureContrast(t.Base, t.Caution, minContrast)
+	t.Info = ensureContrast(t.Base, t.Info, minContrast)
+	t.IncomeSoft = ensureContrast(t.Base, t.IncomeSoft, minContrast)
+	t.ExpenseSoft = ensureContrast(t.Base, t.ExpenseSoft, minContrast)
 	t.Over = ensureContrast(t.Base, t.Over, minContrast)
 	t.Pending = ensureContrast(t.Base, t.Pending, minContrast)
 	t.Reconciled = ensureContrast(t.Base, t.Reconciled, minContrast)
