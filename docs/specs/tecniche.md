@@ -2,7 +2,7 @@
 
 Nov 12, 2026 · @Mattia Ballo
 
-**Versione 1.3** — 13 novembre 2026 · allineata alle FS 1.2, con i temi Catppuccin della TUI e il git flow con `develop`; le modifiche rispetto alle versioni precedenti sono nella sezione Cronologia delle versioni
+**Versione 1.4** — 18 novembre 2026 · allineata alle FS 1.3, con i temi Catppuccin della TUI, il git flow con `develop` e le librerie della TUI rinnovata; le modifiche rispetto alle versioni precedenti sono nella sezione Cronologia delle versioni
 
 ## Panoramica e principi tecnici
 
@@ -29,7 +29,10 @@ Lo stack resta quello deciso nelle FS (Go, Bubble Tea, SQLite senza cgo); attorn
 | Linguaggio | Go, ultima versione stabile, fissata con `toolchain` in `go.mod` | Build riproducibili; si supportano le ultime due minor |
 | CLI | `spf13/cobra` | Sottocomandi annidati, `--help` per comando, completamento bash, zsh e fish già incluso |
 | Prompt interattivi | `charmbracelet/huh` | Stesso ecosistema della TUI; usato solo se c'è un terminale e manca `--no-input` |
-| TUI | `charmbracelet/bubbletea`, `bubbles`, `lipgloss` | Architettura Elm; liste, input, help e keymap pronti |
+| TUI | `charmbracelet/bubbletea`, `bubbles`, `lipgloss` (major v1) | Architettura Elm; liste, input, help, viewport, barre di avanzamento e keymap pronti; la migrazione a v2 è fuori perimetro (ADR 0019) |
+| Markdown nella TUI | `charmbracelet/glamour` (versione compatibile con Lip Gloss v1) | Finestre di spiegazione di Budget e Report scritte in markdown |
+| Grafici della TUI | `NimbleMarkets/ntcharts` (ramo per Bubble Tea v1) | Grafici a linee e serie temporali nei Report; le barre orizzontali restano un componente interno |
+| Selettore di date | `ethanefung/bubble-datepicker` | Scelta delle date nei filtri delle transazioni |
 | Archivio | `modernc.org/sqlite` | SQLite in puro Go, `CGO_ENABLED=0`, cross-compilazione banale |
 | Query | `sqlc` (generazione da SQL) | Query scritte in SQL e verificate in fase di build; nessun ORM |
 | Migrazioni | `pressly/goose` con `embed.FS` | Migrazioni SQL numerate dentro il binario |
@@ -301,6 +304,10 @@ La TUI segue l'architettura Elm di Bubble Tea con una regola ferma: `Update` e `
 | `Warning`, `Over` | Yellow, Red | Budget oltre soglia e sforati (sempre con etichetta) |
 | `Pending`, `Reconciled` | Peach, Teal | Stati delle transazioni (sempre con simbolo) |
 | `Series1…8` | Blue, Sapphire, Teal, Green, Yellow, Peach, Maroon, Mauve | Serie dei grafici e sparkline |
+| `Caution` | Peach | Budget tra il 90% e il 99% (sempre con icona) |
+| `Info` | Blue | Avvisi informativi della Dashboard |
+| `IncomeSoft`, `ExpenseSoft` | Green e Red schiariti verso `Base` | Entrate e uscite non confermate (sempre con il simbolo di stato) |
+| `Chip` | Surface1 | Sfondo delle etichette dei tag |
 
 **Profondità di colore e `NO_COLOR`** — Lip Gloss riduce i colori esadecimali a 256 colori quando il terminale non supporta il truecolor; con soli 16 colori FUI passa al tema `terminal`. Con `NO_COLOR` impostato non si usano colori, qualunque sia il tema.
 
@@ -605,11 +612,12 @@ Le decisioni architetturali si registrano come ADR in `docs/adr/NNNN-titolo.md` 
 | 0011 | Reset come ricostruzione in file temporaneo con rename atomico e backup escluso dalla rotazione |
 | 0012 | Temi della TUI dalla palette Catppuccin tramite token semantici; tema `auto` con rilevamento dello sfondo (OSC 11, poi `COLORFGBG`, poi scuro) |
 | 0013 | Git flow con `develop` (PREVIEW) e `main` (PROD), squash merge di feature e hotfix branch, hook `pre-commit` e tag di versione al rilascio |
+| 0019 | Librerie della TUI: Bubble Tea v1, glamour, ntcharts e bubble-datepicker; il resto con componenti Charm già presenti o interni |
 
 **Da decidere**
 
 - [ ] Confermare la politica di arrotondamento per le conversioni valutarie (proposta: metà lontano dallo zero, una volta per transazione).
-- [ ] Scegliere la major di Bubble Tea da adottare all'avvio e il criterio per gli aggiornamenti delle major dell'ecosistema Charm.
+- [x] Scegliere la major di Bubble Tea da adottare all'avvio e il criterio per gli aggiornamenti delle major dell'ecosistema Charm: resta v1, ogni nuova libreria in versione compatibile con v1, migrazione a v2 come progetto separato (ADR 0019).
 - [ ] Decidere se firmare e notarizzare i binari macOS, necessario per evitare l'avviso di Gatekeeper fuori da Homebrew.
 - [ ] Definire l'integrazione del modello AI locale (runtime, processo separato o libreria), oggi indicata come da definire nelle FS.
 - [ ] Valutare se aggiungere un isolamento dei connettori esterni (es. permessi ridotti del processo) dopo l'MVP.
@@ -620,6 +628,14 @@ Le decisioni architetturali si registrano come ADR in `docs/adr/NNNN-titolo.md` 
 - [ ] Verificare come la major di Bubble Tea scelta espone il colore di sfondo e la notifica del cambio di tema, che determinano l'implementazione del rilevamento.
 
 ## Cronologia delle versioni
+
+**Versione 1.4** — 18 novembre 2026, librerie della TUI rinnovata
+
+| Sezione | Modifica |
+| --- | --- |
+| Stack e dipendenze | Major v1 dell'ecosistema Charm; nuove dipendenze `glamour`, `ntcharts` e `bubble-datepicker` |
+| TUI | Nuovi token `Caution`, `Info`, `IncomeSoft`, `ExpenseSoft` e `Chip` |
+| Decisioni tecniche e punti aperti | ADR 0019; chiuso il punto sulla major di Bubble Tea |
 
 **Versione 1.3** — 13 novembre 2026, git flow con `develop` e squash merge
 
