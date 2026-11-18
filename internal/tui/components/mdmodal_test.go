@@ -5,8 +5,10 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
+	"github.com/muesli/termenv"
 
 	"github.com/0xballo/fui/internal/tui/components"
 	"github.com/0xballo/fui/internal/tui/theme"
@@ -81,4 +83,17 @@ func TestMarkdownModalNoColorGolden(t *testing.T) {
 	m.SetSize(50, 16)
 	m.Open()
 	golden.RequireEqual(t, []byte(ansi.Strip(m.View())))
+}
+
+func TestMarkdownModalAsciiProfileHasNoEscapes(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.Ascii)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	m := components.NewMarkdownModal(mdTheme(t, "mocha"), "# Heading\n\nSome **bold** `code`\n\n- one\n")
+	m.SetSize(50, 16)
+	m.Open()
+	if v := m.View(); strings.Contains(v, "\x1b") {
+		t.Errorf("view contains ANSI escapes under Ascii profile:\n%q", v)
+	}
 }

@@ -6,6 +6,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/0xballo/fui/internal/tui/theme"
 )
@@ -54,13 +56,17 @@ func (m *MarkdownModal) SetSize(w, h int) {
 // render falls back to the raw markdown when glamour fails.
 func (m MarkdownModal) render(width int) string {
 	style := "dark"
-	switch m.th.Name {
-	case "latte":
+	if m.th.Name == "latte" {
 		style = "light"
-	case "terminal":
+	}
+	profile := lipgloss.ColorProfile()
+	if profile == termenv.Ascii {
+		// Dark/light still emit bold/underline sequences without colors; notty emits none.
 		style = "notty"
 	}
-	r, err := glamour.NewTermRenderer(glamour.WithStandardStyle(style), glamour.WithWordWrap(width))
+	// The profile makes glamour honor NO_COLOR and downsample on 16/256-color terminals.
+	r, err := glamour.NewTermRenderer(glamour.WithStandardStyle(style), glamour.WithWordWrap(width),
+		glamour.WithColorProfile(profile))
 	if err != nil {
 		return m.markdown
 	}
