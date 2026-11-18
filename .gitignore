@@ -6,3 +6,4 @@
 *.db-shm
 coverage.out
 .task-report.md
+/.scratch/

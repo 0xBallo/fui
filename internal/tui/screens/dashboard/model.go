@@ -247,8 +247,7 @@ func (m *Model) View() string {
 }
 
 func (m *Model) viewDashboard() string {
-	out := m.th.Title.Render("Dashboard") + "\n\n"
-	out += m.th.Header.Render("Accounts") + "\n" + m.table.View() + "\n\n"
+	out := m.th.Header.Render("Accounts") + "\n" + m.table.View() + "\n\n"
 	out += m.th.Header.Render("Net worth") + "\n" + m.viewNetWorth() + "\n\n"
 	out += m.th.Header.Render("Runway") + "\n" + m.viewRunway() + "\n\n"
 	out += m.th.Header.Render("Spending this month") + "\n" + m.chart.View()

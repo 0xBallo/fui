@@ -157,8 +157,8 @@ func TestSimHiddenWithoutUseCases(t *testing.T) {
 func TestSimRunKindsAndSparkline(t *testing.T) {
 	uc := &stubSim{}
 	s := simScreen(t, uc)
-	if !strings.Contains(s.View(), "i simulations") {
-		t.Fatalf("footer should offer simulations:\n%s", s.View())
+	if !offers(s, "i") {
+		t.Fatalf("key map should offer simulations: %v", s.KeyMap())
 	}
 	s, _ = keys(t, s, "i")
 	v := s.View()

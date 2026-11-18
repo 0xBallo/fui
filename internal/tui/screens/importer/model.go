@@ -192,7 +192,7 @@ type resultMsg struct{ result importing.ImportResult }
 func (m *Model) View() string {
 	switch m.mode {
 	case modeIdle:
-		return m.th.Title.Render("Import") + "\n\n" + m.th.Muted.Render("n new import")
+		return m.th.Muted.Render("No import in progress.")
 	case modeSource:
 		return components.Modal(m.th, m.width, m.height, m.viewSource())
 	case modeMapping:

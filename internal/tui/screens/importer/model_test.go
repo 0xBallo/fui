@@ -213,7 +213,7 @@ func TestImportBackAndCancelKeysReturnToEarlierModes(t *testing.T) {
 	}
 	// esc on the source form returns to the idle page, releasing the keyboard.
 	scr, _ = sendKey(scr, tea.KeyEsc)
-	if scr.InputActive() || !strings.Contains(scr.View(), "n new import") {
+	if scr.InputActive() || !strings.Contains(scr.View(), "No import in progress.") {
 		t.Fatalf("expected esc to close the source form, got:\n%s", scr.View())
 	}
 

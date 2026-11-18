@@ -491,11 +491,11 @@ func (m *Model) View() string {
 }
 
 func (m *Model) viewList() string {
-	header := m.th.Title.Render("Transactions")
+	body := m.table.View() + "\n" + m.summaryLine()
 	if chips := m.chipsView(); chips != "" {
-		header += "\n" + chips
+		return chips + "\n\n" + body
 	}
-	return header + "\n\n" + m.table.View() + "\n" + m.summaryLine()
+	return body
 }
 
 // summaryLine reports the row count and, per currency, the sum of the loaded transactions. When

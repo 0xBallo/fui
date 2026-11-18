@@ -89,7 +89,7 @@ func (m *Model) View() string {
 }
 
 func (m *Model) viewList() string {
-	title := m.th.Title.Render(fmt.Sprintf("Budget — %s (%s)", m.monthIn, m.status.Mode))
+	title := m.th.Title.Render(fmt.Sprintf("%s (%s)", m.monthIn, m.status.Mode))
 	lines := []string{title, "", m.table.View(), "", m.viewFooter()}
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
