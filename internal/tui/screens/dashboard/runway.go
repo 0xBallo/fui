@@ -20,7 +20,7 @@ type runwaySection struct {
 	uc UseCases
 	th theme.Theme
 
-	asOf      domain.Date
+	asOf      domain.Date // period the pending/loaded result belongs to
 	res       reporting.RunwayResult
 	available bool
 	loaded    bool
@@ -33,6 +33,7 @@ type runwayMsg struct {
 }
 
 func (s *runwaySection) load(p sectionParams) tea.Cmd {
+	s.asOf = p.AsOf
 	return func() tea.Msg {
 		res, err := s.uc.Runway(context.Background(), reporting.RunwayParams{
 			AsOf: p.AsOf, BaseCurrency: p.Base, MonthStartDay: p.MonthStartDay,
@@ -52,7 +53,10 @@ func (s *runwaySection) update(msg tea.Msg) (tea.Cmd, bool) {
 	if !ok {
 		return nil, false
 	}
-	s.asOf, s.res, s.available, s.loaded = m.asOf, m.res, m.available, true
+	if m.asOf != s.asOf {
+		return nil, true // stale response for a previous period
+	}
+	s.res, s.available, s.loaded = m.res, m.available, true
 	return nil, true
 }
 
@@ -60,11 +64,12 @@ func (s *runwaySection) view(int) string {
 	if !s.loaded {
 		return ""
 	}
+	head := s.th.Header.Render("Runway") + "\n"
 	if !s.available {
-		return s.th.Muted.Render("Runway: not enough data (needs 3 complete months)")
+		return head + s.th.Muted.Render("not enough data (needs 3 complete months)")
 	}
 	y, m, d := countdown(s.asOf, s.res.ZeroDate)
-	return s.th.Title.Render(fmt.Sprintf("%dy %dm %dd", y, m, d)) + "\n" +
+	return head + s.th.Title.Render(fmt.Sprintf("%dy %dm %dd", y, m, d)) + "\n" +
 		s.th.Muted.Render("zero on "+s.res.ZeroDate.String())
 }
 

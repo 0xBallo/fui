@@ -87,3 +87,16 @@ func TestRunwaySection(t *testing.T) {
 		t.Error("runway section must not consume foreign messages")
 	}
 }
+
+func TestRunwaySectionIgnoresStaleResponse(t *testing.T) {
+	th := theme.Default()
+	s := &runwaySection{uc: runwayStub{res: reporting.RunwayResult{ZeroDate: mustDate(t, "2027-03-30")}}, th: th}
+	oldMsg := s.load(sectionParams{AsOf: mustDate(t, "2025-10-31")})()
+	s.load(sectionParams{AsOf: mustDate(t, "2025-11-18")})
+	if _, ok := s.update(oldMsg); !ok {
+		t.Fatal("stale runwayMsg must still be consumed")
+	}
+	if v := s.view(80); v != "" {
+		t.Errorf("stale response was applied: %q", v)
+	}
+}
