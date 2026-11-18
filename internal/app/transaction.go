@@ -18,6 +18,8 @@ type TxView struct {
 	Account     string
 	Category    string
 	Transfer    *domain.TransferGroup
+	// Tags holds the tag names ordered by tag ID; ListTx fills it, other builders leave it empty.
+	Tags []string `json:"tags,omitempty"`
 }
 
 // AddTxRequest carries user-typed values. Account and Amount are required; Date defaults to
@@ -211,7 +213,16 @@ func (s *Service) ListTx(ctx context.Context, req ListTxRequest) (TxPage, error)
 		}
 		v := newViewer(accts, cats)
 		for _, t := range rows {
-			page.Items = append(page.Items, v.view(t))
+			tv := v.view(t)
+			// ponytail: one query per row, fine for a 200-row page; batch it if pages grow
+			rowTags, err := r.Tags().TagsOf(ctx, t.ID)
+			if err != nil {
+				return fmt.Errorf("tags of transaction %d: %w", t.ID, err)
+			}
+			for _, tg := range rowTags {
+				tv.Tags = append(tv.Tags, tg.Name)
+			}
+			page.Items = append(page.Items, tv)
 		}
 		return nil
 	})

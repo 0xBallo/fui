@@ -187,6 +187,23 @@ func TestListTxFilters(t *testing.T) {
 	wantNoErr(t, err)
 	wantNoErr(t, e.svc.ApplyTagTransaction(ctx, tagP))
 
+	all, err := e.svc.ListTx(ctx, app.ListTxRequest{})
+	wantNoErr(t, err)
+	for _, it := range all.Items {
+		want := 0
+		if it.Transaction.ID == tx1.ID {
+			want = 1
+		}
+		if len(it.Tags) != want || (want == 1 && it.Tags[0] != "vacanze") {
+			t.Errorf("tx %d tags = %v, want %d", it.Transaction.ID, it.Tags, want)
+		}
+	}
+	filtered, err := e.svc.ListTx(ctx, app.ListTxRequest{Tags: []string{"vacanze"}})
+	wantNoErr(t, err)
+	if len(filtered.Items) != 1 || len(filtered.Items[0].Tags) != 1 {
+		t.Errorf("tag filter items = %+v, want 1 row with its tag", filtered.Items)
+	}
+
 	count := func(req app.ListTxRequest) int {
 		t.Helper()
 		page, err := e.svc.ListTx(ctx, req)
