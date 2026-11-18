@@ -186,3 +186,72 @@ func TestAccountsReconcileNonZeroStaysPreview(t *testing.T) {
 		t.Fatalf("expected close guard on non-zero difference, got:\n%s", view)
 	}
 }
+
+func loanFixture(t *testing.T, mutate ...func(*app.Config)) screens.Screen {
+	t.Helper()
+	fx := screentest.New(t, mutate...)
+	fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "100", OpenedOn: "2026-01-01"})
+	fx.Account(t, app.AddAccountRequest{Name: "Savings", Kind: "savings", Currency: "EUR", OpeningBalance: "50", OpenedOn: "2026-01-01"})
+	fx.Account(t, app.AddAccountRequest{Name: "Mortgage", Kind: "loan", Currency: "EUR", OpeningBalance: "-300", OpenedOn: "2026-01-01"})
+	scr := screens.Screen(accounts.New(fx.Service, domain.LocaleENUS, theme.Default()))
+	scr.SetSize(100, 30)
+	return run(t, scr, scr.Init())
+}
+
+func TestAccountsSplitSectionsAndTotals(t *testing.T) {
+	view := loanFixture(t).View()
+	for _, want := range []string{"Loans & mortgages", "Currency", "Total 150.00 EUR", "Total -300.00 EUR"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("missing %q in:\n%s", want, view)
+		}
+	}
+	if strings.Index(view, "Mortgage") < strings.Index(view, "Loans & mortgages") {
+		t.Fatalf("loan listed outside its section:\n%s", view)
+	}
+}
+
+func TestAccountsLoansHiddenWhenEmpty(t *testing.T) {
+	fx, scr := newFixture(t)
+	fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "100", OpenedOn: "2026-01-01"})
+	scr = run(t, scr, scr.Init())
+	scr, _ = sendKey(scr, tea.KeyTab)
+	view := scr.View()
+	if strings.Contains(view, "Loans & mortgages") || !strings.Contains(view, "Total 100.00 EUR") {
+		t.Fatalf("unexpected view:\n%s", view)
+	}
+}
+
+func TestAccountsTotalNotAvailableWithoutBase(t *testing.T) {
+	scr := loanFixture(t, func(c *app.Config) { c.BaseCurrency = domain.Currency{} })
+	if got := strings.Count(scr.View(), "Total n/a"); got != 2 {
+		t.Fatalf("want two n/a totals, got %d:\n%s", got, scr.View())
+	}
+}
+
+func TestAccountsTabTargetsFocusedRow(t *testing.T) {
+	scr := loanFixture(t)
+	scr, cmd := sendKey(scr, tea.KeyEnter)
+	scr = run(t, scr, cmd)
+	if !strings.Contains(scr.View(), "Movements — Checking") {
+		t.Fatalf("expected Checking detail:\n%s", scr.View())
+	}
+	scr, _ = sendKey(scr, tea.KeyEsc)
+
+	scr, _ = sendKey(scr, tea.KeyTab)
+	scr, _ = sendRunes(scr, "d")
+	if !strings.Contains(scr.View(), `Archive "Mortgage"?`) {
+		t.Fatalf("expected archive confirm for Mortgage:\n%s", scr.View())
+	}
+	scr, _ = sendRunes(scr, "n")
+	scr, _ = sendRunes(scr, "r")
+	if !strings.Contains(scr.View(), "Account: Mortgage") {
+		t.Fatalf("expected reconcile for Mortgage:\n%s", scr.View())
+	}
+	scr, _ = sendKey(scr, tea.KeyEsc)
+
+	scr, _ = sendKey(scr, tea.KeyTab)
+	scr, _ = sendRunes(scr, "d")
+	if !strings.Contains(scr.View(), `Archive "Checking"?`) {
+		t.Fatalf("expected focus back on accounts:\n%s", scr.View())
+	}
+}
