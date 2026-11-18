@@ -30,7 +30,7 @@ func longDoc() string {
 	return b.String()
 }
 
-func key(m components.MarkdownModal, k tea.KeyType) components.MarkdownModal {
+func keyMsg(m components.MarkdownModal, k tea.KeyType) components.MarkdownModal {
 	m, _ = m.Update(tea.KeyMsg{Type: k})
 	return m
 }
@@ -55,19 +55,19 @@ func TestMarkdownModalScrollAndClose(t *testing.T) {
 	m.SetSize(60, 14)
 	m.Open()
 	top := m.View()
-	m = key(m, tea.KeyPgDown)
+	m = keyMsg(m, tea.KeyPgDown)
 	if m.View() == top {
 		t.Error("pgdown did not scroll")
 	}
-	m = key(m, tea.KeyHome)
+	m = keyMsg(m, tea.KeyHome)
 	if m.View() != top {
 		t.Error("home did not return to top")
 	}
-	m = key(m, tea.KeyEnd)
+	m = keyMsg(m, tea.KeyEnd)
 	if m.View() == top {
 		t.Error("end did not scroll")
 	}
-	m = key(m, tea.KeyEsc)
+	m = keyMsg(m, tea.KeyEsc)
 	if m.IsOpen() {
 		t.Error("esc did not close")
 	}
