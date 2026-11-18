@@ -37,6 +37,7 @@ func (m *Model) fmtAmount(a reporting.Amount) string {
 func (m *Model) refreshResultView() {
 	m.note = ""
 	m.chart.SetItems(nil)
+	m.sizeReportTable()
 	switch data := m.result.data.(type) {
 	case reporting.SeriesResult:
 		m.viewSeries(data)
@@ -172,4 +173,13 @@ func (m *Model) setChart(items []components.BarItem) {
 		return
 	}
 	m.chart.SetItems(items)
+}
+
+// sizeReportTable shrinks the table by the line chart rows when the loaded kind draws one.
+func (m *Model) sizeReportTable() {
+	h := max(3, m.height-14)
+	if ch := chartHeight(m.height); ch > 0 && len(lineSeries(m.result.kind, m.result.data)) > 0 {
+		h = max(3, m.height-8-ch)
+	}
+	m.table.SetHeight(h)
 }
