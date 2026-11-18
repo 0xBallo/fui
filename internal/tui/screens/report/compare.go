@@ -207,10 +207,17 @@ func (m *Model) viewCompare() string {
 	if m.cmp.loaded {
 		title += " — A " + m.cmp.report.A + " vs B " + m.cmp.report.B
 	}
-	lines := []string{
-		m.th.Title.Render(title), "", m.cmp.table.View(), "",
-		m.th.Base.Render("p periods   t by category: " + onOff(m.cmp.req.ByCategory) + "   r refresh   esc back"),
+	bars := ""
+	if m.cmp.loaded {
+		bars = m.compareBars()
 	}
+	m.cmp.table.SetHeight(max(3, m.height-10-barsHeight(bars)))
+	lines := []string{m.th.Title.Render(title), "", m.cmp.table.View()}
+	if bars != "" {
+		lines = append(lines, "", bars)
+	}
+	lines = append(lines, "",
+		m.th.Base.Render("p periods   t by category: "+onOff(m.cmp.req.ByCategory)+"   r refresh   esc back"))
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
 
