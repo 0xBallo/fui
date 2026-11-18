@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/tui/theme"
 )
@@ -11,43 +13,29 @@ import (
 // barWidth is the number of filled/empty blocks drawn in a progress bar.
 const barWidth = 10
 
-// stateLabel turns a BudgetState into the text the spec requires alongside (not instead of)
-// color, so a non-color terminal still shows the threshold state.
-func stateLabel(s domain.BudgetState) string {
-	switch s {
-	case domain.BudgetOver:
-		return "OVER"
-	case domain.BudgetWarning:
-		return "WARNING"
-	case domain.BudgetOK:
-		return "OK"
+// tier maps a percentage to its visual tier icon and style: green below 70, yellow 70-89, orange
+// 90-99, red from 100. The icon keeps the state readable without color; OVER stays as text.
+func tier(th theme.Theme, percent int) (string, lipgloss.Style) {
+	switch {
+	case percent >= 100:
+		return "✗ OVER", th.Error
+	case percent >= 90:
+		return "‼", th.Caution
+	case percent >= 70:
+		return "!", th.Warning
 	default:
-		return "OK"
+		return "✓", th.Positive
 	}
 }
 
-// progressBar renders a percent (0..100, clamped) as filled blocks, a percentage and a state
-// label, colored by state but never relying on color alone.
-func progressBar(th theme.Theme, percent int, state domain.BudgetState) string {
-	p := percent
-	if p < 0 {
-		p = 0
-	}
-	if p > 100 {
-		p = 100
-	}
+// progressBar renders a percent (fill clamped to 0..100) as blocks, the percentage and the tier
+// icon, colored by tier but never relying on color alone.
+func progressBar(th theme.Theme, percent int) string {
+	p := min(max(percent, 0), 100)
 	filled := (p * barWidth) / 100
 	bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
-	style := th.Positive
-	switch state {
-	case domain.BudgetWarning:
-		style = th.Warning
-	case domain.BudgetOver:
-		style = th.Negative
-	case domain.BudgetOK:
-		style = th.Positive
-	}
-	return fmt.Sprintf("%s %3d%% %s", style.Render(bar), percent, stateLabel(state))
+	icon, style := tier(th, percent)
+	return fmt.Sprintf("%s %3d%% %s", style.Render(bar), percent, icon)
 }
 
 // envelopeAvailable is CarryIn + Assigned + MovesIn - MovesOut, the amount an envelope's Spent is
@@ -69,16 +57,4 @@ func envelopePercent(m domain.EnvelopeMonth) int {
 		return 100
 	}
 	return int(spent * 100 / avail)
-}
-
-// envelopeState mirrors the cap thresholds (80%/100%) for an envelope's progress bar, since
-// EnvelopeMonth carries no Budget.Thresholds of its own in the domain engine.
-func envelopeState(m domain.EnvelopeMonth) domain.BudgetState {
-	if m.Overspend.Sign() > 0 {
-		return domain.BudgetOver
-	}
-	if envelopePercent(m) >= domain.DefaultBudgetThresholds.Warn {
-		return domain.BudgetWarning
-	}
-	return domain.BudgetOK
 }
