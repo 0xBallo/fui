@@ -63,7 +63,7 @@ type Model struct {
 	minBalText  string
 
 	table components.Table
-	chart components.BarChart
+	line  components.LineChart
 	note  string // extra context line under the table (loan name, forecast thresholds, ...)
 
 	accounts []app.AccountBalance
@@ -101,7 +101,7 @@ func New(uc UseCases, loc domain.Locale, monthStartDay int, th theme.Theme) *Mod
 	}
 	m := &Model{uc: uc, loc: loc, monthStartDay: monthStartDay, th: th, km: DefaultKeyMap()}
 	m.table = components.NewTable(nil, th)
-	m.chart = components.NewBarChart(th)
+	m.line = components.NewLineChart(th)
 	m.savedTable = components.NewTable(savedColumns(), th)
 	m.confirm = components.NewConfirmDialog(th)
 	m.help = components.NewMarkdownModal(th, helpMarkdown)
@@ -116,13 +116,12 @@ func (m *Model) Init() tea.Cmd {
 // SetSize adapts the tables to the available terminal size.
 func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h
-	m.table.SetHeight(max(3, h-14))
+	m.sizeReportTable()
 	m.table.SetWidth(w)
 	m.savedTable.SetHeight(max(3, h-10))
 	m.savedTable.SetWidth(w)
 	m.cmp.table.SetHeight(max(3, h-10))
 	m.cmp.table.SetWidth(w)
-	m.chart.SetWidth(w)
 	m.help.SetSize(w, h)
 	m.sizeSim()
 }

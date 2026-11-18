@@ -61,7 +61,7 @@ func (m *Model) submitAdd() tea.Cmd {
 		if _, err := m.uc.ApplyAddTx(ctx, plan); err != nil {
 			return screens.ErrorMsg{Err: err}
 		}
-		return m.load()()
+		return m.loadBase()()
 	}
 }
 

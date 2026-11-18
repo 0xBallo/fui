@@ -62,6 +62,7 @@ type Model struct {
 	next        *app.TxCursor
 	loadingMore bool
 	table       components.Table
+	totals      totalsState
 
 	accounts   []string
 	categories []string
@@ -131,7 +132,7 @@ func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h
 	m.table.SetColumns(m.columns())
 	m.table.SetRows(m.txRows())
-	m.table.SetHeight(max(3, h-8))
+	m.table.SetHeight(max(3, h-8-m.totalsHeight()))
 	m.table.SetWidth(w)
 }
 
@@ -161,6 +162,7 @@ type loadedMsg struct {
 	categories     []string
 	tags           []string
 	clearSelection bool
+	totals         totalsState
 }
 
 // moreMsg carries one more page, appended to the already loaded window.
@@ -184,21 +186,27 @@ func (m *Model) loadMore() tea.Cmd {
 	}
 }
 
+func (m *Model) applyLoaded(msg loadedMsg) {
+	m.items = msg.page.Items
+	m.next = msg.page.Next
+	m.accounts = msg.accounts
+	m.categories = msg.categories
+	m.tags = msg.tags
+	m.totals = msg.totals
+	m.table.SetHeight(max(3, m.height-8-m.totalsHeight()))
+	m.table.SetRows(m.txRows())
+	if msg.clearSelection {
+		m.table.ClearSelection()
+	}
+	m.mode = modeList
+	m.lastErr = nil
+}
+
 // Update advances the screen state; it performs no I/O itself.
 func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case loadedMsg:
-		m.items = msg.page.Items
-		m.next = msg.page.Next
-		m.accounts = msg.accounts
-		m.categories = msg.categories
-		m.tags = msg.tags
-		m.table.SetRows(m.txRows())
-		if msg.clearSelection {
-			m.table.ClearSelection()
-		}
-		m.mode = modeList
-		m.lastErr = nil
+		m.applyLoaded(msg)
 		return m, nil
 	case moreMsg:
 		m.loadingMore = false
@@ -216,7 +224,10 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		}
 		return m, m.runSearch(msg.seq)
 	case searchResultMsg:
-		return m.applySearchResult(msg)
+		return m.applySearchTotals(msg)
+	case totalsMsg:
+		m.applyTotals(msg)
+		return m, nil
 	case needReconcileMsg:
 		m.confirmPurpose = msg.purpose
 		m.confirm.Show("Reconciled transaction", "This transaction is reconciled. Continue anyway?")
@@ -448,7 +459,8 @@ func reload(ctx context.Context, uc UseCases, req app.ListTxRequest, clearSelect
 	for i, t := range tags {
 		tagNames[i] = t.Name
 	}
-	return loadedMsg{page: page, accounts: names, categories: catNames, tags: tagNames, clearSelection: clearSelection}
+	totals := fetchTotals(ctx, uc, req)
+	return loadedMsg{page: page, accounts: names, categories: catNames, tags: tagNames, clearSelection: clearSelection, totals: totals}
 }
 
 // minTagsWidth is the narrowest terminal that still shows the Tags column.
@@ -529,7 +541,7 @@ func (m *Model) View() string {
 }
 
 func (m *Model) viewList() string {
-	body := m.table.View() + "\n" + m.summaryLine()
+	body := m.totalsView() + m.table.View() + "\n" + m.summaryLine()
 	if chips := m.chipsView(); chips != "" {
 		return chips + "\n\n" + body
 	}

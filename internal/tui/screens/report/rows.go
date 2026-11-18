@@ -10,10 +10,6 @@ import (
 	"github.com/0xballo/fui/internal/tui/components"
 )
 
-// chartCap is the largest row count the bar chart renders; longer series (e.g. a 90-day
-// forecast) stay in the scrollable table only.
-const chartCap = 40
-
 // moneyOf rebuilds a domain.Money from a reporting.Amount, as the CLI render package does.
 func moneyOf(a reporting.Amount) (domain.Money, error) {
 	cur, err := domain.ParseCurrency(a.Currency)
@@ -36,7 +32,7 @@ func (m *Model) fmtAmount(a reporting.Amount) string {
 // refreshResultView rebuilds the table, chart and note from the currently loaded result.
 func (m *Model) refreshResultView() {
 	m.note = ""
-	m.chart.SetItems(nil)
+	m.sizeReportTable()
 	switch data := m.result.data.(type) {
 	case reporting.SeriesResult:
 		m.viewSeries(data)
@@ -64,13 +60,10 @@ func (m *Model) viewSeries(s reporting.SeriesResult) {
 		{Title: "Amount", Width: 16, Align: lipgloss.Right},
 	})
 	rows := make([]components.Row, len(s.Points))
-	items := make([]components.BarItem, 0, len(s.Points))
 	for i, p := range s.Points {
 		rows[i] = components.Row{ID: p.Date, Cells: []string{p.Date, m.fmtAmount(p.Amount)}}
-		items = append(items, components.BarItem{Label: p.Date, Value: p.Amount.Minor, DisplayValue: m.fmtAmount(p.Amount)})
 	}
 	m.table.SetRows(rows)
-	m.setChart(items)
 }
 
 func (m *Model) viewInterest(r reporting.InterestResult) {
@@ -81,16 +74,13 @@ func (m *Model) viewInterest(r reporting.InterestResult) {
 		{Title: "Fees", Width: 14, Align: lipgloss.Right},
 	})
 	rows := make([]components.Row, len(r.Rows))
-	items := make([]components.BarItem, 0, len(r.Rows))
 	for i, row := range r.Rows {
 		year := strconv.Itoa(row.Year)
 		rows[i] = components.Row{ID: row.Loan + year, Cells: []string{
 			row.Loan, year, m.fmtAmount(row.Interest), m.fmtAmount(row.Fees),
 		}}
-		items = append(items, components.BarItem{Label: row.Loan + " " + year, Value: row.Interest.Minor, DisplayValue: m.fmtAmount(row.Interest)})
 	}
 	m.table.SetRows(rows)
-	m.setChart(items)
 }
 
 func (m *Model) viewPayees(r reporting.PayeesResult) {
@@ -100,14 +90,11 @@ func (m *Model) viewPayees(r reporting.PayeesResult) {
 		{Title: "Count", Width: 7, Align: lipgloss.Right},
 	})
 	rows := make([]components.Row, 0, len(r.Rows)+1)
-	items := make([]components.BarItem, 0, len(r.Rows))
 	for _, row := range r.Rows {
 		rows = append(rows, components.Row{ID: row.Payee, Cells: []string{row.Payee, m.fmtAmount(row.Total), strconv.Itoa(row.Count)}})
-		items = append(items, components.BarItem{Label: row.Payee, Value: row.Total.Minor, DisplayValue: m.fmtAmount(row.Total)})
 	}
 	rows = append(rows, components.Row{ID: "TOTAL", Cells: []string{"TOTAL", m.fmtAmount(r.Total), strconv.Itoa(len(r.Rows))}})
 	m.table.SetRows(rows)
-	m.setChart(items)
 }
 
 func (m *Model) viewBudget(r reporting.BudgetResult) {
@@ -119,15 +106,12 @@ func (m *Model) viewBudget(r reporting.BudgetResult) {
 		{Title: "State", Width: 8, Align: lipgloss.Left},
 	})
 	rows := make([]components.Row, len(r.Lines))
-	items := make([]components.BarItem, 0, len(r.Lines))
 	for i, l := range r.Lines {
 		rows[i] = components.Row{ID: l.Budget, Cells: []string{
 			l.Budget, m.fmtAmount(l.Budgeted), m.fmtAmount(l.Spent), m.fmtAmount(l.Remaining), l.State,
 		}}
-		items = append(items, components.BarItem{Label: l.Budget, Value: l.Spent.Minor, DisplayValue: m.fmtAmount(l.Spent)})
 	}
 	m.table.SetRows(rows)
-	m.setChart(items)
 	m.note = "Uncovered: " + m.fmtAmount(r.Uncovered)
 }
 
@@ -137,13 +121,10 @@ func (m *Model) viewForecast(f reporting.ForecastResult) {
 		{Title: "Total", Width: 16, Align: lipgloss.Right},
 	})
 	rows := make([]components.Row, len(f.Total))
-	items := make([]components.BarItem, 0, len(f.Total))
 	for i, p := range f.Total {
 		rows[i] = components.Row{ID: p.Date, Cells: []string{p.Date, m.fmtAmount(p.Amount)}}
-		items = append(items, components.BarItem{Label: p.Date, Value: p.Amount.Minor, DisplayValue: m.fmtAmount(p.Amount)})
 	}
 	m.table.SetRows(rows)
-	m.setChart(items)
 	var notes []string
 	if f.FirstBelowZero != "" {
 		notes = append(notes, "first below zero: "+f.FirstBelowZero)
@@ -165,11 +146,17 @@ func joinNotes(notes []string) string {
 	return out
 }
 
-// setChart feeds items into the bar chart, skipping charts too long to read.
-func (m *Model) setChart(items []components.BarItem) {
-	if len(items) > chartCap {
-		m.chart.SetItems(nil)
-		return
+// sizeReportTable shrinks the table by the line chart rows when the loaded kind draws one.
+func (m *Model) sizeReportTable() {
+	h := max(3, m.height-14)
+	if ch := chartHeight(m.height); ch > 0 && len(lineSeries(m.result.kind, m.result.data)) > 0 {
+		h = max(3, m.height-8-ch)
 	}
-	m.chart.SetItems(items)
+	if n := min(len(barItems(m.th, m.fmtAmount, m.result.data)), barRowCap(m.height)); n > 0 {
+		if m.barLegend(m.result.data) != "" {
+			n++
+		}
+		h = max(3, m.height-9-n)
+	}
+	m.table.SetHeight(h)
 }

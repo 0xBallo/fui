@@ -41,3 +41,31 @@ func TestDashboardNetWorthShowsPositionsAndAssetsComponents(t *testing.T) {
 		t.Fatalf("expected net-worth component lines, got:\n%s", view)
 	}
 }
+
+func TestGrossNet(t *testing.T) {
+	eur, _ := domain.ParseCurrency("EUR")
+	line := func(kind domain.AccountKind, minor int64) app.NetWorthLine {
+		m, _ := domain.NewMoney(minor, eur)
+		return app.NetWorthLine{Account: domain.Account{Kind: kind}, Balance: m, Converted: m}
+	}
+	tests := []struct {
+		name       string
+		lines      []app.NetWorthLine
+		gross, net int64
+	}{
+		{"empty", nil, 0, 0},
+		{"no loans", []app.NetWorthLine{line(domain.AccountChecking, 1000), line(domain.AccountSavings, 500)}, 1500, 1500},
+		{"loans", []app.NetWorthLine{line(domain.AccountChecking, 1000), line(domain.AccountLoan, -400)}, 1000, 600},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gross, net, err := dashboard.GrossNet(app.NetWorth{Base: eur, Lines: tc.lines})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if gross.Minor() != tc.gross || net.Minor() != tc.net {
+				t.Fatalf("gross/net = %d/%d, want %d/%d", gross.Minor(), net.Minor(), tc.gross, tc.net)
+			}
+		})
+	}
+}

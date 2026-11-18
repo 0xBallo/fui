@@ -2,15 +2,15 @@ package dashboard
 
 import (
 	"context"
-	"errors"
 	"strconv"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/0xballo/fui/internal/app"
-	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/tui/components"
 	"github.com/0xballo/fui/internal/tui/screens"
@@ -25,12 +25,14 @@ const (
 	modeForm
 )
 
-// Model is the dashboard screen: account balances, net worth, the runway KPI, current-month
-// spending by category, and a quick-add shortcut. Update and View never touch the store; every
-// use case call runs inside a tea.Cmd.
+// twoColumnWidth is the terminal width from which the sections are laid out in two columns.
+const twoColumnWidth = 120
+
+// Model is the dashboard screen: a cycle header, the net worth, the other sections, and a
+// quick-add shortcut. Update and View never touch the store; every use case call runs inside a
+// tea.Cmd.
 type Model struct {
 	uc            UseCases
-	netWorthUC    NetWorthUseCases
 	loc           domain.Locale
 	th            theme.Theme
 	km            KeyMap
@@ -38,19 +40,18 @@ type Model struct {
 
 	width, height int
 	mode          mode
+	vp            viewport.Model
 
-	balances []app.AccountBalance
-	table    components.Table
+	cycle  domain.Cycle
+	anchor domain.Date
+	today  domain.Date
+	since  domain.Date
+	base   domain.Currency
+	period domain.Period
+	ready  bool
 
-	netWorth    app.NetWorth
-	netWorthErr error
-	netWorthPt  *reporting.NetWorthPoint
-
-	spending reporting.SpendingResult
-	chart    components.BarChart
-
-	runway          reporting.RunwayResult
-	runwayAvailable bool
+	nw       *netWorthSection
+	sections []section
 
 	categories []string
 	accounts   []string
@@ -73,33 +74,24 @@ func New(uc UseCases, loc domain.Locale, th theme.Theme, monthStartDay int) *Mod
 	if monthStartDay < 1 || monthStartDay > 31 {
 		monthStartDay = 1
 	}
-	m := &Model{uc: uc, loc: loc, th: th, km: DefaultKeyMap(), monthStartDay: monthStartDay}
-	m.table = components.NewTable([]components.Column{
-		{Title: "Account", Width: 24, Align: lipgloss.Left},
-		{Title: "Kind", Width: 12, Align: lipgloss.Left},
-		{Title: "Balance", Width: 16, Align: lipgloss.Right},
-	}, th)
-	m.chart = components.NewBarChart(th)
+	m := &Model{
+		uc: uc, loc: loc, th: th, km: DefaultKeyMap(), monthStartDay: monthStartDay,
+		cycle: domain.CycleMonth, vp: viewport.New(0, 0),
+	}
+	m.nw = &netWorthSection{uc: uc, loc: loc, th: th}
+	m.sections = []section{m.nw, runwaySection{}, flowSection{}, recentSection{}, alertsSection{}}
 	return m
 }
 
 // Init loads the dashboard data.
-func (m *Model) Init() tea.Cmd { return tea.Batch(m.load(), m.ins.load()) }
+func (m *Model) Init() tea.Cmd { return tea.Batch(m.loadBase(), m.ins.load()) }
 
 // SetSize adapts the panels to the available terminal size.
 func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h
 	m.ins.width = w
-	rows := len(m.balances)
-	if rows > 8 {
-		rows = 8
-	}
-	if rows < 3 {
-		rows = 3
-	}
-	m.table.SetHeight(rows)
-	m.table.SetWidth(w)
-	m.chart.SetWidth(w)
+	m.vp.Width = w
+	m.vp.Height = max(1, h-2)
 }
 
 // Title identifies the screen in the tab bar.
@@ -107,52 +99,40 @@ func (m *Model) Title() string { return "Dashboard" }
 
 // KeyMap exposes the bindings for the global help view.
 func (m *Model) KeyMap() []key.Binding {
-	return append(m.km.Bindings(), m.ins.keyBindings()...)
+	out := append(m.km.Bindings(), m.ins.keyBindings()...)
+	for _, s := range m.sections {
+		out = append(out, s.keys()...)
+	}
+	return out
 }
 
 // InputActive reports whether the quick-add form is capturing keystrokes.
 func (m *Model) InputActive() bool { return m.mode == modeForm }
 
-// loadedMsg carries every piece of fresh dashboard data back into Update.
-type loadedMsg struct {
-	balances []app.AccountBalance
-
-	netWorth    app.NetWorth
-	netWorthErr error
-	netWorthPt  *reporting.NetWorthPoint
-
-	spending reporting.SpendingResult
-
-	runway          reporting.RunwayResult
-	runwayAvailable bool
-
+// baseMsg carries the cycle-independent data back into Update.
+type baseMsg struct {
+	today      domain.Date
+	since      domain.Date
+	base       domain.Currency
 	categories []string
 	accounts   []string
 }
 
-func (m *Model) load() tea.Cmd {
+func (m *Model) loadBase() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
+		today, err := m.uc.Today()
+		if err != nil {
+			return screens.ErrorMsg{Err: err}
+		}
+		out := baseMsg{today: today}
 		bals, err := m.uc.ListAccounts(ctx, app.ListAccountsRequest{})
 		if err != nil {
 			return screens.ErrorMsg{Err: err}
 		}
-		out := loadedMsg{balances: bals}
 		for _, b := range bals {
 			out.accounts = append(out.accounts, b.Account.Name)
 		}
-
-		// Net worth needs a configured base currency and fx rates; it is shown as "n/a" rather
-		// than failing the whole screen when either is missing.
-		out.netWorth, out.netWorthErr = m.uc.NetWorth(ctx, app.NetWorthRequest{})
-		if m.netWorthUC != nil && out.netWorthErr == nil {
-			point, err := m.netWorthUC.NetWorthAt(ctx, out.netWorth.At)
-			if err != nil {
-				return screens.ErrorMsg{Err: err}
-			}
-			out.netWorthPt = &point
-		}
-
 		cats, err := m.uc.ListCategories(ctx)
 		if err != nil {
 			return screens.ErrorMsg{Err: err}
@@ -160,24 +140,43 @@ func (m *Model) load() tea.Cmd {
 		for _, c := range cats {
 			out.categories = append(out.categories, c.Name)
 		}
-
-		base := out.netWorth.Base
-		out.spending, err = m.uc.Spending(ctx, reporting.SpendingParams{BaseCurrency: base, MonthStartDay: m.monthStartDay})
+		// The base currency is only known once configured; sections cope with it being empty.
+		if nw, err := m.uc.NetWorth(ctx, app.NetWorthRequest{}); err == nil {
+			out.base = nw.Base
+		}
+		page, err := m.uc.ListTx(ctx, app.ListTxRequest{Sort: domain.TxSortDate, Limit: 1})
 		if err != nil {
 			return screens.ErrorMsg{Err: err}
 		}
-
-		out.runway, err = m.uc.Runway(ctx, reporting.RunwayParams{BaseCurrency: base, MonthStartDay: m.monthStartDay})
-		switch {
-		case errors.Is(err, domain.ErrNotEnoughData):
-			out.runwayAvailable = false
-		case err != nil:
-			return screens.ErrorMsg{Err: err}
-		default:
-			out.runwayAvailable = true
+		if len(page.Items) > 0 {
+			out.since = page.Items[0].Transaction.Date
 		}
 		return out
 	}
+}
+
+// recompute derives the period from the cycle and anchor and reloads every section.
+func (m *Model) recompute() tea.Cmd {
+	p, err := domain.CyclePeriod(m.cycle, m.anchor, m.monthStartDay, m.since)
+	if err != nil {
+		return func() tea.Msg { return screens.ErrorMsg{Err: err} }
+	}
+	m.period = p
+	asOf := p.To()
+	if m.today.Before(asOf) {
+		asOf = m.today
+	}
+	params := sectionParams{Period: p, AsOf: asOf, Today: m.today, Base: m.base, MonthStartDay: m.monthStartDay}
+	cmds := make([]tea.Cmd, 0, len(m.sections))
+	for _, s := range m.sections {
+		cmds = append(cmds, s.load(params))
+	}
+	return tea.Batch(cmds...)
+}
+
+// atCurrent reports whether the period contains today, so there is no later period to show.
+func (m *Model) atCurrent() bool {
+	return m.cycle == domain.CycleLifetime || m.period.Contains(m.today)
 }
 
 // Update advances the screen state; it performs no I/O itself.
@@ -187,18 +186,23 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 			return m, cmd
 		}
 	}
+	if _, isKey := msg.(tea.KeyMsg); !isKey {
+		for _, s := range m.sections {
+			if cmd, ok := s.update(msg); ok {
+				return m, cmd
+			}
+		}
+	}
 	switch msg := msg.(type) {
-	case loadedMsg:
-		m.balances = msg.balances
-		m.table.SetRows(m.accountRows())
-		m.netWorth, m.netWorthErr = msg.netWorth, msg.netWorthErr
-		m.netWorthPt = msg.netWorthPt
-		m.spending = msg.spending
-		m.chart.SetItems(spendingBars(msg.spending))
-		m.runway, m.runwayAvailable = msg.runway, msg.runwayAvailable
+	case baseMsg:
+		m.today, m.since, m.base = msg.today, msg.since, msg.base
 		m.categories, m.accounts = msg.categories, msg.accounts
 		m.mode = modeView
-		return m, nil
+		if !m.ready {
+			m.ready = true
+			m.anchor = msg.today
+		}
+		return m, m.recompute()
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -209,33 +213,48 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	if m.mode == modeForm {
 		return m.handleFormKey(msg)
 	}
-	if key.Matches(msg, m.km.Add) {
+	for _, s := range m.sections {
+		if cmd, ok := s.update(msg); ok {
+			return m, cmd
+		}
+	}
+	switch {
+	case key.Matches(msg, m.km.Add):
 		m.openAddForm()
+	case !m.ready:
+	case key.Matches(msg, m.km.Cycle):
+		m.cycle = m.cycle.Next()
+		m.anchor = m.today
+		return m, m.recompute()
+	case key.Matches(msg, m.km.Prev):
+		return m, m.shift(-1)
+	case key.Matches(msg, m.km.Next):
+		if m.atCurrent() {
+			return m, nil
+		}
+		return m, m.shift(1)
+	case key.Matches(msg, m.km.Up):
+		m.vp.ScrollUp(1)
+	case key.Matches(msg, m.km.Down):
+		m.vp.ScrollDown(1)
+	case key.Matches(msg, m.km.PageUp):
+		m.vp.HalfPageUp()
+	case key.Matches(msg, m.km.PageDown):
+		m.vp.HalfPageDown()
 	}
 	return m, nil
 }
 
-func (m *Model) accountRows() []components.Row {
-	rows := make([]components.Row, len(m.balances))
-	for i, b := range m.balances {
-		rows[i] = components.Row{ID: b.Account.Name, Cells: []string{
-			b.Account.Name, string(b.Account.Kind), domain.FormatAmount(b.Balance, m.loc),
-		}}
+func (m *Model) shift(n int) tea.Cmd {
+	if m.cycle == domain.CycleLifetime {
+		return nil
 	}
-	return rows
-}
-
-// spendingBars converts a spending report into bar chart items. Spending totals are already
-// positive absolute outflows (see domain.SpendingByCategory), so no sign handling is needed here.
-func spendingBars(r reporting.SpendingResult) []components.BarItem {
-	items := make([]components.BarItem, 0, len(r.Rows))
-	for _, row := range r.Rows {
-		items = append(items, components.BarItem{
-			Label: row.CategoryName, Value: row.Total.Minor(),
-			DisplayValue: domain.FormatMachine(row.Total),
-		})
+	a, err := domain.ShiftCycle(m.cycle, m.anchor, n, m.monthStartDay)
+	if err != nil {
+		return func() tea.Msg { return screens.ErrorMsg{Err: err} }
 	}
-	return items
+	m.anchor = a
+	return m.recompute()
 }
 
 // View renders the active panel.
@@ -243,29 +262,66 @@ func (m *Model) View() string {
 	if m.mode == modeForm {
 		return components.Modal(m.th, m.width, m.height, m.viewForm())
 	}
-	return m.viewDashboard()
+	m.vp.SetContent(m.content())
+	return m.viewHeader() + "\n\n" + m.vp.View()
 }
 
-func (m *Model) viewDashboard() string {
-	out := m.th.Header.Render("Accounts") + "\n" + m.table.View() + "\n\n"
-	out += m.th.Header.Render("Net worth") + "\n" + m.viewNetWorth() + "\n\n"
-	out += m.th.Header.Render("Runway") + "\n" + m.viewRunway() + "\n\n"
-	out += m.th.Header.Render("Spending this month") + "\n" + m.chart.View()
+var monthNames = [...]string{
+	"January", "February", "March", "April", "May", "June",
+	"July", "August", "September", "October", "November", "December",
+}
+
+func (m *Model) viewHeader() string {
+	if !m.ready {
+		return m.th.Muted.Render("loading…")
+	}
+	from := m.period.From()
+	var label string
+	switch m.cycle {
+	case domain.CycleMonth:
+		label = monthNames[from.Month()-1] + " " + strconv.Itoa(from.Year())
+	case domain.CycleQuarter:
+		label = "Q" + strconv.Itoa((from.Month()-1)/3+1) + " " + strconv.Itoa(from.Year())
+	case domain.CycleYear:
+		label = strconv.Itoa(from.Year())
+	case domain.CycleLifetime:
+		label = "since " + from.String()
+	}
+	prev, next := "◀", "▶"
+	if m.atCurrent() {
+		next = " "
+	}
+	if m.cycle == domain.CycleLifetime {
+		prev = " "
+	}
+	return m.th.Header.Render(prev + " " + label + " · " + string(m.cycle) + " " + next)
+}
+
+// content lays the sections out in one or two columns, then appends the quick insight panel.
+func (m *Model) content() string {
+	var out string
+	if m.width >= twoColumnWidth {
+		colW := m.width/2 - 1
+		left := m.column(colW, m.sections[:3])
+		right := m.column(colW, m.sections[3:])
+		out = lipgloss.JoinHorizontal(lipgloss.Top,
+			lipgloss.NewStyle().Width(colW).Render(left), "  ",
+			lipgloss.NewStyle().Width(colW).Render(right))
+	} else {
+		out = m.column(m.width, m.sections)
+	}
 	if ins := m.ins.view(); ins != "" {
 		out += "\n\n" + ins
 	}
 	return out
 }
 
-func (m *Model) viewNetWorth() string {
-	return m.renderNetWorth()
-}
-
-func (m *Model) viewRunway() string {
-	if !m.runwayAvailable {
-		return m.th.Muted.Render("not enough data (needs at least 3 complete months)")
+func (m *Model) column(width int, secs []section) string {
+	var parts []string
+	for _, s := range secs {
+		if v := s.view(width); v != "" {
+			parts = append(parts, v)
+		}
 	}
-	months, days := m.runway.Months, m.runway.Days
-	return m.th.Base.Render(domain.FormatAmount(m.runway.Liquidity, m.loc)) +
-		" — " + strconv.Itoa(months) + " months (" + strconv.Itoa(days) + " days), zero around " + m.runway.ZeroDate.String()
+	return strings.Join(parts, "\n\n")
 }

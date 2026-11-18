@@ -59,27 +59,27 @@ func themeSnapshot(t *testing.T, theme, keys, wait string) {
 
 func TestDashboardSnapshotLatte(t *testing.T) {
 	forceColorProfile(t, termenv.TrueColor)
-	themeSnapshot(t, "latte", "", "Checking")
+	themeSnapshot(t, "latte", "", "net of loans")
 }
 
 func TestDashboardSnapshotMocha(t *testing.T) {
 	forceColorProfile(t, termenv.TrueColor)
-	themeSnapshot(t, "mocha", "", "Checking")
+	themeSnapshot(t, "mocha", "", "net of loans")
 }
 
 func TestDashboardSnapshotTerminal(t *testing.T) {
 	forceColorProfile(t, termenv.TrueColor)
-	themeSnapshot(t, "terminal", "", "Checking")
+	themeSnapshot(t, "terminal", "", "net of loans")
 }
 
 func TestDashboardSnapshotHighContrast(t *testing.T) {
 	forceColorProfile(t, termenv.TrueColor)
-	themeSnapshot(t, "high-contrast", "", "Checking")
+	themeSnapshot(t, "high-contrast", "", "net of loans")
 }
 
 func TestDashboardSnapshotNoColor(t *testing.T) {
 	forceColorProfile(t, termenv.Ascii)
-	themeSnapshot(t, "mocha", "", "Checking")
+	themeSnapshot(t, "mocha", "", "net of loans")
 }
 
 func TestTransactionsSnapshotLatte(t *testing.T) {

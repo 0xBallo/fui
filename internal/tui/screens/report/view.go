@@ -31,7 +31,7 @@ func (m *Model) View() string {
 func (m *Model) viewReport() string {
 	title := m.th.Title.Render(m.reportTitle())
 	lines := []string{title, "", m.table.View()}
-	if chart := m.chart.View(); chart != "" {
+	if chart := m.chartView(m.width, m.height); chart != "" {
 		lines = append(lines, "", chart)
 	}
 	if m.note != "" {
