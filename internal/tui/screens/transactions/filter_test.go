@@ -1,6 +1,7 @@
 package transactions
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -79,5 +80,18 @@ func TestDatePickerIgnoredOnOtherFields(t *testing.T) {
 	press(m, tea.KeyCtrlD)
 	if m.picker.IsOpen() {
 		t.Fatal("picker must open only on From/To")
+	}
+}
+
+func TestFilterViewShowsPickHint(t *testing.T) {
+	m := newFilterModel(t, "", "")
+	if strings.Contains(m.viewFilter(), "ctrl+d pick date") {
+		t.Fatal("hint must be hidden off the date fields")
+	}
+	for range 6 {
+		m.filterForm.Next()
+	}
+	if !strings.Contains(m.viewFilter(), "ctrl+d pick date") {
+		t.Fatal("expected the pick date hint on From")
 	}
 }

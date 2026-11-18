@@ -120,14 +120,10 @@ func (m *Model) openDatePicker() bool {
 	return true
 }
 
-// today returns the current date through the use cases (the clock lives in app.Service), or the
-// zero date when the injected use cases cannot provide it.
+// today returns the current date from the use cases (the clock lives in app.Service), or the
+// zero date if it cannot be resolved.
 func (m *Model) today() domain.Date {
-	c, ok := m.uc.(interface{ Today() (domain.Date, error) })
-	if !ok {
-		return domain.Date{}
-	}
-	d, err := c.Today()
+	d, err := m.uc.Today()
 	if err != nil {
 		return domain.Date{}
 	}
@@ -166,7 +162,11 @@ func (m *Model) viewFilter() string {
 	if m.picker.IsOpen() {
 		return m.th.Title.Render("Pick a date") + "\n" + m.picker.View()
 	}
-	return m.th.Title.Render("Filter transactions") + "\n\n" + m.filterForm.View()
+	hint := ""
+	if m.filterFrom.Focused() || m.filterTo.Focused() {
+		hint = "\n" + m.th.Muted.Render(m.km.PickDate.Help().Key+" "+m.km.PickDate.Help().Desc)
+	}
+	return m.th.Title.Render("Filter transactions") + "\n\n" + m.filterForm.View() + hint
 }
 
 // filterChip is one active filter rendered as a removable chip in the header above the list.
