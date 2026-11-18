@@ -21,7 +21,7 @@ const maxCompare = 3
 
 // SimUseCases is what the simulations view needs; it matches internal/app/simulating.Service with
 // the enabled-module set already bound, plus the base currency amounts are entered and shown in.
-// It is separate from UseCases so the view stays optional: without it the "i" key is not offered.
+// It is separate from UseCases so the view stays optional: without it the "m" key is not offered.
 type SimUseCases interface {
 	Run(ctx context.Context, req simulating.RunRequest) (simulating.RunResult, error)
 	PlanSave(ctx context.Context, name string, req simulating.RunRequest) (simulating.SavePlan, error)
@@ -40,7 +40,7 @@ type simKeys struct {
 
 func defaultSimKeys() simKeys {
 	return simKeys{
-		Open:     key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "simulations")),
+		Open:     key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "simulations")),
 		PrevKind: key.NewBinding(key.WithKeys("h", "left"), key.WithHelp("h/←", "previous type")),
 		NextKind: key.NewBinding(key.WithKeys("l", "right"), key.WithHelp("l/→", "next type")),
 		Params:   key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "edit params")),
