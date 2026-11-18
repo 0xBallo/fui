@@ -56,7 +56,7 @@ type Model struct {
 	categories []string
 	accounts   []string
 
-	ins insightPanel
+	al *alertsSection
 
 	form      components.Form
 	accountF  components.Autocomplete
@@ -79,17 +79,17 @@ func New(uc UseCases, loc domain.Locale, th theme.Theme, monthStartDay int) *Mod
 		cycle: domain.CycleMonth, vp: viewport.New(0, 0),
 	}
 	m.nw = &netWorthSection{uc: uc, loc: loc, th: th}
-	m.sections = []section{m.nw, &runwaySection{uc: uc, th: th}, flowSection{}, newRecentSection(uc, loc, th), alertsSection{}}
+	m.al = newAlertsSection(loc, th)
+	m.sections = []section{m.nw, &runwaySection{uc: uc, th: th}, flowSection{}, newRecentSection(uc, loc, th), m.al}
 	return m
 }
 
 // Init loads the dashboard data.
-func (m *Model) Init() tea.Cmd { return tea.Batch(m.loadBase(), m.ins.load()) }
+func (m *Model) Init() tea.Cmd { return m.loadBase() }
 
 // SetSize adapts the panels to the available terminal size.
 func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h
-	m.ins.width = w
 	m.vp.Width = w
 	m.vp.Height = max(1, h-2)
 }
@@ -99,7 +99,7 @@ func (m *Model) Title() string { return "Dashboard" }
 
 // KeyMap exposes the bindings for the global help view.
 func (m *Model) KeyMap() []key.Binding {
-	out := append(m.km.Bindings(), m.ins.keyBindings()...)
+	out := m.km.Bindings()
 	for _, s := range m.sections {
 		out = append(out, s.keys()...)
 	}
@@ -181,11 +181,6 @@ func (m *Model) atCurrent() bool {
 
 // Update advances the screen state; it performs no I/O itself.
 func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
-	if _, isKey := msg.(tea.KeyMsg); !isKey || m.mode == modeView {
-		if cmd, ok := m.ins.update(msg); ok {
-			return m, cmd
-		}
-	}
 	if _, isKey := msg.(tea.KeyMsg); !isKey {
 		for _, s := range m.sections {
 			if cmd, ok := s.update(msg); ok {
@@ -297,7 +292,7 @@ func (m *Model) viewHeader() string {
 	return m.th.Header.Render(prev + " " + label + " · " + string(m.cycle) + " " + next)
 }
 
-// content lays the sections out in one or two columns, then appends the quick insight panel.
+// content lays the sections out in one or two columns.
 func (m *Model) content() string {
 	var out string
 	if m.width >= twoColumnWidth {
@@ -309,9 +304,6 @@ func (m *Model) content() string {
 			lipgloss.NewStyle().Width(colW).Render(right))
 	} else {
 		out = m.column(m.width, m.sections)
-	}
-	if ins := m.ins.view(); ins != "" {
-		out += "\n\n" + ins
 	}
 	return out
 }

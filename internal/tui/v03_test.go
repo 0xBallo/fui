@@ -133,7 +133,7 @@ func TestV03FeaturesFollowModules(t *testing.T) {
 	}{
 		{name: "dashboard net worth and insights", mods: all, want: []string{"Positions: 300.00", "Netflix"}},
 		{name: "dashboard without analytics", mods: []module.ID{module.Investments, module.Recurring, module.Simulations}, notWant: []string{"Positions: 300.00", "Netflix"}},
-		{name: "insights focus", mods: all, keys: []string{"i"}, want: []string{"> [subscription] Netflix"}},
+		{name: "insights focus", mods: all, keys: []string{"i"}, want: []string{"> i info [subscription] Netflix"}},
 		{name: "account positions", mods: all, keys: []string{"3", "enter"}, want: []string{"VWCE ETF"}},
 		{name: "account without investments", mods: []module.ID{module.Analytics}, keys: []string{"3", "enter"}, notWant: []string{"VWCE ETF"}},
 		{name: "report compare", mods: all, keys: []string{"5", "c"}, want: []string{"Compare periods", "TOTAL"}},
