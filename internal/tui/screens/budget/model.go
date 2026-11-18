@@ -52,6 +52,7 @@ type Model struct {
 	form        components.Form
 
 	confirm components.ConfirmDialog
+	help    components.MarkdownModal
 }
 
 var _ screens.Screen = (*Model)(nil)
@@ -61,6 +62,7 @@ func New(uc UseCases, loc domain.Locale, th theme.Theme) *Model {
 	m := &Model{uc: uc, loc: loc, th: th, km: DefaultKeyMap()}
 	m.table = components.NewTable(capColumns(), th)
 	m.confirm = components.NewConfirmDialog(th)
+	m.help = components.NewMarkdownModal(th, helpMarkdown)
 	return m
 }
 
@@ -72,6 +74,7 @@ func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h
 	m.table.SetHeight(max(3, h-10))
 	m.table.SetWidth(w)
+	m.help.SetSize(w, h)
 }
 
 // Title identifies the screen in the tab bar.
@@ -82,7 +85,7 @@ func (m *Model) KeyMap() []key.Binding { return m.km.Bindings() }
 
 // InputActive reports whether a form is capturing keystrokes.
 func (m *Model) InputActive() bool {
-	return m.mode == modeSetForm || m.mode == modeAssignForm || m.mode == modeMoveForm
+	return m.help.IsOpen() || m.mode == modeSetForm || m.mode == modeAssignForm || m.mode == modeMoveForm
 }
 
 // statusLoadedMsg carries a fresh month status back into Update.
@@ -128,6 +131,10 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+	if m.help.IsOpen() {
+		m.help, _ = m.help.Update(msg)
+		return m, nil
+	}
 	switch m.mode {
 	case modeSetForm, modeAssignForm, modeMoveForm:
 		return m.handleFormKey(msg)
@@ -157,6 +164,8 @@ func (m *Model) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		m.openMoveForm()
 	case key.Matches(msg, m.km.CopyPrev):
 		m.openCopyConfirm()
+	case key.Matches(msg, m.km.Explain):
+		m.help.Open()
 	}
 	return m, nil
 }

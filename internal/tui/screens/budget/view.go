@@ -77,6 +77,9 @@ func (m *Model) envelopeRows() []components.Row {
 
 // View renders the active panel.
 func (m *Model) View() string {
+	if m.help.IsOpen() {
+		return m.help.View()
+	}
 	switch m.mode {
 	case modeSetForm, modeAssignForm, modeMoveForm:
 		return components.Modal(m.th, m.width, m.height, m.viewForm())
