@@ -15,6 +15,7 @@ import (
 // supply a stub store-free implementation.
 type UseCases interface {
 	ListAccounts(ctx context.Context, req app.ListAccountsRequest) ([]app.AccountBalance, error)
+	NetWorth(ctx context.Context, req app.NetWorthRequest) (app.NetWorth, error)
 	ShowAccount(ctx context.Context, ref, at string) (app.AccountBalance, error)
 	ListTx(ctx context.Context, req app.ListTxRequest) (app.TxPage, error)
 	PlanAddAccount(ctx context.Context, req app.AddAccountRequest) (app.AddAccountPlan, error)
