@@ -2,10 +2,13 @@ package dashboard_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/exp/golden"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -22,16 +25,23 @@ type useCases struct {
 	screentest.Reporting
 }
 
-// run executes cmd and any cmd that Update returns in reaction, until it settles, returning the
-// resulting screen. Every tea.Cmd in this screen finishes all its I/O and returns one terminal
-// message, so draining one chain is enough.
+// run executes cmd and every cmd that Update returns in reaction (expanding tea.Batch), until it
+// settles, returning the resulting screen. Every tea.Cmd in this screen finishes all its I/O and
+// returns one terminal message.
 func run(t *testing.T, scr screens.Screen, cmd tea.Cmd) screens.Screen {
 	t.Helper()
-	for cmd != nil {
-		msg := cmd()
-		scr, cmd = scr.Update(msg)
+	if cmd == nil {
+		return scr
 	}
-	return scr
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			scr = run(t, scr, c)
+		}
+		return scr
+	}
+	scr, next := scr.Update(msg)
+	return run(t, scr, next)
 }
 
 func sendKey(scr screens.Screen, k tea.KeyType) (screens.Screen, tea.Cmd) {
@@ -62,17 +72,11 @@ func TestDashboardLoadsSummary(t *testing.T) {
 	scr = run(t, scr, scr.Init())
 
 	view := scr.View()
-	if !strings.Contains(view, "Checking") {
-		t.Fatalf("expected the account balance in view, got:\n%s", view)
+	if !strings.Contains(view, "June 2026") {
+		t.Fatalf("expected the cycle header in view, got:\n%s", view)
 	}
-	if !strings.Contains(view, "930.00") {
-		t.Fatalf("expected the net worth 930.00 EUR in view, got:\n%s", view)
-	}
-	if !strings.Contains(view, "Groceries") || !strings.Contains(view, "Transport") {
-		t.Fatalf("expected both spending categories in view, got:\n%s", view)
-	}
-	if !strings.Contains(view, "not enough data") {
-		t.Fatalf("expected the runway placeholder with no history, got:\n%s", view)
+	if !strings.Contains(ansi.Strip(view), "net of loans 930.00") {
+		t.Fatalf("expected the net worth 930.00 in view, got:\n%s", view)
 	}
 }
 
@@ -116,29 +120,68 @@ func TestDashboardQuickAdd(t *testing.T) {
 	}
 }
 
-// TestDashboardUsesConfiguredMonthStartDay verifies New's monthStartDay parameter actually reaches
-// the Spending/Runway calls instead of a hardcoded 1: with "now" frozen at 2026-06-15 (see
-// screentest.New), a transaction dated 2026-06-10 falls in the current accounting month when it
-// starts on the 1st, but in the previous one when it starts on the 12th.
-func TestDashboardUsesConfiguredMonthStartDay(t *testing.T) {
-	fx := screentest.New(t)
-	fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "1000", OpenedOn: "2026-01-01"})
-	fx.Category(t, app.AddCategoryRequest{Name: "Groceries", Kind: "expense"})
-	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-50", Description: "Supermarket", Category: "Groceries", Date: "2026-06-10"})
+func TestDashboardCycleKeys(t *testing.T) {
+	fx, scr := newFixture(t)
+	fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "1000", OpenedOn: "2024-03-01"})
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-50", Description: "Old", Date: "2024-03-05"})
+	scr = run(t, scr, scr.Init())
 
-	uc := useCases{Service: fx.Service, Reporting: fx.NewReporting(t)}
-
-	monthStart1 := screens.Screen(dashboard.New(uc, domain.LocaleENUS, theme.Default(), 1))
-	monthStart1.SetSize(100, 30)
-	monthStart1 = run(t, monthStart1, monthStart1.Init())
-	if !strings.Contains(monthStart1.View(), "Groceries") {
-		t.Fatalf("expected Groceries spending with month_start_day=1, got:\n%s", monthStart1.View())
+	header := func() string { return strings.Split(ansi.Strip(scr.View()), "\n")[0] }
+	if h := header(); !strings.Contains(h, "June 2026 · month") || strings.Contains(h, "▶") {
+		t.Fatalf("current month: next must be disabled, header %q", h)
 	}
+	scr, cmd := sendRunes(scr, "l")
+	scr = run(t, scr, cmd)
+	if h := header(); !strings.Contains(h, "June 2026") {
+		t.Fatalf("next at the current period must be a no-op, header %q", h)
+	}
+	scr, cmd = sendRunes(scr, "h")
+	scr = run(t, scr, cmd)
+	if h := header(); !strings.Contains(h, "◀ May 2026 · month ▶") {
+		t.Fatalf("after h, header %q", h)
+	}
+	scr, cmd = sendRunes(scr, "p")
+	scr = run(t, scr, cmd)
+	if h := header(); !strings.Contains(h, "Q2 2026 · quarter") {
+		t.Fatalf("after p, header %q", h)
+	}
+	scr, cmd = sendRunes(scr, "p")
+	scr = run(t, scr, cmd)
+	if h := header(); !strings.Contains(h, "2026 · year") {
+		t.Fatalf("after p, header %q", h)
+	}
+	scr, cmd = sendRunes(scr, "p")
+	scr = run(t, scr, cmd)
+	if h := header(); !strings.Contains(h, "since 2024-03-05 · lifetime") {
+		t.Fatalf("after p, header %q", h)
+	}
+}
 
-	monthStart12 := screens.Screen(dashboard.New(uc, domain.LocaleENUS, theme.Default(), 12))
-	monthStart12.SetSize(100, 30)
-	monthStart12 = run(t, monthStart12, monthStart12.Init())
-	if strings.Contains(monthStart12.View(), "Groceries") {
-		t.Fatalf("expected no Groceries spending with month_start_day=12 (tx predates the period), got:\n%s", monthStart12.View())
+func TestDashboardNetWorthFollowsPeriod(t *testing.T) {
+	fx, scr := newFixture(t)
+	fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "1000", OpenedOn: "2026-01-01"})
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-100", Description: "June", Date: "2026-06-10"})
+	scr = run(t, scr, scr.Init())
+	if !strings.Contains(ansi.Strip(scr.View()), "net of loans 900.00") {
+		t.Fatalf("expected 900.00 now:\n%s", scr.View())
+	}
+	scr, cmd := sendRunes(scr, "h")
+	scr = run(t, scr, cmd)
+	if !strings.Contains(ansi.Strip(scr.View()), "net of loans 1,000.00") {
+		t.Fatalf("expected 1,000.00 at the end of May:\n%s", scr.View())
+	}
+}
+
+func TestDashboardGolden(t *testing.T) {
+	for _, size := range [][2]int{{80, 20}, {140, 30}} {
+		fx := screentest.New(t)
+		fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "1000", OpenedOn: "2026-01-01"})
+		uc := useCases{Service: fx.Service, Reporting: fx.NewReporting(t)}
+		scr := screens.Screen(dashboard.New(uc, domain.LocaleENUS, theme.Default(), 1))
+		scr.SetSize(size[0], size[1])
+		scr = run(t, scr, scr.Init())
+		t.Run(fmt.Sprintf("%dx%d", size[0], size[1]), func(t *testing.T) {
+			golden.RequireEqual(t, []byte(ansi.Strip(scr.View())))
+		})
 	}
 }
