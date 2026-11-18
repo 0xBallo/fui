@@ -1,0 +1,11 @@
+Global
+──────
+?  help
+q  quit
+Screen
+──────
+up  move
+n   new
+e   edit
+d   delete
+/   filter
