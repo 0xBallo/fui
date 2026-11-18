@@ -40,7 +40,7 @@ type simKeys struct {
 
 func defaultSimKeys() simKeys {
 	return simKeys{
-		Open:     key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "simulations")),
+		Open:     key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "simulations")),
 		PrevKind: key.NewBinding(key.WithKeys("h", "left"), key.WithHelp("h/←", "previous type")),
 		NextKind: key.NewBinding(key.WithKeys("l", "right"), key.WithHelp("l/→", "next type")),
 		Params:   key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "edit params")),

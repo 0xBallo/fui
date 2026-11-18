@@ -16,6 +16,7 @@ type KeyMap struct {
 	DelSaved key.Binding
 	Export   key.Binding
 	Back     key.Binding
+	Explain  key.Binding
 }
 
 // DefaultKeyMap returns the canonical key bindings for the report screen.
@@ -33,6 +34,7 @@ func DefaultKeyMap() KeyMap {
 		DelSaved: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete selected")),
 		Export:   key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "export transactions")),
 		Back:     key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+		Explain:  key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "explain reports")),
 	}
 }
 
@@ -40,6 +42,6 @@ func DefaultKeyMap() KeyMap {
 func (k KeyMap) Bindings() []key.Binding {
 	return []key.Binding{
 		k.Up, k.Down, k.PrevKind, k.NextKind, k.Refresh, k.Params,
-		k.Save, k.Saved, k.RunSaved, k.DelSaved, k.Export, k.Back,
+		k.Save, k.Saved, k.RunSaved, k.DelSaved, k.Export, k.Back, k.Explain,
 	}
 }

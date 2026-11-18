@@ -76,6 +76,8 @@ type Model struct {
 
 	confirm components.ConfirmDialog
 
+	help components.MarkdownModal
+
 	cmp compareState
 	sim simState
 }
@@ -102,6 +104,7 @@ func New(uc UseCases, loc domain.Locale, monthStartDay int, th theme.Theme) *Mod
 	m.chart = components.NewBarChart(th)
 	m.savedTable = components.NewTable(savedColumns(), th)
 	m.confirm = components.NewConfirmDialog(th)
+	m.help = components.NewMarkdownModal(th, helpMarkdown)
 	return m
 }
 
@@ -120,6 +123,7 @@ func (m *Model) SetSize(w, h int) {
 	m.cmp.table.SetHeight(max(3, h-10))
 	m.cmp.table.SetWidth(w)
 	m.chart.SetWidth(w)
+	m.help.SetSize(w, h)
 	m.sizeSim()
 }
 
@@ -134,7 +138,7 @@ func (m *Model) KeyMap() []key.Binding {
 // InputActive reports whether a form is capturing keystrokes.
 func (m *Model) InputActive() bool {
 	return m.mode == modeParamsForm || m.mode == modeSaveForm || m.mode == modeExportForm ||
-		(m.mode == modeCompare && m.cmp.formActive) || m.simInputActive()
+		(m.mode == modeCompare && m.cmp.formActive) || m.simInputActive() || m.help.IsOpen()
 }
 
 // accountsLoadedMsg carries the accounts back into Update, for the account field's suggestions
@@ -179,6 +183,12 @@ type exportDoneMsg struct {
 func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	if cmd, ok := m.updateSim(msg); ok {
 		return m, cmd
+	}
+	if m.help.IsOpen() {
+		if _, ok := msg.(tea.KeyMsg); ok {
+			m.help, _ = m.help.Update(msg)
+			return m, nil
+		}
 	}
 	switch msg := msg.(type) {
 	case accountsLoadedMsg:
@@ -254,6 +264,8 @@ func (m *Model) handleReportKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		return m, m.loadSaved()
 	case key.Matches(msg, m.km.Export):
 		m.openExportForm()
+	case key.Matches(msg, m.km.Explain):
+		m.help.Open()
 	case m.compareEnabled() && key.Matches(msg, m.cmp.km.Open):
 		return m, m.openCompare()
 	case m.simEnabled() && key.Matches(msg, m.sim.km.Open):
