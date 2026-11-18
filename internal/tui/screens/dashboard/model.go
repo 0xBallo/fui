@@ -79,7 +79,7 @@ func New(uc UseCases, loc domain.Locale, th theme.Theme, monthStartDay int) *Mod
 		cycle: domain.CycleMonth, vp: viewport.New(0, 0),
 	}
 	m.nw = &netWorthSection{uc: uc, loc: loc, th: th}
-	m.sections = []section{m.nw, runwaySection{}, flowSection{}, recentSection{}, alertsSection{}}
+	m.sections = []section{m.nw, &runwaySection{uc: uc, th: th}, flowSection{}, recentSection{}, alertsSection{}}
 	return m
 }
 
