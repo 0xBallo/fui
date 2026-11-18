@@ -31,21 +31,13 @@ func (m *Model) View() string {
 func (m *Model) viewReport() string {
 	title := m.th.Title.Render(m.reportTitle())
 	lines := []string{title, "", m.table.View()}
-	if chart := m.lineOrBarChart(); chart != "" {
+	if chart := m.chartView(m.width, m.height); chart != "" {
 		lines = append(lines, "", chart)
 	}
 	if m.note != "" {
 		lines = append(lines, "", m.th.Muted.Render(m.note))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
-}
-
-// lineOrBarChart prefers the line chart; kinds without one keep their bar chart until U26.
-func (m *Model) lineOrBarChart() string {
-	if len(lineSeries(m.result.kind, m.result.data)) > 0 {
-		return m.chartView(m.width, m.height)
-	}
-	return m.chart.View()
 }
 
 func (m *Model) reportTitle() string {
