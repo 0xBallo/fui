@@ -38,6 +38,14 @@ const (
 // (three lines), the blank line below it and the status line. The help bar adds its own height.
 const reservedRows = 5
 
+// bannerHeight is the rows the header banner takes above the tab bar: none on short terminals.
+func (r *Root) bannerHeight() int {
+	if r.height >= bannerMinHeight {
+		return bannerRows
+	}
+	return 0
+}
+
 // maxHelpRows caps the height of the expanded help bar.
 const maxHelpRows = 10
 
@@ -63,6 +71,8 @@ type Config struct {
 	ThemeLight    string
 	ThemeDark     string
 	MonthStartDay int
+	// Version is the build version shown in the header; "v0.3.0" is displayed as "v0.3".
+	Version string
 
 	Modules module.Set
 	// Budget backs the Budget tab (module budget); Report the Reports tab and Importer the Import
@@ -222,7 +232,7 @@ func (r *Root) helpView() string {
 // bodyHeight is the height left to the active screen below the tab bar and above the status
 // line and the help bar.
 func (r *Root) bodyHeight() int {
-	return max(1, r.height-reservedRows-lipgloss.Height(r.helpView()))
+	return max(1, r.height-reservedRows-r.bannerHeight()-lipgloss.Height(r.helpView()))
 }
 
 func (r *Root) resize() {
@@ -345,12 +355,16 @@ func (r *Root) View() string {
 			"Terminal too small: %dx%d. FUI needs at least %dx%d.", r.width, r.height, minWidth, minHeight))
 	}
 	helpBar := r.helpView()
-	h := max(1, r.height-reservedRows-lipgloss.Height(helpBar))
+	h := max(1, r.height-reservedRows-r.bannerHeight()-lipgloss.Height(helpBar))
 	body := r.tabs[r.active].View()
 	if r.height > 0 {
 		body = lipgloss.NewStyle().Height(h).MaxHeight(h).Render(body)
 	}
-	return r.viewTabs() + "\n\n" + body + "\n" + r.viewStatus() + "\n" + helpBar
+	header := r.viewTabs()
+	if r.bannerHeight() > 0 {
+		header = viewBanner(r.th, r.cfg.Version) + "\n" + header
+	}
+	return header + "\n\n" + body + "\n" + r.viewStatus() + "\n" + helpBar
 }
 
 // tabNames are the seven screens in tab order; a tab with no Screen is rendered disabled.
@@ -373,10 +387,19 @@ var (
 // the terminal is too narrow for all seven labels.
 func (r *Root) viewTabs() string {
 	row := lipgloss.JoinHorizontal(lipgloss.Top, r.tabParts()...)
-	gap := lipgloss.NewStyle().Border(tabBorder, false, false, true, false).
-		BorderForeground(r.th.Tokens.Accent).
-		Render(strings.Repeat(" ", max(0, r.width-lipgloss.Width(row))))
-	return lipgloss.JoinHorizontal(lipgloss.Bottom, row, gap)
+	gapW := max(0, r.width-lipgloss.Width(row))
+	rule := lipgloss.NewStyle().Foreground(r.th.Tokens.Accent).Render(strings.Repeat("─", gapW))
+	middle := strings.Repeat(" ", gapW)
+	if r.bannerHeight() == 0 {
+		// The compact title sits on the middle row of the tab bar, right-aligned; it is dropped
+		// when the gap cannot hold it plus a space of margin.
+		title := logoStyle(r.th).Render("FinanceUI") + " " + r.th.Muted.Render(byline(r.cfg.Version))
+		if w := lipgloss.Width(title); gapW > w {
+			middle = strings.Repeat(" ", gapW-w) + title
+		}
+	}
+	gap := strings.Repeat(" ", gapW) + "\n" + middle + "\n" + rule
+	return lipgloss.JoinHorizontal(lipgloss.Top, row, gap)
 }
 
 // tabParts renders each tab with the roomiest variant that fits the terminal width.
@@ -423,7 +446,7 @@ func (r *Root) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			r.resize()
 		}
 	case r.tabs[r.active].InputActive():
-	case msg.Button == tea.MouseButtonLeft && msg.Y < tabBarRows:
+	case msg.Button == tea.MouseButtonLeft && msg.Y >= r.bannerHeight() && msg.Y < r.bannerHeight()+tabBarRows:
 		if id, ok := r.tabAt(msg.X); ok {
 			return r.switchTo(id)
 		}
