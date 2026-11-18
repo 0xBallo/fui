@@ -2,6 +2,7 @@ package report
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -103,7 +104,8 @@ func compareBarItems(th theme.Theme, fmtAmt amountFormatter, r reporting.Compare
 }
 
 // renderBars draws at most the rows that fit a screen of height h.
-func (m *Model) renderBars(items []components.BarItem, width, height int) string {
+// A non-empty legend is added as one line under the chart.
+func (m *Model) renderBars(items []components.BarItem, legend string, width, height int) string {
 	n := min(len(items), barRowCap(height))
 	if n == 0 {
 		return ""
@@ -111,7 +113,40 @@ func (m *Model) renderBars(items []components.BarItem, width, height int) string
 	chart := components.NewBarChart(m.th)
 	chart.SetWidth(width)
 	chart.SetItems(items[:n])
-	return chart.View()
+	out := chart.View()
+	if legend != "" {
+		out += "\n" + legend
+	}
+	return out
+}
+
+// legendOf renders "■ name" pairs, each swatch in its own style.
+func legendOf(entries ...legendEntry) string {
+	parts := make([]string, len(entries))
+	for i, e := range entries {
+		parts[i] = e.style.Render("■") + " " + e.name
+	}
+	return strings.Join(parts, "  ")
+}
+
+type legendEntry struct {
+	name  string
+	style lipgloss.Style
+}
+
+// barLegend is the legend of the paired-bar charts of data, or "" for the others.
+func (m *Model) barLegend(data any) string {
+	if _, ok := data.(reporting.BudgetResult); ok {
+		return legendOf(legendEntry{"budgeted", m.th.Muted}, legendEntry{"spent", m.th.Positive})
+	}
+	return ""
+}
+
+func (m *Model) compareLegend() string {
+	return legendOf(
+		legendEntry{m.cmp.report.A, lipgloss.NewStyle().Foreground(m.th.Tokens.Series1)},
+		legendEntry{m.cmp.report.B, lipgloss.NewStyle().Foreground(m.th.Tokens.Series2)},
+	)
 }
 
 // barsHeight is the number of lines of a rendered bar chart.
@@ -123,5 +158,5 @@ func barsHeight(s string) int {
 }
 
 func (m *Model) compareBars() string {
-	return m.renderBars(compareBarItems(m.th, m.fmtAmount, m.cmp.report), m.width, m.height)
+	return m.renderBars(compareBarItems(m.th, m.fmtAmount, m.cmp.report), m.compareLegend(), m.width, m.height)
 }

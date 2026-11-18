@@ -2,6 +2,7 @@ package report
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -109,4 +110,27 @@ func TestBarChartViewGolden(t *testing.T) {
 		t.Fatal("bars shown on a short screen")
 	}
 	golden.RequireEqual(t, []byte(ansi.Strip(m.chartView(60, 24))))
+}
+
+func TestBarLegends(t *testing.T) {
+	m := newTestModel()
+	m.result = reportResult{kind: reporting.KindBudget, data: reporting.BudgetResult{Lines: []reporting.BudgetLine{
+		{Budget: "Food", Budgeted: eur(100), Spent: eur(40)},
+	}}}
+	if got := ansi.Strip(m.chartView(60, 24)); !strings.HasSuffix(got, "■ budgeted  ■ spent") {
+		t.Fatalf("budget legend missing:\n%s", got)
+	}
+	m.width, m.height = 60, 24
+	m.cmp.report = reporting.CompareReport{A: "2026-01", B: "2026-02", Rows: []reporting.CompareRowView{{Category: "Food", A: eur(1), B: eur(2)}}}
+	got := ansi.Strip(m.compareBars())
+	if !strings.HasSuffix(got, "■ 2026-01  ■ 2026-02") {
+		t.Fatalf("compare legend missing:\n%s", got)
+	}
+	if h := barsHeight(m.compareBars()); h != 4 {
+		t.Fatalf("barsHeight = %d, want 4 (2 bars, legend, gap)", h)
+	}
+	m.result = reportResult{kind: reporting.KindPayees, data: reporting.PayeesResult{Rows: []reporting.PayeeRow{{Payee: "A", Total: eur(1)}}}}
+	if strings.Contains(m.chartView(60, 24), "■") {
+		t.Fatal("single-series chart has a legend")
+	}
 }

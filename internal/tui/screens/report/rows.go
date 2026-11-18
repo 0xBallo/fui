@@ -153,6 +153,9 @@ func (m *Model) sizeReportTable() {
 		h = max(3, m.height-8-ch)
 	}
 	if n := min(len(barItems(m.th, m.fmtAmount, m.result.data)), barRowCap(m.height)); n > 0 {
+		if m.barLegend(m.result.data) != "" {
+			n++
+		}
 		h = max(3, m.height-9-n)
 	}
 	m.table.SetHeight(h)

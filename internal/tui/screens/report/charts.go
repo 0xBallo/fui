@@ -89,7 +89,7 @@ func (m *Model) chartView(width, height int) string {
 	ch := chartHeight(height)
 	series := lineSeries(m.result.kind, m.result.data)
 	if len(series) == 0 {
-		return m.renderBars(barItems(m.th, m.fmtAmount, m.result.data), width, height)
+		return m.renderBars(barItems(m.th, m.fmtAmount, m.result.data), m.barLegend(m.result.data), width, height)
 	}
 	if ch == 0 || len(series) == 0 {
 		return ""
