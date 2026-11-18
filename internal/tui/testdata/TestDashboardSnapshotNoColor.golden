@@ -13,12 +13,12 @@ net of loans 1,207.50
 Runway                                                                          
 not enough data (needs 3 complete months)                                       
                                                                                 
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
+Recent transactions                                                             
+╭────────────┬─────────────────────────────────┬────────────────┬──────────────╮
+│Date        │Description                      │Category        │        Amount│
+├────────────┼─────────────────────────────────┼────────────────┼──────────────┤
+│06/10/2026  │Supermarket                      │Groceries       │        -42.50│
+╰────────────┴─────────────────────────────────┴────────────────┴──────────────╯
+→ View all transactions (t)                                                     
 
-a quick add · p next cycle · h/← previous period · l/→ next period · 1 dashboar…
+a quick add · p next cycle · h/← previous period · l/→ next period …
