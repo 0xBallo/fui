@@ -24,6 +24,9 @@ type KeyMap struct {
 	PrevChip    key.Binding
 	NextChip    key.Binding
 	RemoveChip  key.Binding
+	// PickDate opens the date picker on a focused From/To filter field. It shares ctrl+d with
+	// PageDown, which is a list-mode key, so it is left out of Bindings to avoid a false collision.
+	PickDate key.Binding
 }
 
 // DefaultKeyMap returns the canonical key bindings for transactions.
@@ -45,6 +48,7 @@ func DefaultKeyMap() KeyMap {
 		Tags:        bind("t", "tags", "t"),
 		Categorize:  bind("c", "bulk categorize", "c"),
 		ClearFilter: bind("ctrl+r", "reset filter", "ctrl+r"),
+		PickDate:    bind("ctrl+d", "pick date", "ctrl+d"),
 	}
 	km.PrevChip, km.NextChip, km.RemoveChip = chipKeyBindings()
 	return km

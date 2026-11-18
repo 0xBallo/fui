@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -65,6 +66,19 @@ func (m *Model) openFilterForm() {
 }
 
 func (m *Model) handleFilterKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+	if m.picker.IsOpen() {
+		m.picker, _ = m.picker.Update(msg)
+		if v, ok := m.picker.Picked(); ok && m.pickTarget != nil {
+			m.pickTarget.SetValue(v)
+		}
+		if !m.picker.IsOpen() {
+			m.pickTarget = nil
+		}
+		return m, nil
+	}
+	if key.Matches(msg, m.km.PickDate) && m.openDatePicker() {
+		return m, nil
+	}
 	switch msg.String() {
 	case "esc":
 		m.mode = modeList
@@ -85,6 +99,39 @@ func (m *Model) handleFilterKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	}
 	m.filterForm.Update(msg)
 	return m, nil
+}
+
+// openDatePicker opens the picker on the focused From/To field, starting from its value when it is
+// a valid date and from today otherwise. It reports whether a date field had focus.
+func (m *Model) openDatePicker() bool {
+	switch {
+	case m.filterFrom.Focused():
+		m.pickTarget = &m.filterFrom
+	case m.filterTo.Focused():
+		m.pickTarget = &m.filterTo
+	default:
+		return false
+	}
+	initial := m.today()
+	if d, err := domain.ParseDate(m.pickTarget.Value()); err == nil {
+		initial = d
+	}
+	m.picker.Open(initial.In(time.UTC))
+	return true
+}
+
+// today returns the current date through the use cases (the clock lives in app.Service), or the
+// zero date when the injected use cases cannot provide it.
+func (m *Model) today() domain.Date {
+	c, ok := m.uc.(interface{ Today() (domain.Date, error) })
+	if !ok {
+		return domain.Date{}
+	}
+	d, err := c.Today()
+	if err != nil {
+		return domain.Date{}
+	}
+	return d
 }
 
 func (m *Model) submitFilter() tea.Cmd {
@@ -116,6 +163,9 @@ func (m *Model) submitFilter() tea.Cmd {
 }
 
 func (m *Model) viewFilter() string {
+	if m.picker.IsOpen() {
+		return m.th.Title.Render("Pick a date") + "\n" + m.picker.View()
+	}
 	return m.th.Title.Render("Filter transactions") + "\n\n" + m.filterForm.View()
 }
 
