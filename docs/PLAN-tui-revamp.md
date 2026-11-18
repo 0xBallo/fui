@@ -109,5 +109,4 @@ tokens only (no literal colors), keymap collision test green.
 
 | Task | Status | PR |
 | --- | --- | --- |
-| U00–U26 | merged | — |
-| U27 | in review | — |
+| U00–U27 | merged | #36–#63 |

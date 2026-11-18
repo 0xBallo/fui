@@ -7,11 +7,35 @@ All notable changes to FUI are listed here, newest first. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-18
+
+### Added
+
+- TUI header with an ASCII "FinanceUI" banner, the version and a link to the author (one line on short terminals).
+- Dashboard calculation cycles (month, quarter, year, lifetime) switched with `p` and browsed with `h`/`l`;
+  every section follows the selected period.
+- Dashboard sections: gross net worth in big digits with the net of loans, runway countdown with the zero date,
+  income/expenses/savings bar chart, last ten transactions with a jump to Transactions (`t`), and an alerts box
+  (budgets over or near their threshold, anomalous transactions, upcoming recurrences, other insights).
+- Transactions: income and expense totals of the current filter in big digits, tags shown as chips, and a date
+  picker on the From/To filters (`ctrl+d`).
+- Accounts: currency column, separate sections for wealth accounts and loans/mortgages, each with its total in
+  the base currency.
+- Budget and Reports: `i` opens a markdown explanation of the screen.
+- Reports: line charts for net worth, balance over time, forecast and remaining debt; bar charts with legends for
+  budget vs actual, top payees, interest paid and period comparison.
+- `make demo` seeds a synthetic archive for manual runs.
+- ADR 0019: TUI libraries (glamour, ntcharts, bubble-datepicker) on Bubble Tea v1.
+
 ### Changed
 
-- TUI revamp: dashboard with period selector, income/expense/savings chart, runway, last transactions and
-  budget, anomaly and recurrence alerts; transactions period totals; accounts by currency; tiered budget progress;
-  explanation modals on Budget and Reports; series and bar charts on Reports; version in the header.
+- Key help moved to a one-line bar at the bottom, cut with `…`; `?` expands it with global and screen commands.
+- Transactions are colored by flow (income green, expenses red, transfers plain), pending ones in a lighter tone.
+- Budget progress bars are colored by tier (< 70%, 70–89%, 90–99%, ≥ 100%) with an icon instead of the `OK`
+  label; `OVER` stays as text.
+- The dashboard drops the accounts table and the spending-by-category chart (still on Accounts and Reports) and
+  the insights panel, now part of the alerts.
+- Reports: the simulations view moved from `i` to `m`.
 
 ## [0.3.0] - 2026-11-16
 
@@ -66,7 +90,8 @@ All notable changes to FUI are listed here, newest first. The format follows
 - TUI screens: Budget, Reports, Import and Settings (modules, theme, categories, tags, rules, recurrences, import
   profiles); dynamic shell completion of names.
 
-[Unreleased]: https://github.com/0xBallo/fui/compare/v0.3.0...develop
+[Unreleased]: https://github.com/0xBallo/fui/compare/v0.4.0...develop
+[0.4.0]: https://github.com/0xBallo/fui/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/0xBallo/fui/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/0xBallo/fui/compare/v0.2...v0.2.1
 [0.2]: https://github.com/0xBallo/fui/releases/tag/v0.2
