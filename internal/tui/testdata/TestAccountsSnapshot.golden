@@ -1,7 +1,6 @@
 ╭─────────╮╭────────────╮╭──────────╮╭──────╮╭───────╮╭──────╮╭────────╮        
 │Dashboard││Transactions││3 Accounts││Budget││Reports││Import││Settings│        
 ┴─────────┴┴────────────┴┘          └┴──────┴┴───────┴┴──────┴┴────────┴────────
-e/enter movements · a add · d archive · r reconcile
 
 ╭────────────────────────────────────────────────┬────────────┬────────────────╮
 │Account                                         │Kind        │         Balance│
@@ -20,5 +19,6 @@ e/enter movements · a add · d archive · r reconcile
                                                                                 
                                                                                 
                                                                                 
+                                                                                
 
-? help · q quit
+e/enter movements · a add · d archive · r reconcile · 1 dashboard …
