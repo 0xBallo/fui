@@ -5,6 +5,7 @@ import (
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/investing"
+	"github.com/0xballo/fui/internal/app/recurring"
 	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/app/simulating"
 	"github.com/0xballo/fui/internal/domain"
@@ -90,3 +91,22 @@ func (u simUseCases) Compare(ctx context.Context, refs []string) (simulating.Com
 }
 
 func (u simUseCases) BaseCurrency() domain.Currency { return u.base }
+
+// flowUseCases adapts the CashFlow report to dashboard.FlowUseCases.
+type flowUseCases struct {
+	run func(context.Context, reporting.CashFlowParams) (reporting.CashFlowResult, error)
+}
+
+func (u flowUseCases) CashFlow(ctx context.Context, p reporting.CashFlowParams) (reporting.CashFlowResult, error) {
+	return u.run(ctx, p)
+}
+
+// recurrenceAlerts adapts recurring.Service.List to dashboard.AlertRecurringUseCases.
+type recurrenceAlerts struct {
+	svc     *recurring.Service
+	modules func() module.Set
+}
+
+func (u recurrenceAlerts) ListRecurrences(ctx context.Context) ([]app.Recurrence, error) {
+	return u.svc.List(ctx, u.modules())
+}

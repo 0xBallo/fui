@@ -94,6 +94,11 @@ type Config struct {
 	Simulations report.SimUseCases
 	// Lists adds the CRUD sections (categories, tags, rules, recurrences, import profiles) to Settings.
 	Lists settings.Lists
+	// Flow (core), AlertBudget (module budget) and AlertRecurring (module recurring) feed the
+	// dashboard flow chart and alerts.
+	Flow           dashboard.FlowUseCases
+	AlertBudget    dashboard.AlertBudgetUseCases
+	AlertRecurring dashboard.AlertRecurringUseCases
 }
 
 // Root is the top-level Bubble Tea model: it routes between the screens (fixed keys 1..7),
@@ -172,6 +177,15 @@ func (r *Root) rebuild() {
 // enabled and whose use cases are wired.
 func (r *Root) newDashboard() *dashboard.Model {
 	m := dashboard.New(r.uc, r.loc, r.th, r.cfg.MonthStartDay)
+	if r.cfg.Flow != nil {
+		m.SetFlowUseCases(r.cfg.Flow)
+	}
+	if r.cfg.AlertBudget != nil && r.cfg.Modules.Has(module.Budget) {
+		m.SetAlertBudget(r.cfg.AlertBudget)
+	}
+	if r.cfg.AlertRecurring != nil && r.cfg.Modules.Has(module.Recurring) {
+		m.SetAlertRecurring(r.cfg.AlertRecurring)
+	}
 	if r.cfg.Modules.Has(module.Analytics) {
 		if r.cfg.NetWorth != nil {
 			m.SetNetWorthUseCases(r.cfg.NetWorth)
