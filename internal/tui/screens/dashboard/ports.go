@@ -1,5 +1,4 @@
-// Package dashboard implements the TUI home screen: account balances, net worth, the runway KPI,
-// current-month spending by category, and a quick-add shortcut for transactions.
+// Package dashboard implements the TUI home screen: calculation cycles, net worth, and a quick-add shortcut for transactions.
 package dashboard
 
 import (
@@ -19,8 +18,8 @@ type UseCases interface {
 	PlanAddTx(ctx context.Context, req app.AddTxRequest) (app.AddTxPlan, error)
 	ApplyAddTx(ctx context.Context, p app.AddTxPlan) (domain.Transaction, error)
 	Today() (domain.Date, error)
-	// Spending runs the spending-by-category report (internal/app/reporting.Spending.Run).
-	Spending(ctx context.Context, params reporting.SpendingParams) (reporting.SpendingResult, error)
+	// ListTx pages transactions; the dashboard uses it to find the oldest one (lifetime cycle).
+	ListTx(ctx context.Context, req app.ListTxRequest) (app.TxPage, error)
 	// Runway runs the runway KPI (internal/app/reporting.Runway.Run); it fails with
 	// domain.ErrNotEnoughData when fewer than 3 complete months of history are available
 	// (the median outflow is taken over up to 12 complete months).

@@ -5,21 +5,21 @@
 │ 1 Dashboard ││ 2 Transactions ││ 3 Accounts ││ 4 Budget ││ 5 Reports ││ 6 Import ││ 7 Settings │                      
 ┘             └┴────────────────┴┴────────────┴┴──────────┴┴───────────┴┴──────────┴┴────────────┴──────────────────────
 
-Accounts                                                                                                                
-╭────────────────────────────────────────────────────────────────────────────────────────┬────────────┬────────────────╮
-│Account                                                                                 │Kind        │         Balance│
-├────────────────────────────────────────────────────────────────────────────────────────┼────────────┼────────────────┤
-╰────────────────────────────────────────────────────────────────────────────────────────┴────────────┴────────────────╯
-  (no data)                                                                                                             
+loading…                                                                                                                
                                                                                                                         
 Net worth                                                                                                               
-0                                                                                                                       
+n/a (missing field "currency")                                                                                          
                                                                                                                         
-Runway                                                                                                                  
-not enough data (needs at least 3 complete months)                                                                      
                                                                                                                         
-Spending this month                                                                                                     
-(no data)                                                                                                               
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -37,4 +37,4 @@ Spending this month
                                                                                                                         
                                                                                                                         
 
-a quick add · 1 dashboard · 2 transactions · 3 accounts · 4 budget · 5 reports · 6 import · 7 settings · ? help · q quit
+a quick add · p next cycle · h/← previous period · l/→ next period · 1 dashboard · 2 transactions · 3 accounts …

@@ -62,7 +62,7 @@ func snapshot(t *testing.T, keys, wait string) {
 }
 
 func TestDashboardSnapshot(t *testing.T) {
-	snapshot(t, "", "Checking")
+	snapshot(t, "", "net of loans")
 }
 
 func TestTransactionsSnapshot(t *testing.T) {
