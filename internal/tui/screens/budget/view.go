@@ -53,7 +53,7 @@ func (m *Model) capRows() []components.Row {
 			domain.FormatAmount(l.Spent, m.loc),
 			domain.FormatAmount(l.Planned, m.loc),
 			domain.FormatAmount(l.Remaining, m.loc),
-			progressBar(m.th, l.Percent, l.State),
+			progressBar(m.th, l.Percent),
 		}}
 	}
 	return rows
@@ -69,7 +69,7 @@ func (m *Model) envelopeRows() []components.Row {
 			domain.FormatAmount(l.Spent, m.loc),
 			domain.FormatAmount(l.Planned, m.loc),
 			domain.FormatAmount(l.Balance, m.loc),
-			progressBar(m.th, envelopePercent(l.EnvelopeMonth), envelopeState(l.EnvelopeMonth)),
+			progressBar(m.th, envelopePercent(l.EnvelopeMonth)),
 		}}
 	}
 	return rows
