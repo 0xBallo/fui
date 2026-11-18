@@ -474,7 +474,7 @@ func (m *Model) columns() []components.Column {
 // flowOf classifies a row for coloring; the sign stays in the amount text so color is never the only cue.
 func flowOf(v app.TxView) theme.Flow {
 	switch {
-	case v.Transfer != nil:
+	case v.Transfer != nil || v.Transaction.Kind == domain.KindTransfer:
 		return theme.FlowTransfer
 	case v.Transaction.Amount.Sign() < 0:
 		return theme.FlowExpense

@@ -183,11 +183,13 @@ func TestTxRowsFlowStyleAndTags(t *testing.T) {
 		mk(-500, domain.StatusBooked, false), mk(500, domain.StatusBooked, false),
 		mk(-500, domain.StatusPending, false), mk(500, domain.StatusPending, false),
 		mk(-500, domain.StatusBooked, true),
+		mk(-500, domain.StatusBooked, false),
 	}
+	items[5].Transaction.Kind = domain.KindTransfer
 	want := []lipgloss.Style{
 		th.FlowStyle(theme.FlowExpense, false), th.FlowStyle(theme.FlowIncome, false),
 		th.FlowStyle(theme.FlowExpense, true), th.FlowStyle(theme.FlowIncome, true),
-		th.FlowStyle(theme.FlowTransfer, false),
+		th.FlowStyle(theme.FlowTransfer, false), th.FlowStyle(theme.FlowTransfer, false),
 	}
 	m := New(nil, domain.LocaleENUS, th)
 	m.items = items
