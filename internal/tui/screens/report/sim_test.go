@@ -148,8 +148,8 @@ func keys(t *testing.T, s scr.Screen, in ...string) (scr.Screen, string) {
 func TestSimHiddenWithoutUseCases(t *testing.T) {
 	h := newHarness(t)
 	s := run(t, newFixture(t, h), nil)
-	s, _ = keys(t, s, "i")
-	if strings.Contains(s.View(), "Simulation") || strings.Contains(s.View(), "i simulations") {
+	s, _ = keys(t, s, "m")
+	if strings.Contains(s.View(), "Simulation") || strings.Contains(s.View(), "m simulations") {
 		t.Fatalf("simulations must be hidden:\n%s", s.View())
 	}
 }
@@ -157,10 +157,10 @@ func TestSimHiddenWithoutUseCases(t *testing.T) {
 func TestSimRunKindsAndSparkline(t *testing.T) {
 	uc := &stubSim{}
 	s := simScreen(t, uc)
-	if !strings.Contains(s.View(), "i simulations") {
-		t.Fatalf("footer should offer simulations:\n%s", s.View())
+	if !offers(s, "m") {
+		t.Fatalf("key map should offer simulations: %v", s.KeyMap())
 	}
-	s, _ = keys(t, s, "i")
+	s, _ = keys(t, s, "m")
 	v := s.View()
 	for _, want := range []string{"Simulation: investment", "Pessimistic", "13,000.00", "+3,000.00", "Annual rates: 3.00% / 5.00% / 7.00%", "▁█"} {
 		if !strings.Contains(v, want) {
@@ -187,7 +187,7 @@ func TestSimRunKindsAndSparkline(t *testing.T) {
 func TestSimParamsFormBuildsRequest(t *testing.T) {
 	uc := &stubSim{}
 	s := simScreen(t, uc)
-	s, _ = keys(t, s, "i", "p")
+	s, _ = keys(t, s, "m", "p")
 	if !s.InputActive() {
 		t.Fatal("form should capture input")
 	}
@@ -216,7 +216,7 @@ func TestSimSaveAndCompare(t *testing.T) {
 		{Name: "a", Kind: "investment"}, {Name: "b", Kind: "investment"}, {Name: "c", Kind: "investment"}, {Name: "d", Kind: "investment"},
 	}}
 	s := simScreen(t, uc)
-	s, _ = keys(t, s, "i", "s")
+	s, _ = keys(t, s, "m", "s")
 	s, _ = keys(t, s, "r", "e", "t")
 	s, note := keys(t, s, "enter")
 	if len(uc.saved) != 1 || uc.saved[0] != "ret" || !strings.Contains(note, "ret") {

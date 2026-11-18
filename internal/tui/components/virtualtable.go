@@ -20,6 +20,8 @@ type Column struct {
 type Row struct {
 	ID    string
 	Cells []string
+	// Style is applied to every cell; the zero value leaves cells unstyled.
+	Style lipgloss.Style
 }
 
 // Table displays a scrollable, virtualized list of rows, rendering only visible items.
@@ -226,9 +228,9 @@ func (t *Table) View() string {
 			case row == table.HeaderRow:
 				return t.theme.Header.Inherit(cell(cols[col]))
 			case t.offset+row == t.cursor:
-				return t.theme.Selected.Inherit(cell(cols[col]))
+				return t.theme.Selected.Inherit(t.rows[t.offset+row].Style).Inherit(cell(cols[col]))
 			}
-			return cell(cols[col])
+			return t.rows[t.offset+row].Style.Inherit(cell(cols[col]))
 		}).
 		Render()
 	if len(t.rows) == 0 {

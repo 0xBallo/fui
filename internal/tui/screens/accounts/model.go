@@ -45,6 +45,9 @@ type Model struct {
 
 	balances []app.AccountBalance
 	table    components.Table
+	loans    components.Table
+	loanOn   bool // focus is on the loans table
+	totals   totals
 
 	detail    app.AccountBalance
 	detailTbl components.Table
@@ -76,11 +79,14 @@ var _ screens.Screen = (*Model)(nil)
 // New builds the accounts screen over uc, formatting amounts and dates with loc.
 func New(uc UseCases, loc domain.Locale, th theme.Theme) *Model {
 	m := &Model{uc: uc, loc: loc, th: th, km: DefaultKeyMap()}
-	m.table = components.NewTable([]components.Column{
+	cols := []components.Column{
 		{Title: "Account", Width: 24, Align: lipgloss.Left},
 		{Title: "Kind", Width: 12, Align: lipgloss.Left},
+		{Title: "Currency", Width: 8, Align: lipgloss.Left},
 		{Title: "Balance", Width: 16, Align: lipgloss.Right},
-	}, th)
+	}
+	m.table = components.NewTable(cols, th)
+	m.loans = components.NewTable(cols, th)
 	m.detailTbl = components.NewTable([]components.Column{
 		{Title: "Date", Width: 10, Align: lipgloss.Left},
 		{Title: "Description", Width: 28, Align: lipgloss.Left},
@@ -91,6 +97,19 @@ func New(uc UseCases, loc domain.Locale, th theme.Theme) *Model {
 	return m
 }
 
+// layoutLists sizes the two tables, reserving room for the loans section and both total lines.
+func (m *Model) layoutLists() {
+	avail := max(5, m.height-6)
+	n := len(m.loans.Rows())
+	if n == 0 {
+		m.table.SetHeight(avail - 1)
+		return
+	}
+	loanH := min(n+3, 6)
+	m.loans.SetHeight(loanH)
+	m.table.SetHeight(max(4, avail-loanH-3))
+}
+
 // Init loads the account balances.
 func (m *Model) Init() tea.Cmd { return m.load() }
 
@@ -98,8 +117,9 @@ func (m *Model) Init() tea.Cmd { return m.load() }
 func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h
 	rows := max(3, h-8)
-	m.table.SetHeight(rows)
+	m.layoutLists()
 	m.table.SetWidth(w)
+	m.loans.SetWidth(w)
 	m.detailTbl.SetHeight(rows)
 	m.detailTbl.SetWidth(w)
 	m.resizePositions(w, h)
@@ -117,16 +137,40 @@ func (m *Model) InputActive() bool {
 }
 
 // loadedMsg carries a fresh account listing back into Update.
-type loadedMsg struct{ balances []app.AccountBalance }
+type loadedMsg struct {
+	balances []app.AccountBalance
+	netWorth *app.NetWorth // nil when the base currency or a rate is missing
+}
+
+// fetch lists the accounts and, best effort, their base-currency values for the section totals.
+func (m *Model) fetch(ctx context.Context) tea.Msg {
+	bals, err := m.uc.ListAccounts(ctx, app.ListAccountsRequest{})
+	if err != nil {
+		return screens.ErrorMsg{Err: err}
+	}
+	msg := loadedMsg{balances: bals}
+	if nw, err := m.uc.NetWorth(ctx, app.NetWorthRequest{}); err == nil {
+		msg.netWorth = &nw
+	}
+	return msg
+}
 
 func (m *Model) load() tea.Cmd {
-	return func() tea.Msg {
-		bals, err := m.uc.ListAccounts(context.Background(), app.ListAccountsRequest{})
-		if err != nil {
-			return screens.ErrorMsg{Err: err}
-		}
-		return loadedMsg{balances: bals}
+	return func() tea.Msg { return m.fetch(context.Background()) }
+}
+
+// applyLoaded stores a fresh listing in both tables and recomputes the section totals.
+func (m *Model) applyLoaded(msg loadedMsg) {
+	m.balances = msg.balances
+	m.totals = sectionTotals(msg.netWorth, m.loc)
+	wealth, loans := m.accountRows()
+	m.table.SetRows(wealth)
+	m.loans.SetRows(loans)
+	if len(loans) == 0 {
+		m.loanOn = false
 	}
+	m.layoutLists()
+	m.mode = modeList
 }
 
 // detailLoadedMsg carries one account and its movements back into Update.
@@ -140,9 +184,7 @@ type reconcilePlannedMsg struct {
 	plan app.ReconcilePlan
 }
 
-type reconcileAppliedMsg struct {
-	balances []app.AccountBalance
-}
+type reconcileAppliedMsg struct{ loaded loadedMsg }
 
 func (m *Model) loadDetail(name string) tea.Cmd {
 	return func() tea.Msg {
@@ -167,9 +209,7 @@ func (m *Model) loadDetail(name string) tea.Cmd {
 func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case loadedMsg:
-		m.balances = msg.balances
-		m.table.SetRows(m.accountRows())
-		m.mode = modeList
+		m.applyLoaded(msg)
 		return m, nil
 	case detailLoadedMsg:
 		m.detail = msg.bal
@@ -182,9 +222,7 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		m.mode = modeReconcilePreview
 		return m, nil
 	case reconcileAppliedMsg:
-		m.balances = msg.balances
-		m.table.SetRows(m.accountRows())
-		m.mode = modeList
+		m.applyLoaded(msg.loaded)
 		return m, nil
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -214,12 +252,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 
 func (m *Model) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	switch {
+	case key.Matches(msg, m.km.Switch):
+		m.loanOn = !m.loanOn && len(m.loans.Rows()) > 0
 	case key.Matches(msg, m.km.Up):
-		m.table.MoveUp(1)
+		m.focused().MoveUp(1)
 	case key.Matches(msg, m.km.Down):
-		m.table.MoveDown(1)
+		m.focused().MoveDown(1)
 	case key.Matches(msg, m.km.Open):
-		row := m.table.SelectedRow()
+		row := m.focused().SelectedRow()
 		if row == nil {
 			return m, nil
 		}
@@ -227,7 +267,7 @@ func (m *Model) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	case key.Matches(msg, m.km.Add):
 		m.openAddForm()
 	case key.Matches(msg, m.km.Archive):
-		row := m.table.SelectedRow()
+		row := m.focused().SelectedRow()
 		if row == nil {
 			return m, nil
 		}
@@ -235,13 +275,20 @@ func (m *Model) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		m.confirm.Show("Archive account", fmt.Sprintf("Archive %q?", row.ID))
 		m.mode = modeConfirm
 	case key.Matches(msg, m.km.Reconcile):
-		row := m.table.SelectedRow()
+		row := m.focused().SelectedRow()
 		if row == nil {
 			return m, nil
 		}
 		m.openReconcileForm(row.ID, modeList)
 	}
 	return m, nil
+}
+
+func (m *Model) focused() *components.Table {
+	if m.loanOn {
+		return &m.loans
+	}
+	return &m.table
 }
 
 func (m *Model) handleDetailKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
@@ -284,11 +331,7 @@ func (m *Model) submitArchive() tea.Cmd {
 		if _, err := m.uc.ApplyArchiveAccount(ctx, plan); err != nil {
 			return screens.ErrorMsg{Err: err}
 		}
-		bals, err := m.uc.ListAccounts(ctx, app.ListAccountsRequest{})
-		if err != nil {
-			return screens.ErrorMsg{Err: err}
-		}
-		return loadedMsg{balances: bals}
+		return m.fetch(ctx)
 	}
 }
 
@@ -371,11 +414,12 @@ func (m *Model) submitReconcileApply() tea.Cmd {
 		if err := uc.ApplyReconcile(ctx, module.Default(), plan); err != nil {
 			return screens.ErrorMsg{Err: err}
 		}
-		bals, err := uc.ListAccounts(ctx, app.ListAccountsRequest{})
-		if err != nil {
-			return screens.ErrorMsg{Err: err}
+		msg := m.fetch(ctx)
+		loaded, ok := msg.(loadedMsg)
+		if !ok {
+			return msg
 		}
-		return reconcileAppliedMsg{balances: bals}
+		return reconcileAppliedMsg{loaded: loaded}
 	}
 }
 
@@ -431,22 +475,23 @@ func (m *Model) submitAdd() tea.Cmd {
 		if _, err := m.uc.ApplyAddAccount(ctx, plan); err != nil {
 			return screens.ErrorMsg{Err: err}
 		}
-		bals, err := m.uc.ListAccounts(ctx, app.ListAccountsRequest{})
-		if err != nil {
-			return screens.ErrorMsg{Err: err}
-		}
-		return loadedMsg{balances: bals}
+		return m.fetch(ctx)
 	}
 }
 
-func (m *Model) accountRows() []components.Row {
-	rows := make([]components.Row, len(m.balances))
-	for i, b := range m.balances {
-		rows[i] = components.Row{ID: b.Account.Name, Cells: []string{
-			b.Account.Name, string(b.Account.Kind), domain.FormatAmount(b.Balance, m.loc),
+// accountRows splits the balances into the wealth rows (every kind but loan) and the loan rows.
+func (m *Model) accountRows() (wealth, loans []components.Row) {
+	for _, b := range m.balances {
+		row := components.Row{ID: b.Account.Name, Cells: []string{
+			b.Account.Name, string(b.Account.Kind), b.Account.Currency.Code(), domain.FormatAmount(b.Balance, m.loc),
 		}}
+		if b.Account.Kind == domain.AccountLoan {
+			loans = append(loans, row)
+		} else {
+			wealth = append(wealth, row)
+		}
 	}
-	return rows
+	return wealth, loans
 }
 
 func (m *Model) txRows(items []app.TxView) []components.Row {
@@ -481,7 +526,19 @@ func (m *Model) View() string {
 }
 
 func (m *Model) viewList() string {
-	return m.th.Title.Render("Accounts") + "\n\n" + m.table.View()
+	out := m.sectionTitle("Accounts", !m.loanOn) + "\n" + m.table.View() + "\n" + m.th.Base.Render(m.totals.wealth)
+	if len(m.loans.Rows()) > 0 {
+		out += "\n" + m.sectionTitle("Loans & mortgages", m.loanOn) + "\n" + m.loans.View() + "\n" +
+			m.th.Base.Render(m.totals.loans)
+	}
+	return out
+}
+
+func (m *Model) sectionTitle(name string, focus bool) string {
+	if focus {
+		return m.th.Title.Render("▸ " + name)
+	}
+	return m.th.Muted.Render("  " + name)
 }
 
 func (m *Model) viewDetail() string {

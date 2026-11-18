@@ -12,6 +12,7 @@ type KeyMap struct {
 	Assign    key.Binding
 	Move      key.Binding
 	CopyPrev  key.Binding
+	Explain   key.Binding
 	Back      key.Binding
 }
 
@@ -26,11 +27,12 @@ func DefaultKeyMap() KeyMap {
 		Assign:    key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "assign from pool")),
 		Move:      key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "move to envelope")),
 		CopyPrev:  key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "copy previous month")),
+		Explain:   key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "explain budgets")),
 		Back:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 	}
 }
 
 // Bindings returns all keys as a slice for help generation and collision checks.
 func (k KeyMap) Bindings() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.PrevMonth, k.NextMonth, k.SetAmount, k.Assign, k.Move, k.CopyPrev, k.Back}
+	return []key.Binding{k.Up, k.Down, k.PrevMonth, k.NextMonth, k.SetAmount, k.Assign, k.Move, k.CopyPrev, k.Explain, k.Back}
 }

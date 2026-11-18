@@ -1,6 +1,7 @@
 package components
 
 import (
+	"reflect"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -14,6 +15,8 @@ type BarItem struct {
 	Label        string
 	Value        int64
 	DisplayValue string
+	// Style colors the filled bar; the zero value falls back to the theme's BarFill.
+	Style lipgloss.Style
 }
 
 // BarChart renders horizontal textual bar graphs scaled to available terminal width.
@@ -65,8 +68,8 @@ func (b *BarChart) View() string {
 
 func (b *BarChart) calculateDimensions() (maxVal int64, maxLabelLen int, maxDisplayLen int) {
 	for _, item := range b.items {
-		if item.Value > maxVal {
-			maxVal = item.Value
+		if v := abs64(item.Value); v > maxVal {
+			maxVal = v
 		}
 		if l := ansi.StringWidth(item.Label); l > maxLabelLen {
 			maxLabelLen = l
@@ -85,17 +88,28 @@ func (b *BarChart) renderRow(item BarItem, maxVal int64, labelLen, displayLen, b
 	lbl := ansi.Truncate(item.Label, labelLen, "…")
 	styledLabel := lipgloss.NewStyle().Width(labelLen).Render(lbl)
 
-	valRatio := float64(max(0, item.Value)) / float64(maxVal)
+	valRatio := float64(abs64(item.Value)) / float64(maxVal)
 	fillLen := int(valRatio * float64(barSpace))
-	if item.Value > 0 && fillLen == 0 {
+	if item.Value != 0 && fillLen == 0 {
 		fillLen = 1
 	}
 
 	barStr := strings.Repeat("█", fillLen)
-	styledBar := b.theme.BarFill.Render(barStr)
+	barStyle := b.theme.BarFill
+	if !reflect.DeepEqual(item.Style, lipgloss.Style{}) {
+		barStyle = item.Style
+	}
+	styledBar := barStyle.Render(barStr)
 	paddedBar := lipgloss.NewStyle().Width(barSpace).Render(styledBar)
 
 	styledVal := lipgloss.NewStyle().Width(displayLen).Align(lipgloss.Right).Render(item.DisplayValue)
 
 	return styledLabel + " " + paddedBar + " " + styledVal
+}
+
+func abs64(v int64) int64 {
+	if v < 0 {
+		return -v
+	}
+	return v
 }

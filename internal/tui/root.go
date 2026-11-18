@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/module"
@@ -33,10 +34,20 @@ const (
 	minHeight = 24
 )
 
-// reservedRows is the vertical space Root reserves for the tab bar (three lines), the status bar
-// and the blank line above it, plus one for the rule under each screen title, leaving the rest to
-// the active screen.
-const reservedRows = 6
+// reservedRows is the vertical space Root reserves besides the body and the help bar: the tab bar
+// (three lines), the blank line below it and the status line. The help bar adds its own height.
+const reservedRows = 5
+
+// bannerHeight is the rows the header banner takes above the tab bar: none on short terminals.
+func (r *Root) bannerHeight() int {
+	if r.height >= bannerMinHeight {
+		return bannerRows
+	}
+	return 0
+}
+
+// maxHelpRows caps the height of the expanded help bar.
+const maxHelpRows = 10
 
 // UseCases is the union of every MVP screen's needs: the app layer (shared with the CLI) plus the
 // reporting layer the dashboard uses for spending and runway.
@@ -60,6 +71,8 @@ type Config struct {
 	ThemeLight    string
 	ThemeDark     string
 	MonthStartDay int
+	// Version is the build version shown in the header; "v0.3.0" is displayed as "v0.3".
+	Version string
 
 	Modules module.Set
 	// Budget backs the Budget tab (module budget); Report the Reports tab and Importer the Import
@@ -81,10 +94,15 @@ type Config struct {
 	Simulations report.SimUseCases
 	// Lists adds the CRUD sections (categories, tags, rules, recurrences, import profiles) to Settings.
 	Lists settings.Lists
+	// Flow (core), AlertBudget (module budget) and AlertRecurring (module recurring) feed the
+	// dashboard flow chart and alerts.
+	Flow           dashboard.FlowUseCases
+	AlertBudget    dashboard.AlertBudgetUseCases
+	AlertRecurring dashboard.AlertRecurringUseCases
 }
 
 // Root is the top-level Bubble Tea model: it routes between the screens (fixed keys 1..7),
-// surfaces errors and status messages on a status bar, and renders a help overlay from every
+// surfaces errors and status messages on a status line, and renders a help bar from every
 // screen's keymap.
 type Root struct {
 	uc  UseCases
@@ -101,7 +119,7 @@ type Root struct {
 	width, height int
 	status        string
 	err           error
-	showHelp      bool
+	help          components.HelpBar
 }
 
 var _ tea.Model = (*Root)(nil)
@@ -148,6 +166,8 @@ func (r *Root) rebuild() {
 	if r.tabs[r.active] == nil {
 		r.active = screens.TabDashboard
 	}
+	r.help = components.NewHelpBar(r.th)
+	r.help.SetWidth(r.width)
 	if r.height > 0 {
 		r.resize()
 	}
@@ -157,6 +177,15 @@ func (r *Root) rebuild() {
 // enabled and whose use cases are wired.
 func (r *Root) newDashboard() *dashboard.Model {
 	m := dashboard.New(r.uc, r.loc, r.th, r.cfg.MonthStartDay)
+	if r.cfg.Flow != nil {
+		m.SetFlowUseCases(r.cfg.Flow)
+	}
+	if r.cfg.AlertBudget != nil && r.cfg.Modules.Has(module.Budget) {
+		m.SetAlertBudget(r.cfg.AlertBudget)
+	}
+	if r.cfg.AlertRecurring != nil && r.cfg.Modules.Has(module.Recurring) {
+		m.SetAlertRecurring(r.cfg.AlertRecurring)
+	}
 	if r.cfg.Modules.Has(module.Analytics) {
 		if r.cfg.NetWorth != nil {
 			m.SetNetWorthUseCases(r.cfg.NetWorth)
@@ -198,12 +227,31 @@ func (r *Root) retheme(name string) {
 	if prev != nil {
 		prev.SetTheme(r.th)
 		r.tabs[screens.TabSettings] = prev
-		prev.SetSize(r.width, max(1, r.height-reservedRows))
+		prev.SetSize(r.width, r.bodyHeight())
 	}
 }
 
+// helpView renders the help bar for the active screen.
+func (r *Root) helpView() string {
+	maxH := min(maxHelpRows, max(1, r.height/2))
+	out := r.help.View(r.km.Bindings(), r.ActiveKeyMap(), r.tabs[r.active].Title(), maxH)
+	if r.help.Expanded() || r.width == 0 {
+		return out
+	}
+	// bubbles/help overflows the width when the ellipsis itself does not fit after the last
+	// item; cut the line here so the collapsed bar is always one row.
+	return ansi.Truncate(out, r.width, "…")
+}
+
+// bodyHeight is the height left to the active screen below the tab bar and above the status
+// line and the help bar.
+func (r *Root) bodyHeight() int {
+	return max(1, r.height-reservedRows-r.bannerHeight()-lipgloss.Height(r.helpView()))
+}
+
 func (r *Root) resize() {
-	h := max(1, r.height-reservedRows)
+	r.help.SetWidth(r.width)
+	h := r.bodyHeight()
 	for _, scr := range r.tabs {
 		if scr != nil {
 			scr.SetSize(r.width, h)
@@ -258,8 +306,9 @@ func (r *Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (r *Root) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if r.showHelp {
-		r.showHelp = false
+	if r.help.Expanded() {
+		r.help.Toggle()
+		r.resize()
 		return r, nil
 	}
 	// A screen with an open form, filter, search box, or categorize field owns every keystroke:
@@ -269,7 +318,8 @@ func (r *Root) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, r.km.Quit):
 			return r, tea.Quit
 		case key.Matches(msg, r.km.Help):
-			r.showHelp = true
+			r.help.Toggle()
+			r.resize()
 			return r, nil
 		case key.Matches(msg, r.km.Dashboard):
 			return r.switchTo(screens.TabDashboard)
@@ -318,17 +368,17 @@ func (r *Root) View() string {
 		return r.th.Warning.Render(fmt.Sprintf(
 			"Terminal too small: %dx%d. FUI needs at least %dx%d.", r.width, r.height, minWidth, minHeight))
 	}
+	helpBar := r.helpView()
+	h := max(1, r.height-reservedRows-r.bannerHeight()-lipgloss.Height(helpBar))
 	body := r.tabs[r.active].View()
-	// Fill the terminal: the body takes every line the tab bar (three), the blank line and the
-	// status bar leave, so the status bar sits on the last row.
-	h := max(1, r.height-5)
-	if r.showHelp {
-		body = components.Modal(r.th, r.width, h, r.viewHelp(h))
-	}
 	if r.height > 0 {
 		body = lipgloss.NewStyle().Height(h).MaxHeight(h).Render(body)
 	}
-	return r.viewTabs() + "\n" + body + "\n\n" + r.viewStatus()
+	header := r.viewTabs()
+	if r.bannerHeight() > 0 {
+		header = viewBanner(r.th, r.cfg.Version) + "\n" + header
+	}
+	return header + "\n\n" + body + "\n" + r.viewStatus() + "\n" + helpBar
 }
 
 // tabNames are the seven screens in tab order; a tab with no Screen is rendered disabled.
@@ -351,10 +401,19 @@ var (
 // the terminal is too narrow for all seven labels.
 func (r *Root) viewTabs() string {
 	row := lipgloss.JoinHorizontal(lipgloss.Top, r.tabParts()...)
-	gap := lipgloss.NewStyle().Border(tabBorder, false, false, true, false).
-		BorderForeground(r.th.Tokens.Accent).
-		Render(strings.Repeat(" ", max(0, r.width-lipgloss.Width(row))))
-	return lipgloss.JoinHorizontal(lipgloss.Bottom, row, gap)
+	gapW := max(0, r.width-lipgloss.Width(row))
+	rule := lipgloss.NewStyle().Foreground(r.th.Tokens.Accent).Render(strings.Repeat("─", gapW))
+	middle := strings.Repeat(" ", gapW)
+	if r.bannerHeight() == 0 {
+		// The compact title sits on the middle row of the tab bar, right-aligned; it is dropped
+		// when the gap cannot hold it plus a space of margin.
+		title := logoStyle(r.th).Render("FinanceUI") + " " + r.th.Muted.Render(byline(r.cfg.Version))
+		if w := lipgloss.Width(title); gapW > w {
+			middle = strings.Repeat(" ", gapW-w) + title
+		}
+	}
+	gap := strings.Repeat(" ", gapW) + "\n" + middle + "\n" + rule
+	return lipgloss.JoinHorizontal(lipgloss.Top, row, gap)
 }
 
 // tabParts renders each tab with the roomiest variant that fits the terminal width.
@@ -395,12 +454,13 @@ func (r *Root) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return r, nil
 	}
 	switch {
-	case r.showHelp:
+	case r.help.Expanded():
 		if msg.Button == tea.MouseButtonLeft {
-			r.showHelp = false
+			r.help.Toggle()
+			r.resize()
 		}
 	case r.tabs[r.active].InputActive():
-	case msg.Button == tea.MouseButtonLeft && msg.Y < tabBarRows:
+	case msg.Button == tea.MouseButtonLeft && msg.Y >= r.bannerHeight() && msg.Y < r.bannerHeight()+tabBarRows:
 		if id, ok := r.tabAt(msg.X); ok {
 			return r.switchTo(id)
 		}
@@ -439,41 +499,6 @@ func (r *Root) viewStatus() string {
 	case r.status != "":
 		return r.th.StatusBar.Render(r.status)
 	default:
-		return r.th.StatusBar.Render("? help · q quit")
+		return ""
 	}
-}
-
-// viewHelp lists the global and active-screen bindings, wrapping them into side-by-side columns
-// when they would not fit the h lines of the modal that frames them.
-func (r *Root) viewHelp(h int) string {
-	bindings := append(append([]key.Binding{}, r.km.Bindings()...), r.ActiveKeyMap()...)
-	var keys, descs []string
-	for _, b := range bindings {
-		if hb := b.Help(); hb.Key != "" {
-			keys, descs = append(keys, hb.Key), append(descs, hb.Desc)
-		}
-	}
-	// The modal's border and the title with its rule take four lines.
-	perCol := len(keys)
-	if r.height > 0 {
-		perCol = max(1, h-4)
-	}
-	var cols []string
-	for start := 0; start < len(keys); start += perCol {
-		end := min(start+perCol, len(keys))
-		keyW := 0
-		for _, k := range keys[start:end] {
-			keyW = max(keyW, lipgloss.Width(k))
-		}
-		lines := make([]string, 0, end-start)
-		for i := start; i < end; i++ {
-			lines = append(lines, r.th.HelpKey.Width(keyW).Render(keys[i])+"  "+r.th.HelpDesc.Render(descs[i]))
-		}
-		col := strings.Join(lines, "\n")
-		if end < len(keys) {
-			col = lipgloss.NewStyle().PaddingRight(4).Render(col)
-		}
-		cols = append(cols, col)
-	}
-	return r.th.Title.Render("Help — "+r.tabs[r.active].Title()) + "\n" + lipgloss.JoinHorizontal(lipgloss.Top, cols...)
 }

@@ -2,7 +2,7 @@
 
 Nov 9, 2026 · @Mattia Ballo
 
-**Versione 1.2** — 12 novembre 2026 · le modifiche rispetto alle versioni precedenti sono nella sezione Cronologia delle versioni
+**Versione 1.3** — 18 novembre 2026 · le modifiche rispetto alle versioni precedenti sono nella sezione Cronologia delle versioni
 
 ## Panoramica e obiettivi
 
@@ -214,13 +214,17 @@ La TUI si apre sulla Dashboard e offre sette schermate raggiungibili con un tast
 
 | Tasto | Schermata | Contenuto | Azioni principali |
 | --- | --- | --- | --- |
-| 1 | Dashboard | Saldi dei conti, patrimonio netto, autonomia in mesi, spese del mese contro budget, prossime ricorrenze | Aggiunta rapida, salto alla schermata di dettaglio |
-| 2 | Transazioni | Lista filtrabile e ordinabile (data, conto, beneficiario, categoria, importo, stato) | Aggiungi, modifica, elimina, split, categorizzazione multipla, ricerca testuale e filtri |
-| 3 | Conti | Elenco conti con saldo; dettaglio movimenti per conto | Aggiungi, archivia, riconcilia |
-| 4 | Budget | Per tetto o busta: importo, speso, previsto, residuo con riporto, barra di avanzamento; con le buste anche il saldo Da assegnare | Imposta importo, mese precedente e successivo, copia dal mese prima, assegna e sposta tra buste |
-| 5 | Report | Report predefiniti e salvati con grafici a barre testuali e tabelle, previsione di cassa | Cambia report e periodo, esporta |
+| 1 | Dashboard | Riquadri in quest'ordine, tutti riferiti al ciclo di calcolo scelto (mese contabile, trimestre, anno, dall'inizio): patrimonio con la liquidità lorda in grande (tutti i conti tranne prestiti e mutui, nella valuta di riferimento) e in piccolo il netto dei prestiti; autonomia come conto alla rovescia in anni, mesi e giorni con la data di esaurimento; grafico a barre orizzontali con entrate (verde), uscite (rosso) e risparmio (testo) con i valori; ultimi 10 movimenti; avvisi | Aggiunta rapida, cambio del ciclo e periodo precedente o successivo, vai a tutte le transazioni, gestione degli avvisi |
+| 2 | Transazioni | Lista filtrabile e ordinabile (data, conto, beneficiario, categoria, tag come etichette, importo, stato); uscite in rosso, entrate in verde, trasferimenti senza colore, transazioni non confermate in una tonalità più chiara dello stesso colore; totale entrate e uscite del filtro corrente in grande | Aggiungi, modifica, elimina, split, categorizzazione multipla, ricerca testuale e filtri con selettore di date |
+| 3 | Conti | Elenco conti con valuta e saldo, separato tra conti che formano il patrimonio lordo e prestiti o mutui, con il totale di ciascuna sezione nella valuta di riferimento; dettaglio movimenti per conto | Aggiungi, archivia, riconcilia, passa da una sezione all'altra |
+| 4 | Budget | Per tetto o busta: importo, speso, previsto, residuo con riporto, barra di avanzamento colorata per fascia (verde sotto il 70%, giallo 70–89%, arancione 90–99%, rosso dal 100%) con un'icona per fascia; con le buste anche il saldo Da assegnare | Imposta importo, mese precedente e successivo, copia dal mese prima, assegna e sposta tra buste, spiegazione dei tipi di budget |
+| 5 | Report | Report predefiniti e salvati con tabelle e grafici adatti al risultato (linee per le serie nel tempo, barre per i confronti), previsione di cassa | Cambia report e periodo, esporta, spiegazione dei report |
 | 6 | Import | Anteprima del file, mappatura colonne, duplicati evidenziati | Scegli connettore e profilo, includi o escludi righe, conferma |
 | 7 | Impostazioni | Moduli attivi, categorie, tag, regole, ricorrenze, profili di import | CRUD su ogni elemento |
+
+**Layout** — dall'alto: il titolo FinanceUI in caratteri ASCII con il sottotitolo `vX.Y by 0xBallo` (`0xBallo` è un collegamento al profilo GitHub; con meno di 30 righe diventa una sola riga accanto alle schede), le schede, la schermata, la riga di stato e la barra dei comandi alta una riga. Se i comandi non entrano nella riga vengono troncati con `…`; `?` espande la barra mostrando tutte le scorciatoie, divise tra globali e della schermata corrente.
+
+**Avvisi della Dashboard** — un riquadro elenca, dal più grave: budget sforati (pericolo), budget vicini alla soglia di avviso e transazioni anomale (attenzione), spese ricorrenti previste entro il periodo di fatturazione corrente e altre analisi automatiche (informazione).
 
 **Scorciatoie globali**
 
@@ -234,8 +238,18 @@ La TUI si apre sulla Dashboard e offre sette schermate raggiungibili con un tast
 | `d` | Elimina, con conferma |
 | `Spazio` | Seleziona per azioni multiple |
 | `Esc` | Torna indietro o chiudi il pannello |
-| `?` | Mostra le scorciatoie della schermata |
+| `?` | Espande la barra dei comandi con tutte le scorciatoie, divise tra globali e della schermata |
 | `q` | Esci |
+
+**Scorciatoie di schermata**
+
+| Schermata | Tasto | Azione |
+| --- | --- | --- |
+| Dashboard | `p` | Cambia il ciclo di calcolo (mese, trimestre, anno, dall'inizio) |
+| Dashboard | `h` / `l` o frecce | Periodo precedente o successivo |
+| Dashboard | `t` | Vai a tutte le transazioni |
+| Dashboard | `i` | Seleziona gli avvisi |
+| Budget, Report | `i` | Spiegazione della schermata |
 
 **Requisiti**
 
@@ -651,6 +665,14 @@ Lo stack è deciso; le domande rimaste riguardano il perimetro e si possono chiu
 - [ ] Raccogliere export Widiba e Revolut su periodi più lunghi per verificare causali e tipi di movimento assenti negli export di prova.
 
 ## Cronologia delle versioni
+
+**Versione 1.3** — 18 novembre 2026
+
+| Sezione | Modifica |
+| --- | --- |
+| Requisiti funzionali — TUI | Titolo ASCII con versione e collegamento all'autore; barra dei comandi in fondo alta una riga, espandibile con `?` |
+| Requisiti funzionali — TUI | Dashboard a riquadri riferiti al ciclo di calcolo: patrimonio lordo e netto, autonomia come conto alla rovescia, grafico entrate, uscite e risparmio, ultimi 10 movimenti, avvisi |
+| Requisiti funzionali — TUI | Transazioni colorate per tipo e stato, tag come etichette, selettore di date nei filtri, totali in grande; Conti con valuta e sezioni separate per i prestiti; Budget con colori per fascia e spiegazione; Report con grafici e spiegazione |
 
 **Versione 1.2** — 12 novembre 2026
 

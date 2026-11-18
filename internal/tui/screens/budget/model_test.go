@@ -94,7 +94,7 @@ func TestBudgetCapStatus(t *testing.T) {
 	s = run(t, s, s.Init())
 
 	view := s.View()
-	for _, want := range []string{"Groceries", "400", "150", "250", "OK"} {
+	for _, want := range []string{"Groceries", "400", "150", "250", "✓"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected %q in view, got:\n%s", want, view)
 		}
@@ -281,8 +281,8 @@ func TestBudgetCapWarningAndOverStates(t *testing.T) {
 	s = run(t, s, s.Init())
 
 	view := s.View()
-	if !strings.Contains(view, "WARNING") {
-		t.Fatalf("expected a WARNING state, got:\n%s", view)
+	if !strings.Contains(view, "‼") {
+		t.Fatalf("expected a warning tier, got:\n%s", view)
 	}
 	if !strings.Contains(view, "OVER") {
 		t.Fatalf("expected an OVER state, got:\n%s", view)

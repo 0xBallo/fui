@@ -63,7 +63,7 @@ type Model struct {
 	minBalText  string
 
 	table components.Table
-	chart components.BarChart
+	line  components.LineChart
 	note  string // extra context line under the table (loan name, forecast thresholds, ...)
 
 	accounts []app.AccountBalance
@@ -75,6 +75,8 @@ type Model struct {
 	fields formFields
 
 	confirm components.ConfirmDialog
+
+	help components.MarkdownModal
 
 	cmp compareState
 	sim simState
@@ -99,9 +101,10 @@ func New(uc UseCases, loc domain.Locale, monthStartDay int, th theme.Theme) *Mod
 	}
 	m := &Model{uc: uc, loc: loc, monthStartDay: monthStartDay, th: th, km: DefaultKeyMap()}
 	m.table = components.NewTable(nil, th)
-	m.chart = components.NewBarChart(th)
+	m.line = components.NewLineChart(th)
 	m.savedTable = components.NewTable(savedColumns(), th)
 	m.confirm = components.NewConfirmDialog(th)
+	m.help = components.NewMarkdownModal(th, helpMarkdown)
 	return m
 }
 
@@ -113,13 +116,13 @@ func (m *Model) Init() tea.Cmd {
 // SetSize adapts the tables to the available terminal size.
 func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h
-	m.table.SetHeight(max(3, h-14))
+	m.sizeReportTable()
 	m.table.SetWidth(w)
 	m.savedTable.SetHeight(max(3, h-10))
 	m.savedTable.SetWidth(w)
 	m.cmp.table.SetHeight(max(3, h-10))
 	m.cmp.table.SetWidth(w)
-	m.chart.SetWidth(w)
+	m.help.SetSize(w, h)
 	m.sizeSim()
 }
 
@@ -134,7 +137,7 @@ func (m *Model) KeyMap() []key.Binding {
 // InputActive reports whether a form is capturing keystrokes.
 func (m *Model) InputActive() bool {
 	return m.mode == modeParamsForm || m.mode == modeSaveForm || m.mode == modeExportForm ||
-		(m.mode == modeCompare && m.cmp.formActive) || m.simInputActive()
+		(m.mode == modeCompare && m.cmp.formActive) || m.simInputActive() || m.help.IsOpen()
 }
 
 // accountsLoadedMsg carries the accounts back into Update, for the account field's suggestions
@@ -179,6 +182,12 @@ type exportDoneMsg struct {
 func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	if cmd, ok := m.updateSim(msg); ok {
 		return m, cmd
+	}
+	if m.help.IsOpen() {
+		if _, ok := msg.(tea.KeyMsg); ok {
+			m.help, _ = m.help.Update(msg)
+			return m, nil
+		}
 	}
 	switch msg := msg.(type) {
 	case accountsLoadedMsg:
@@ -254,6 +263,8 @@ func (m *Model) handleReportKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		return m, m.loadSaved()
 	case key.Matches(msg, m.km.Export):
 		m.openExportForm()
+	case key.Matches(msg, m.km.Explain):
+		m.help.Open()
 	case m.compareEnabled() && key.Matches(msg, m.cmp.km.Open):
 		return m, m.openCompare()
 	case m.simEnabled() && key.Matches(msg, m.sim.km.Open):

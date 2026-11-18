@@ -129,7 +129,7 @@ func (m *Model) viewPositions() string {
 	if len(m.positions.rows) == 0 {
 		return out + "\n" + m.th.Muted.Render("(no positions)")
 	}
-	return out + "\n" + m.positions.table.View() + "\n" + m.th.Muted.Render("p set manual price")
+	return out + "\n" + m.positions.table.View()
 }
 
 func (m *Model) selectedPosition() (investing.PositionLine, bool) {

@@ -10,7 +10,9 @@ import (
 // UseCases is the subset of app.Service this screen needs, received by interface so tests can
 // supply a stub store-free implementation.
 type UseCases interface {
+	Today() (domain.Date, error)
 	ListTx(ctx context.Context, req app.ListTxRequest) (app.TxPage, error)
+	TxTotals(ctx context.Context, req app.ListTxRequest) (app.TxTotals, error)
 	ListAccounts(ctx context.Context, req app.ListAccountsRequest) ([]app.AccountBalance, error)
 	ListCategories(ctx context.Context) ([]domain.Category, error)
 	ListTags(ctx context.Context) ([]domain.Tag, error)

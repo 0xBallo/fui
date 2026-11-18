@@ -1,24 +1,24 @@
 ╭───────────╮╭────────────╮╭────────╮╭──────╮╭───────╮╭──────╮╭────────╮        
 │1 Dashboard││Transactions││Accounts││Budget││Reports││Import││Settings│        
 ┘           └┴────────────┴┴────────┴┴──────┴┴───────┴┴──────┴┴────────┴────────
-Dashboard                                                                       
-─────────                                                                       
-                                                                                
-Accounts                                                                        
-╭────────────────────────────────────────────────┬────────────┬────────────────╮
-│Account                                         │Kind        │         Balance│
-├────────────────────────────────────────────────┼────────────┼────────────────┤
-│Checking                                        │checking    │        1,207.50│
-╰────────────────────────────────────────────────┴────────────┴────────────────╯
+
+◀ June 2026 · month                                                             
                                                                                 
 Net worth                                                                       
-1,207.50                                                                        
+▄█    ▀▀█ █▀█ ▀▀█   █▀▀ █▀█                                                     
+ █  ▄ █▀▀ █ █   █   ▀▀█ █ █                                                     
+▀▀▀ ▀ ▀▀▀ ▀▀▀   ▀ ▄ ▀▀▀ ▀▀▀ EUR                                                 
+net of loans 1,207.50                                                           
                                                                                 
 Runway                                                                          
-not enough data (needs at least 3 complete months)                              
+not enough data (needs 3 complete months)                                       
                                                                                 
-Spending this month                                                             
-Groceries ██████████████████████████████████████████████████████████████ 42.50  
-                                                                                
+Recent transactions                                                             
+╭────────────┬─────────────────────────────────┬────────────────┬──────────────╮
+│Date        │Description                      │Category        │        Amount│
+├────────────┼─────────────────────────────────┼────────────────┼──────────────┤
+│06/10/2026  │Supermarket                      │Groceries       │        -42.50│
+╰────────────┴─────────────────────────────────┴────────────────┴──────────────╯
+→ View all transactions (t)                                                     
 
-? help · q quit
+a quick add · p next cycle · h/← previous period · l/→ next period …

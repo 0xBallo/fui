@@ -8,6 +8,9 @@ import (
 
 // View renders the active panel.
 func (m *Model) View() string {
+	if m.help.IsOpen() {
+		return m.help.View()
+	}
 	switch m.mode {
 	case modeParamsForm, modeSaveForm, modeExportForm:
 		return components.Modal(m.th, m.width, m.height, m.viewForm())
@@ -28,13 +31,12 @@ func (m *Model) View() string {
 func (m *Model) viewReport() string {
 	title := m.th.Title.Render(m.reportTitle())
 	lines := []string{title, "", m.table.View()}
-	if chart := m.chart.View(); chart != "" {
+	if chart := m.chartView(m.width, m.height); chart != "" {
 		lines = append(lines, "", chart)
 	}
 	if m.note != "" {
 		lines = append(lines, "", m.th.Muted.Render(m.note))
 	}
-	lines = append(lines, "", m.viewFooter())
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
 
@@ -43,7 +45,7 @@ func (m *Model) reportTitle() string {
 	if label == "" {
 		label = predefinedKinds()[m.kindIdx].Label
 	}
-	title := "Reports — " + label
+	title := label
 	if m.result.saved != "" {
 		title += " (saved: " + m.result.saved + ")"
 	}
@@ -51,17 +53,6 @@ func (m *Model) reportTitle() string {
 		title += " — " + m.periodText
 	}
 	return title
-}
-
-func (m *Model) viewFooter() string {
-	footer := "h/l report   p params   s save   v saved   e export   r refresh"
-	if m.compareEnabled() {
-		footer += "   c compare"
-	}
-	if m.simEnabled() {
-		footer += "   i simulations"
-	}
-	return m.th.Base.Render(footer)
 }
 
 func (m *Model) viewSaved() string {

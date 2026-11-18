@@ -44,7 +44,7 @@ func snapshot(t *testing.T, model tea.Model, ready, wait string, act func(*teate
 	tm := teatest.NewTestModel(t, model, teatest.WithInitialTermSize(100, 30))
 
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return bytes.Contains(b, []byte("n new import"))
+		return bytes.Contains(b, []byte("No import in progress."))
 	}, teatest.WithDuration(3*time.Second))
 	typeRunes(tm, "n") // open the source form from the idle page
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
@@ -125,7 +125,7 @@ func TestImportConfirmDialogSnapshot(t *testing.T) {
 	// Wait for the connector field's suggestions to load (the "> csv" dropdown line) before
 	// typing, so the "fui" keystroke race never lands before connectorsLoadedMsg: otherwise the
 	// dropdown-accept double-enter below and the resulting frame sequence are non-deterministic.
-	waitForText("n new import")
+	waitForText("No import in progress.")
 	typeRunes(tm, "n") // open the source form from the idle page
 	waitForText("> csv")
 	typeRunes(tm, "fui")

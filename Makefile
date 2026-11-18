@@ -3,7 +3,7 @@ PKGS    ?= ./...
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: fmt fmt-check generate lint test check bench build cover hooks
+.PHONY: fmt fmt-check generate lint test check bench build cover hooks demo
 
 fmt:
 	gofumpt -w .
@@ -36,3 +36,7 @@ build:
 # hooks enables the versioned git hooks in .githooks (pre-commit: fmt, build, vet, lint, test).
 hooks:
 	git config core.hooksPath .githooks
+
+# demo seeds a throwaway archive with synthetic data under .scratch/demo (never the real one).
+demo:
+	tools/demo/seed.sh

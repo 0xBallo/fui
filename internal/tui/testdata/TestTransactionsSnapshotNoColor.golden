@@ -1,9 +1,8 @@
 ╭─────────╮╭──────────────╮╭────────╮╭──────╮╭───────╮╭──────╮╭────────╮        
 │Dashboard││2 Transactions││Accounts││Budget││Reports││Import││Settings│        
 ┴─────────┴┘              └┴────────┴┴──────┴┴───────┴┴──────┴┴────────┴────────
-Transactions                                                                    
-────────────                                                                    
-                                                                                
+
+IN +0.00 · OUT −42.50 · 1 tx                                                    
 ╭──────────┬────────────────┬─────────┬──────────────┬──────────┬──────────────╮
 │Date      │Account         │Descript…│Category      │Status    │        Amount│
 ├──────────┼────────────────┼─────────┼──────────────┼──────────┼──────────────┤
@@ -20,5 +19,6 @@ Transactions
                                                                                 
                                                                                 
                                                                                 
+                                                                                
 
-? help · q quit
+a add · e/enter edit · d delete · f filter · / search · space select · s split …

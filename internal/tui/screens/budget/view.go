@@ -11,7 +11,7 @@ import (
 
 func capColumns() []components.Column {
 	return []components.Column{
-		{Title: "Name", Width: 18, Align: lipgloss.Left},
+		{Title: "Name", Width: 16, Align: lipgloss.Left},
 		{Title: "Available", Width: 12, Align: lipgloss.Right},
 		{Title: "Spent", Width: 12, Align: lipgloss.Right},
 		{Title: "Planned", Width: 12, Align: lipgloss.Right},
@@ -22,7 +22,7 @@ func capColumns() []components.Column {
 
 func envelopeColumns() []components.Column {
 	return []components.Column{
-		{Title: "Name", Width: 18, Align: lipgloss.Left},
+		{Title: "Name", Width: 16, Align: lipgloss.Left},
 		{Title: "Carry in", Width: 12, Align: lipgloss.Right},
 		{Title: "Assigned", Width: 12, Align: lipgloss.Right},
 		{Title: "Spent", Width: 12, Align: lipgloss.Right},
@@ -53,7 +53,7 @@ func (m *Model) capRows() []components.Row {
 			domain.FormatAmount(l.Spent, m.loc),
 			domain.FormatAmount(l.Planned, m.loc),
 			domain.FormatAmount(l.Remaining, m.loc),
-			progressBar(m.th, l.Percent, l.State),
+			progressBar(m.th, l.Percent),
 		}}
 	}
 	return rows
@@ -69,7 +69,7 @@ func (m *Model) envelopeRows() []components.Row {
 			domain.FormatAmount(l.Spent, m.loc),
 			domain.FormatAmount(l.Planned, m.loc),
 			domain.FormatAmount(l.Balance, m.loc),
-			progressBar(m.th, envelopePercent(l.EnvelopeMonth), envelopeState(l.EnvelopeMonth)),
+			progressBar(m.th, envelopePercent(l.EnvelopeMonth)),
 		}}
 	}
 	return rows
@@ -77,6 +77,9 @@ func (m *Model) envelopeRows() []components.Row {
 
 // View renders the active panel.
 func (m *Model) View() string {
+	if m.help.IsOpen() {
+		return m.help.View()
+	}
 	switch m.mode {
 	case modeSetForm, modeAssignForm, modeMoveForm:
 		return components.Modal(m.th, m.width, m.height, m.viewForm())
@@ -89,7 +92,7 @@ func (m *Model) View() string {
 }
 
 func (m *Model) viewList() string {
-	title := m.th.Title.Render(fmt.Sprintf("Budget — %s (%s)", m.monthIn, m.status.Mode))
+	title := m.th.Title.Render(fmt.Sprintf("%s (%s)", m.monthIn, m.status.Mode))
 	lines := []string{title, "", m.table.View(), "", m.viewFooter()}
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
