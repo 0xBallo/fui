@@ -25,6 +25,7 @@ type Lists struct {
 	Rules       lists.RulesUseCases
 	Recurrences lists.RecurrencesUseCases
 	Profiles    lists.ProfilesConfig
+	Assets      lists.AssetsUseCases
 }
 
 // sub is one embedded CRUD sub-view and its section tab label.
@@ -55,6 +56,9 @@ func (m *Model) rebuildSubs() {
 	}
 	if l.Recurrences != nil && m.enabled.Has(module.Recurring) {
 		m.subs = append(m.subs, sub{"Recurrences", lists.NewRecurrences(l.Recurrences, m.enabled, l.Locale, m.th)})
+	}
+	if l.Assets != nil && m.enabled.Has(module.Assets) {
+		m.subs = append(m.subs, sub{"Assets", lists.NewAssets(l.Assets, m.enabled, l.Locale, m.th)})
 	}
 	if l.Profiles != nil {
 		m.subs = append(m.subs, sub{"Import profiles", lists.NewProfiles(l.Profiles, m.th)})
