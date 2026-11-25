@@ -335,6 +335,7 @@ type Item struct {
 	Debt   domain.Money
 	Net    domain.Money
 	At     domain.Date
+	Loan   string // name of the linked loan, empty without a link
 }
 
 // View is an Item with the full valuation history, oldest first.
@@ -408,7 +409,13 @@ func item(ctx context.Context, r app.Repos, a domain.Asset, at domain.Date) (Ite
 	if err != nil {
 		return Item{}, nil, err
 	}
+	var loanName string
 	if a.LoanID != 0 {
+		l, err := r.Loans().Get(ctx, a.LoanID)
+		if err != nil {
+			return Item{}, nil, fmt.Errorf("loan of asset %q: %w", a.Name, err)
+		}
+		loanName = l.Name
 		if debt, err = loanDebt(ctx, r, a, at); err != nil {
 			return Item{}, nil, err
 		}
@@ -417,7 +424,7 @@ func item(ctx context.Context, r app.Repos, a domain.Asset, at domain.Date) (Ite
 	if err != nil {
 		return Item{}, nil, fmt.Errorf("net value of %q: %w", a.Name, err)
 	}
-	return Item{Asset: a, Latest: latest, Debt: debt, Net: net, At: at}, history, nil
+	return Item{Asset: a, Latest: latest, Debt: debt, Net: net, At: at, Loan: loanName}, history, nil
 }
 
 // loanDebt is the residual debt (never negative) of the loan linked to a: the opposite of the
