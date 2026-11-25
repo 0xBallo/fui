@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"database/sql"
 )
 
 const addTransactionSplit = `-- name: AddTransactionSplit :exec
@@ -39,6 +40,82 @@ WHERE transaction_id = ?1
 func (q *Queries) ClearTransactionSplits(ctx context.Context, transactionID int64) error {
 	_, err := q.db.ExecContext(ctx, clearTransactionSplits, transactionID)
 	return err
+}
+
+const listTransactionsWithSplitsForReport = `-- name: ListTransactionsWithSplitsForReport :many
+SELECT
+    t.id, t.account_id, t.date, t.operation_date, t.value_date, t.amount_minor, t.currency, t.payee_id, t.description, t.category_id, t.notes, t.status, t.kind, t.external_id, t.fingerprint, t.import_batch_id, t.transfer_group_id, t.created_at, t.updated_at, t.search_text, t.recurrence_id, t.due_date, t.original_amount_minor, t.original_currency, t.raw,
+    s.category_id AS split_category_id,
+    s.amount_minor AS split_amount_minor
+FROM transactions AS t
+LEFT JOIN transaction_splits AS s ON s.transaction_id = t.id
+WHERE t.date >= ?1
+    AND t.date <= ?2
+    AND (json_array_length(?3) = 0 OR t.account_id IN (SELECT value FROM json_each(?3)))
+ORDER BY t.date, t.id, s.id
+`
+
+type ListTransactionsWithSplitsForReportParams struct {
+	FromDate       string
+	ToDate         string
+	AccountIdsJson interface{}
+}
+
+type ListTransactionsWithSplitsForReportRow struct {
+	Transaction      Transaction
+	SplitCategoryID  sql.NullInt64
+	SplitAmountMinor sql.NullInt64
+}
+
+func (q *Queries) ListTransactionsWithSplitsForReport(ctx context.Context, arg ListTransactionsWithSplitsForReportParams) ([]ListTransactionsWithSplitsForReportRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTransactionsWithSplitsForReport, arg.FromDate, arg.ToDate, arg.AccountIdsJson)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTransactionsWithSplitsForReportRow
+	for rows.Next() {
+		var i ListTransactionsWithSplitsForReportRow
+		if err := rows.Scan(
+			&i.Transaction.ID,
+			&i.Transaction.AccountID,
+			&i.Transaction.Date,
+			&i.Transaction.OperationDate,
+			&i.Transaction.ValueDate,
+			&i.Transaction.AmountMinor,
+			&i.Transaction.Currency,
+			&i.Transaction.PayeeID,
+			&i.Transaction.Description,
+			&i.Transaction.CategoryID,
+			&i.Transaction.Notes,
+			&i.Transaction.Status,
+			&i.Transaction.Kind,
+			&i.Transaction.ExternalID,
+			&i.Transaction.Fingerprint,
+			&i.Transaction.ImportBatchID,
+			&i.Transaction.TransferGroupID,
+			&i.Transaction.CreatedAt,
+			&i.Transaction.UpdatedAt,
+			&i.Transaction.SearchText,
+			&i.Transaction.RecurrenceID,
+			&i.Transaction.DueDate,
+			&i.Transaction.OriginalAmountMinor,
+			&i.Transaction.OriginalCurrency,
+			&i.Transaction.Raw,
+			&i.SplitCategoryID,
+			&i.SplitAmountMinor,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const splitsOfTransaction = `-- name: SplitsOfTransaction :many
