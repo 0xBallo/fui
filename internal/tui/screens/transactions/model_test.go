@@ -154,6 +154,10 @@ func TestTransactionsDeleteWithConfirm(t *testing.T) {
 		t.Fatalf("expected a confirm dialog, got:\n%s", scr.View())
 	}
 
+	if !scr.(*transactions.Model).InputActive() {
+		t.Fatalf("expected the confirm dialog to own the keys, so the global undo key stays inactive")
+	}
+
 	scr, _ = sendRunes(scr, "n")
 	if strings.Contains(scr.View(), "Delete transaction") {
 		t.Fatalf("expected the dialog to close on no")

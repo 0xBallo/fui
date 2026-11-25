@@ -159,9 +159,9 @@ func (m *Model) KeyMap() []key.Binding {
 // categorize field is currently capturing keystrokes.
 func (m *Model) InputActive() bool {
 	switch m.mode {
-	case modeForm, modeFilter, modeSearch, modeSplit, modeTags, modeCategorize:
+	case modeForm, modeFilter, modeSearch, modeSplit, modeTags, modeCategorize, modeConfirm:
 		return true
-	case modeList, modeConfirm:
+	case modeList:
 		return false
 	}
 	return false
