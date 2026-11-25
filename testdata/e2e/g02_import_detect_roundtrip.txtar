@@ -1,0 +1,44 @@
+# G02: detect a CSV profile, save it and import with it; an FUI export keeps original and raw.
+exec fui init --currency EUR
+exec fui account add Checking --kind checking --currency EUR
+
+exec fui import detect bank.csv
+stdout 'date_column'
+stdout 'Booking date'
+exec fui import detect bank.csv --json
+stdout '"date_format":"DD/MM/YYYY"'
+stdout '"has_header":true'
+
+exec fui import detect bank.csv --save mybank --dry-run
+! exec fui import bank.csv --connector csv --profile mybank --account Checking --dry-run
+exec fui import detect bank.csv --save mybank
+stdout 'Saved as import.profiles.mybank'
+exec fui import bank.csv --connector csv --profile mybank --account Checking --yes --json
+stdout '"transactions":2'
+exec fui tx list --json
+stdout '"amount":-3000'
+
+# Round trip: export in FUI format and import into a second archive.
+exec fui import s.fui.jsonl --create-accounts --yes
+exec fui export --format fui --output out.fui.jsonl
+exec fui import out.fui.jsonl --dry-run --json
+stdout '"counts":\{"new":0,"duplicate":3'
+env XDG_DATA_HOME=$WORK/xdg/data-b
+env XDG_STATE_HOME=$WORK/xdg/state-b
+exec fui init --currency EUR
+exec fui import out.fui.jsonl --create-accounts --yes
+exec fui tx list --json
+stdout '"description":"Shop"'
+exec fui export --format fui --output again.fui.jsonl
+grep '"original":\{"amount":-1400,"currency":"USD"\}' again.fui.jsonl
+grep '"memo":"x"' again.fui.jsonl
+
+-- bank.csv --
+Booking date,Description,Amount
+05/01/2026,Rent,"-30,00"
+25/01/2026,Salary,"1500,00"
+-- s.fui.jsonl --
+{"type":"meta","protocol":"fui/1","connector":"bank","version":"1","source":{"file":"s.fui.jsonl"}}
+{"type":"account","ref":"a","name":"Main","currency":"EUR","kind":"checking"}
+{"type":"transaction","account":"a","id":"t3","date":"2026-10-03","amount":-1200,"currency":"EUR","description":"Shop","status":"booked","original":{"amount":-1400,"currency":"USD"},"raw":{"memo":"x"}}
+{"type":"end","transactions":1,"errors":0}

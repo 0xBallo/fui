@@ -1,0 +1,40 @@
+{
+  "profile": {
+    "DateColumn": "",
+    "AmountColumn": "",
+    "DebitColumn": "",
+    "CreditColumn": "",
+    "DescriptionColumn": "\u0000\u0001\u0002 lorem ipsum ÿþ",
+    "ExternalIDColumn": "",
+    "Delimiter": ",",
+    "Encoding": "windows-1252",
+    "DateFormat": "",
+    "DecimalSeparator": ".",
+    "SkipRows": 0,
+    "TargetAccount": ""
+  },
+  "delimiter": 44,
+  "date_format": "",
+  "decimal_sep": 46,
+  "has_header": true,
+  "columns": [
+    {
+      "header": "\u0000\u0001\u0002 lorem ipsum ÿþ",
+      "role": "description",
+      "confidence": 40
+    }
+  ],
+  "sample": [
+    [
+      "not a table at all"
+    ],
+    [
+      "????"
+    ]
+  ],
+  "warnings": [
+    "no date column found",
+    "no amount column found",
+    "decimal separator not evident, assuming \".\""
+  ]
+}

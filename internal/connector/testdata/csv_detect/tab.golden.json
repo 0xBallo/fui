@@ -1,0 +1,55 @@
+{
+  "profile": {
+    "DateColumn": "Date",
+    "AmountColumn": "Amount",
+    "DebitColumn": "",
+    "CreditColumn": "",
+    "DescriptionColumn": "Details",
+    "ExternalIDColumn": "",
+    "Delimiter": "\\t",
+    "Encoding": "",
+    "DateFormat": "DD.MM.YYYY",
+    "DecimalSeparator": ".",
+    "SkipRows": 0,
+    "TargetAccount": ""
+  },
+  "delimiter": 9,
+  "date_format": "DD.MM.YYYY",
+  "decimal_sep": 46,
+  "has_header": true,
+  "columns": [
+    {
+      "header": "Date",
+      "role": "date",
+      "confidence": 90
+    },
+    {
+      "header": "Details",
+      "role": "description",
+      "confidence": 90
+    },
+    {
+      "header": "Amount",
+      "role": "amount",
+      "confidence": 90
+    }
+  ],
+  "sample": [
+    [
+      "02.10.2026",
+      "Coffee",
+      "-3.50"
+    ],
+    [
+      "03.10.2026",
+      "Salary",
+      "2500.00"
+    ],
+    [
+      "04.10.2026",
+      "Books",
+      "-12.99"
+    ]
+  ],
+  "warnings": []
+}

@@ -8,8 +8,11 @@ import (
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/importing"
+	"github.com/0xballo/fui/internal/config"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 	"github.com/0xballo/fui/internal/testutil/memstore"
+	"github.com/0xballo/fui/internal/tui/screens/settings/lists"
 	"github.com/0xballo/fui/pkg/fuiproto"
 )
 
@@ -129,7 +132,7 @@ func newFixture() fixture {
 	backup := &stubBackup{}
 	svc := app.New(store, clock, backup, app.Config{Locale: domain.LocaleENUS, Location: time.UTC, BaseCurrency: cur})
 	connectors := newFakeConnectors()
-	imp := importing.New(store, clock, backup, connectors)
+	imp := importing.New(store, clock, backup, connectors).WithCSVDetector(fakeDetector{})
 	return fixture{Service: svc, imp: imp, store: store, connectors: connectors}
 }
 
@@ -143,6 +146,46 @@ func (f fixture) PlanImport(ctx context.Context, req importing.PlanRequest) (imp
 	return f.imp.PlanImport(ctx, req)
 }
 
-func (f fixture) ApplyImport(ctx context.Context, p importing.ImportPlan) (importing.ImportResult, error) {
-	return f.imp.ApplyImport(ctx, p)
+func (f fixture) ApplyImportWith(ctx context.Context, p importing.ImportPlan, opts importing.ApplyOptions) (importing.ImportResult, error) {
+	return f.imp.ApplyImportWith(ctx, p, opts)
+}
+
+func (f fixture) DetectCSV(ctx context.Context, file string) (importing.CSVSuggestion, error) {
+	return f.imp.DetectCSV(ctx, file)
+}
+
+// fakeDetector suggests a fixed profile for any file.
+type fakeDetector struct{}
+
+func (fakeDetector) DetectCSV(context.Context, string) (importing.CSVSuggestion, error) {
+	return importing.CSVSuggestion{
+		Profile: config.CSVProfile{
+			DateColumn: "Date", AmountColumn: "Amount", DescriptionColumn: "Memo",
+			Delimiter: ",", DateFormat: "2006-01-02", DecimalSeparator: ".",
+		},
+		Delimiter: ',', DateFormat: "2006-01-02", DecimalSep: '.', HasHeader: true,
+		Columns: []importing.ColumnGuess{
+			{Header: "Date", Role: importing.RoleDate},
+			{Header: "Amount", Role: importing.RoleAmount},
+			{Header: "Memo", Role: importing.RoleDescription},
+			{Header: "Ref", Role: importing.RoleOther},
+		},
+		Sample: [][]string{{"2026-06-01", "-10.00", "Pizza", "a1"}, {"2026-06-02", "500.00", "Salary", "a2"}},
+	}, nil
+}
+
+// recordingProfiles is a ProfileSaver that keeps what it was asked to save.
+type recordingProfiles struct{ saved []lists.Profile }
+
+func (r *recordingProfiles) SaveProfile(p lists.Profile) error {
+	r.saved = append(r.saved, p)
+	return nil
+}
+
+// recordingModules is an app.ModuleConfigWriter that keeps the module lists it persisted.
+type recordingModules struct{ calls [][]module.ID }
+
+func (r *recordingModules) SetModulesEnabled(_ context.Context, ids []module.ID) error {
+	r.calls = append(r.calls, ids)
+	return nil
 }

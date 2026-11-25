@@ -227,3 +227,37 @@ func testRuleTransaction(t *testing.T, accountID AccountID, minor int64) Transac
 	}
 	return tx
 }
+
+func TestApplyWithHint(t *testing.T) {
+	rule := func(name string, c RuleConditions, cat CategoryID) Rule {
+		return Rule{Name: name, Enabled: true, Conditions: c, Actions: RuleActions{CategoryID: cat}}
+	}
+	rules := []Rule{
+		rule("eq", RuleConditions{HintEquals: " Groceries "}, 1),
+		rule("has", RuleConditions{HintContains: "FUEL"}, 2),
+	}
+	tests := []struct {
+		name, hint string
+		want       CategoryID
+	}{
+		{"equals is case-insensitive", "GROCERIES", 1},
+		{"equals is not a substring match", "groceries and more", 0},
+		{"contains", "Car fuel station", 2},
+		{"no hint never matches", "", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ApplyWithHint(rules, testRuleTransaction(t, 7, -100), "x", tt.hint)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.CategoryID != tt.want {
+				t.Fatalf("category = %d, want %d", got.CategoryID, tt.want)
+			}
+		})
+	}
+	// Plain Apply carries no hint.
+	if got, _ := Apply(rules, testRuleTransaction(t, 7, -100), "x"); got.CategoryID != 0 {
+		t.Fatalf("Apply matched a hint rule: %+v", got)
+	}
+}

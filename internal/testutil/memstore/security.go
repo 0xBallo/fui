@@ -229,6 +229,19 @@ func (s securities) ListOpsBySecurity(_ context.Context, id domain.SecurityID, f
 	return out, nil
 }
 
+func (s securities) ListOpsByBatch(_ context.Context, batch domain.ImportBatchID) ([]domain.SecurityOp, error) {
+	var out []domain.SecurityOp
+	for _, op := range s.st.SecOps {
+		if batch != 0 && op.ImportBatchID == batch {
+			out = append(out, op)
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.SecurityOp) int {
+		return cmp.Or(a.Date.Cmp(b.Date), cmp.Compare(a.ID, b.ID))
+	})
+	return out, nil
+}
+
 func inUse(what string, id any) error {
 	return fmt.Errorf("%s %v is referenced: %w", what, id, app.ErrInUse)
 }

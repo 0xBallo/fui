@@ -55,6 +55,7 @@ type Service struct {
 	clock      app.Clock
 	backup     app.Backuper
 	connectors Connectors
+	detector   CSVDetector
 }
 
 // New builds a Service. connectors may be nil when only file sources are planned.
@@ -86,6 +87,8 @@ type stream struct {
 	result fuiproto.ValidationResult
 	lines  map[*fuiproto.TransactionRecord]int
 	sec    map[*fuiproto.SecurityOpRecord]int
+	sched  map[*fuiproto.ScheduleRecord]int
+	inst   map[*fuiproto.InstallmentRecord]int
 	stderr string
 }
 
@@ -95,6 +98,8 @@ func readStream(ctx context.Context, src Source) (stream, error) {
 	st := stream{
 		lines: map[*fuiproto.TransactionRecord]int{},
 		sec:   map[*fuiproto.SecurityOpRecord]int{},
+		sched: map[*fuiproto.ScheduleRecord]int{},
+		inst:  map[*fuiproto.InstallmentRecord]int{},
 	}
 	var srcErr error
 	line := 0
@@ -107,6 +112,10 @@ func readStream(ctx context.Context, src Source) (stream, error) {
 				st.lines[rec.Transaction] = line
 			} else if rec.SecurityOp != nil {
 				st.sec[rec.SecurityOp] = line
+			} else if rec.Schedule != nil {
+				st.sched[rec.Schedule] = line
+			} else if rec.Installment != nil {
+				st.inst[rec.Installment] = line
 			}
 			if !yield(rec, err) {
 				return

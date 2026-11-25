@@ -414,6 +414,8 @@ type SecurityRepo interface {
 	// ListOpsBySecurity returns operations of security in [from,to], ordered by date then ID.
 	// A zero from or to means unbounded on that side.
 	ListOpsBySecurity(ctx context.Context, securityID domain.SecurityID, from, to domain.Date) ([]domain.SecurityOp, error)
+	// ListOpsByBatch returns the operations created by an import batch, ordered by date then ID.
+	ListOpsByBatch(ctx context.Context, batch domain.ImportBatchID) ([]domain.SecurityOp, error)
 }
 
 // AssetRepo stores manually valued assets and their valuation history. Asset names are unique

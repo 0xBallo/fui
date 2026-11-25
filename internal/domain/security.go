@@ -130,6 +130,8 @@ type SecurityOp struct {
 	UnitPrice Money
 	Fees      Money
 	CashTx    TransactionID // optional linked liquidity movement
+
+	ImportBatchID ImportBatchID // import that created the operation, 0 when none
 }
 
 // NewSecurityOp validates op: known kind, set date, account and security,

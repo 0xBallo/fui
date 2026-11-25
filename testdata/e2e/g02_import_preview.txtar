@@ -1,0 +1,56 @@
+# G02: the import preview lists warnings, new entities, transfer proposals, balance mismatches and
+# the records of disabled modules; --accept-transfers and --enable-modules settle them.
+exec fui init --preset expense --currency EUR
+exec fui account add AccountA --kind checking --currency EUR
+exec fui account add AccountB --kind savings --currency EUR
+
+exec fui import s.fui.jsonl --map a=AccountA --map b=AccountB --dry-run
+stdout 'new tag: weekly'
+stdout 'new payee: Corner Shop'
+stdout 'transfer proposal: #0 row 0 <-> row 1 \(amount_date, not accepted\)'
+stdout 'module investments is disabled: 1 record\(s\) \(security_op\)'
+stdout 'warning: line 8:'
+stdout 'balance mismatch: a on 2026-10-05: statement 99999'
+stdout 'fui reconcile'
+
+exec fui import s.fui.jsonl --map a=AccountA --map b=AccountB --dry-run --json
+stdout '"transfers":\[\{"row":0,"other":1,"reason":"amount_date","accept":false\}\]'
+stdout '"new_tags":\["weekly"\]'
+stdout '"new_payees":\["Corner Shop"\]'
+stdout '"module_records":\[\{"module":"investments","count":1'
+stdout '"balance_mismatches":\[\{"account_ref":"a"'
+stdout '"warnings":\[\{"line":8'
+
+# Without flags the transfer is skipped with a warning and the module records are skipped.
+exec fui import s.fui.jsonl --map a=AccountA --map b=AccountB --yes
+stderr 'transfer proposal\(s\) skipped'
+stdout 'warning: line 8:'
+exec fui import undo 1 --yes
+
+# --accept-transfers links the legs; --enable-modules brings the security operation in.
+exec fui import s.fui.jsonl --map a=AccountA --map b=AccountB --accept-transfers --enable-modules investments --yes --json
+stdout '"transfers":1'
+! stdout '"warnings"'
+exec fui module list --json
+stdout 'investments'
+exec fui tx show 3
+stdout 'original: USD'
+stdout 'raw: .*memo'
+exec fui tx show 3 --json
+stdout '"original":\{"amount":-1400,"currency":"USD"\}'
+stdout '"raw":"\{.*memo'
+
+# The batch with a security operation can be undone.
+exec fui import undo 1 --yes --json
+stdout '"removed_transactions"'
+
+-- s.fui.jsonl --
+{"type":"meta","protocol":"fui/1","connector":"bank","version":"1","source":{"file":"s.fui.jsonl"}}
+{"type":"account","ref":"a","name":"AccountA","currency":"EUR","kind":"checking"}
+{"type":"account","ref":"b","name":"AccountB","currency":"EUR","kind":"savings"}
+{"type":"transaction","account":"a","id":"t1","date":"2026-10-01","amount":-5000,"currency":"EUR","description":"to B","status":"booked","kind":"transfer"}
+{"type":"transaction","account":"b","id":"t2","date":"2026-10-02","amount":5000,"currency":"EUR","description":"from A","status":"booked","kind":"transfer"}
+{"type":"transaction","account":"a","id":"t3","date":"2026-10-03","amount":-1200,"currency":"EUR","description":"Shop","payee":"Corner Shop","status":"booked","category":"Groceries","tags":["weekly"],"original":{"amount":-1400,"currency":"USD"},"raw":{"memo":"x"}}
+{"type":"balance","account":"a","date":"2026-10-05","amount":99999}
+{"type":"security_op","account":"a","date":"2026-10-04","kind":"buy","quantity":10,"unit_price":100,"security":{"name":"ACME","ticker":"ACME","currency":"EUR","kind":"stock","quantity_scale":0}}
+{"type":"end","transactions":3,"errors":0}

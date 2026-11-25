@@ -30,6 +30,8 @@ func New(store app.Store, backup app.Backuper) *Service {
 type ConditionsSpec struct {
 	DescriptionContains string
 	DescriptionEquals   string
+	HintContains        string
+	HintEquals          string
 	MinAbsMinor         *int64
 	MaxAbsMinor         *int64
 	Sign                string // any, inflow or outflow; empty means any
@@ -207,6 +209,7 @@ func build(ctx context.Context, r app.Repos, name string, prio int, enabled bool
 func conditions(ctx context.Context, r app.Repos, c ConditionsSpec) (domain.RuleConditions, error) {
 	out := domain.RuleConditions{
 		DescriptionContains: c.DescriptionContains, DescriptionEquals: c.DescriptionEquals,
+		HintContains: c.HintContains, HintEquals: c.HintEquals,
 		Amount: domain.RuleAmountRange{MinAbsMinor: c.MinAbsMinor, MaxAbsMinor: c.MaxAbsMinor, Sign: domain.RuleAmountSign(strings.ToLower(c.Sign))},
 	}
 	if len(c.Accounts) == 0 {

@@ -278,3 +278,32 @@ func TestPlanApplyDoesNotWrite(t *testing.T) {
 		t.Fatal("PlanApply wrote")
 	}
 }
+
+func TestHintConditionsCarriedThroughAddEdit(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	r := e.add(t, rules.AddRequest{
+		Name: "hinted", Priority: 1,
+		Conditions: rules.ConditionsSpec{HintContains: " Gro ", HintEquals: "Groceries"},
+		Actions:    rules.ActionsSpec{Category: "food"},
+	})
+	if r.Conditions.HintContains != "gro" || r.Conditions.HintEquals != "groceries" {
+		t.Fatalf("hint conditions = %+v, want normalized gro/groceries", r.Conditions)
+	}
+
+	newConds := rules.ConditionsSpec{HintEquals: "Transport"}
+	p, err := e.svc.PlanEdit(ctx, rules.EditRequest{Name: "hinted", Conditions: &newConds})
+	if err != nil {
+		t.Fatalf("PlanEdit: %v", err)
+	}
+	if err := e.svc.ApplyEdit(ctx, p); err != nil {
+		t.Fatalf("ApplyEdit: %v", err)
+	}
+	list, err := e.svc.List(ctx)
+	if err != nil || len(list) != 1 {
+		t.Fatalf("List = %v, %v", list, err)
+	}
+	if c := list[0].Conditions; c.HintContains != "" || c.HintEquals != "transport" {
+		t.Fatalf("edited hint conditions = %+v", c)
+	}
+}

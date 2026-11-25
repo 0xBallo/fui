@@ -6,8 +6,10 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 	"github.com/0xballo/fui/internal/tui/components"
 	"github.com/0xballo/fui/internal/tui/screens"
 	"github.com/0xballo/fui/internal/tui/theme"
@@ -23,6 +25,8 @@ const (
 	modePreview
 	modeConfirm
 	modeResult
+	modeModules
+	modeCSVMap
 )
 
 // createAccountOption is the mapping suggestion meaning "create a new account for this ref",
@@ -63,6 +67,19 @@ type Model struct {
 	confirm components.ConfirmDialog
 
 	result importing.ImportResult
+
+	// details is true while the preview shows the sections (warnings, transfers...) instead of
+	// the row table.
+	details       bool
+	detailLines   []detailLine
+	detailCursor  int
+	enableModules map[module.ID]bool
+	moduleCursor  int
+
+	modules      module.Set
+	moduleWriter app.ModuleConfigWriter
+	profiles     ProfileSaver
+	csv          csvMapper
 }
 
 var _ screens.Screen = (*Model)(nil)
@@ -78,6 +95,16 @@ func New(uc UseCases, loc domain.Locale, th theme.Theme) *Model {
 	m.mode = modeIdle
 	return m
 }
+
+// SetModules gives the screen the enabled module set and the writer that persists enabling a
+// module from the module dialog; without a writer the dialog only reports what is skipped.
+func (m *Model) SetModules(enabled module.Set, w app.ModuleConfigWriter) {
+	m.modules, m.moduleWriter = enabled, w
+}
+
+// SetProfiles gives the screen the port that saves the CSV profiles built by the column mapper;
+// without it the mapper is not offered.
+func (m *Model) SetProfiles(p ProfileSaver) { m.profiles = p }
 
 // Init loads the discovered connectors, to suggest them on the source form.
 func (m *Model) Init() tea.Cmd { return m.loadConnectors() }
@@ -97,7 +124,9 @@ func (m *Model) Title() string { return "Import" }
 func (m *Model) KeyMap() []key.Binding { return m.km.Bindings() }
 
 // InputActive reports whether the source or mapping form is capturing keystrokes.
-func (m *Model) InputActive() bool { return m.mode == modeSource || m.mode == modeMapping }
+func (m *Model) InputActive() bool {
+	return m.mode == modeSource || m.mode == modeMapping || m.mode == modeCSVMap
+}
 
 // connectorsLoadedMsg carries the discovered connectors back into Update.
 type connectorsLoadedMsg struct{ connectors []importing.ConnectorInfo }
@@ -124,9 +153,13 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	case mappingAccountsMsg:
 		m.openMappingForm(msg.accounts)
 		return m, nil
+	case csvDetectedMsg:
+		m.openCSVMapper(msg.sug)
+		return m, nil
 	case resultMsg:
 		m.result = msg.result
 		m.mode = modeResult
+		m.afterModulesEnabled()
 		return m, nil
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -149,6 +182,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		return m.handlePreviewKey(msg)
 	case modeConfirm:
 		return m.handleConfirmKey(msg)
+	case modeModules:
+		return m.handleModulesKey(msg)
+	case modeCSVMap:
+		return m.handleCSVMapKey(msg)
 	case modeResult:
 		return m.handleResultKey(msg)
 	}
@@ -176,8 +213,9 @@ func (m *Model) handleResultKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 
 func (m *Model) submitApply() tea.Cmd {
 	plan := m.plan
+	opts := m.applyOptions()
 	return func() tea.Msg {
-		res, err := m.uc.ApplyImport(context.Background(), plan)
+		res, err := m.uc.ApplyImportWith(context.Background(), plan, opts)
 		if err != nil {
 			return screens.ErrorMsg{Err: err}
 		}
@@ -201,6 +239,10 @@ func (m *Model) View() string {
 		return m.viewPreview()
 	case modeConfirm:
 		return components.Modal(m.th, m.width, m.height, m.confirm.View())
+	case modeModules:
+		return components.Modal(m.th, m.width, m.height, m.viewModules())
+	case modeCSVMap:
+		return components.Modal(m.th, m.width, m.height, m.viewCSVMap())
 	case modeResult:
 		return m.viewResult()
 	}

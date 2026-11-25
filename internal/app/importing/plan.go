@@ -5,6 +5,7 @@ import (
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 )
 
 // EntityImportBatch is the Change.Entity of the batch an import creates.
@@ -47,6 +48,9 @@ type Row struct {
 	Transfer   string   // transfer label shared by the two legs, as written in the stream
 	Matched    []domain.TransactionID
 	Rules      RuleEffect // what the categorization rules set on this row
+	// Hint is the source's category hint: only the rules' hint conditions see it, it never sets
+	// the category by itself.
+	Hint string
 	// ConfirmsPending is set when the row matches a pending transaction a recurrence created
 	// (recurring module only): applying it books that transaction instead of inserting a new one.
 	ConfirmsPending domain.TransactionID
@@ -79,6 +83,18 @@ type SecurityOpPlanRow struct {
 	Op         domain.SecurityOp
 	CashTx     string // stream transaction id in SecurityOpRecord.cash_tx
 	Include    bool
+	// Module is set when the record belongs to a module that is not enabled: it is imported
+	// only if ApplyOptions.EnableModules names it, and skipped with a warning otherwise.
+	Module module.ID
+}
+
+// ModuleRecords lists the records of one module that is not enabled, so that the user can
+// enable the module or skip them. Schedules and installments are only detected, never imported.
+type ModuleRecords struct {
+	Module module.ID
+	Count  int
+	Kinds  []string // record types, in stream order of first appearance
+	Lines  []int
 }
 
 // TransferProposal suggests linking an incoming leg to another movement as a transfer. It is
@@ -101,6 +117,29 @@ type BalanceDiscrepancy struct {
 	Actual     int64
 }
 
+// BalanceMismatch is a statement balance record of an existing account that differs from the
+// balance computed at that date (archive plus the rows the import adds).
+type BalanceMismatch struct {
+	AccountRef string
+	AccountID  domain.AccountID
+	Date       domain.Date
+	Expected   int64 // balance stated by the stream
+	Computed   int64
+	Suggest    string // the reconcile command that records the stated balance
+}
+
+// BalanceCheck is a statement balance record of an existing account, with the balance the
+// archive alone has at that date: the plan rows included at any time are added on top of Base.
+type BalanceCheck struct {
+	AccountRef  string
+	AccountID   domain.AccountID
+	AccountName string
+	Currency    domain.Currency
+	Date        domain.Date
+	Expected    int64
+	Base        int64
+}
+
 // ImportPlan is the plain-data result of PlanImport: what ApplyImport will do.
 type ImportPlan struct {
 	app.Plan
@@ -121,7 +160,13 @@ type ImportPlan struct {
 	Errors          []RowError
 	Warnings        []RowWarning
 	Transfers       []TransferProposal
+	ModuleRecords   []ModuleRecords
 	Discrepancies   []BalanceDiscrepancy
+	// BalanceMismatches lists balance records of existing accounts the computed balance contradicts;
+	// refresh recomputes it from BalanceChecks whenever the included rows change.
+	BalanceMismatches []BalanceMismatch
+	// BalanceChecks holds the statement balances of existing accounts with what the archive alone sums to.
+	BalanceChecks []BalanceCheck
 	// Stderr is what the connector wrote on stderr, for --verbose.
 	Stderr string
 }
@@ -160,9 +205,19 @@ func (p *ImportPlan) SetInclude(i int, include bool) error {
 	return nil
 }
 
+// SetAcceptTransfer accepts or rejects the transfer proposal i; an accepted one is linked on apply.
+func (p *ImportPlan) SetAcceptTransfer(i int, accept bool) error {
+	if i < 0 || i >= len(p.Transfers) {
+		return fmt.Errorf("transfer proposal %d: %w", i, domain.ErrNotFound)
+	}
+	p.Transfers[i].Accept = accept
+	return nil
+}
+
 // refresh recomputes Changes from the other fields. Importing always asks for confirmation:
 // Bulk is set, and ApplyImport takes the backup itself.
 func (p *ImportPlan) refresh() {
+	p.refreshBalanceMismatches()
 	changes := make([]app.Change, 0, len(p.NewAccounts)+len(p.NewCategories)+len(p.NewPayees)+len(p.NewTags)+len(p.NewSecurities)+3)
 	changes = p.appendEntityCreates(changes)
 	secOps := p.includedSecurityOps()
@@ -236,7 +291,7 @@ func (p *ImportPlan) appendEntityCreates(changes []app.Change) []app.Change {
 func (p *ImportPlan) includedSecurityOps() int {
 	n := 0
 	for _, row := range p.SecurityOps {
-		if row.Include {
+		if row.Include && row.Module == "" {
 			n++
 		}
 	}
