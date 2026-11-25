@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -44,7 +45,7 @@ func (c *Config) Validate() error {
 	if err := validateTimeout(c.Connectors.Timeout); err != nil {
 		return err
 	}
-	if err := validateForecastHorizon(c.Forecast.Horizon); err != nil {
+	if err := validateForecastHorizon(string(c.Forecast.Horizon)); err != nil {
 		return err
 	}
 	if err := validateInsights(c); err != nil {
@@ -135,11 +136,24 @@ func validateTimeout(d Duration) error {
 	return nil
 }
 
-func validateForecastHorizon(days int) error {
-	if days <= 0 {
-		return fmt.Errorf("invalid value for key %q: %d (must be greater than 0)", "forecast.horizon", days)
+func validateForecastHorizon(value string) error {
+	_, err := normalizeHorizon("forecast.horizon", value)
+	return err
+}
+
+// normalizeHorizon checks value is "Nd", "Nw", "Nm" or a bare number of days (N > 0) and returns
+// it with the unit made explicit.
+func normalizeHorizon(key, value string) (string, error) {
+	in := strings.TrimSpace(value)
+	digits, unit := in, "d"
+	if in != "" && strings.ContainsRune("dwm", rune(in[len(in)-1])) {
+		digits, unit = in[:len(in)-1], in[len(in)-1:]
 	}
-	return nil
+	n, err := strconv.Atoi(digits)
+	if err != nil || n <= 0 || digits[0] == '+' {
+		return "", fmt.Errorf("invalid value for key %q: %q (expected Nd, Nw, Nm or a number of days greater than 0)", key, value)
+	}
+	return strconv.Itoa(n) + unit, nil
 }
 
 func validateModulesEnabled(ids []module.ID) error {

@@ -121,7 +121,26 @@ type ImportConfig struct {
 
 // ForecastConfig holds forecast settings.
 type ForecastConfig struct {
-	Horizon int `toml:"horizon"`
+	Horizon    ForecastHorizon `toml:"horizon"`
+	MinBalance string          `toml:"min_balance"`
+}
+
+// ForecastHorizon is the forecast span: "Nd", "Nw", "Nm" or a bare number of days. Files written
+// before the unit existed hold an integer (days), which is read as "Nd".
+type ForecastHorizon string
+
+// UnmarshalTOML accepts both the legacy integer and the string form.
+func (h *ForecastHorizon) UnmarshalTOML(data []byte) error {
+	raw := strings.TrimSpace(string(data))
+	if len(raw) >= 2 && (raw[0] == '"' || raw[0] == '\'') && raw[len(raw)-1] == raw[0] {
+		raw = raw[1 : len(raw)-1]
+	}
+	v, err := normalizeHorizon("forecast.horizon", raw)
+	if err != nil {
+		return err
+	}
+	*h = ForecastHorizon(v)
+	return nil
 }
 
 // ModulesConfig holds enabled module ids.
