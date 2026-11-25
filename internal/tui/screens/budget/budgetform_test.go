@@ -184,3 +184,16 @@ func TestBudgetFormKeepsOpenOnError(t *testing.T) {
 		}
 	}
 }
+
+// TestEditFormPrefillsTargets checks that the edit form shows the budget's current categories as
+// chips, resolved from their ids.
+func TestEditFormPrefillsTargets(t *testing.T) {
+	h := capHarness(t)
+	s := newFixture(t, h)
+	s = run(t, s, s.Init())
+	s, cmd := sendRunes(s, "e")
+	s = run(t, s, cmd)
+	if v := plain(s); !strings.Contains(v, "Edit budget") || strings.Count(v, "Groceries") < 2 {
+		t.Fatalf("edit form lacks the current target chip (name + chip):\n%s", v)
+	}
+}

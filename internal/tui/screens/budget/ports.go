@@ -26,4 +26,6 @@ type UseCases interface {
 	Tags(ctx context.Context) ([]string, error)
 	// Today dates assignments and moves made while the month on screen contains it.
 	Today() (domain.Date, error)
+	// TargetNames resolves the category and tag ids of budget targets to their names.
+	TargetNames(ctx context.Context, targets []domain.BudgetTarget) (cats, tags []string, err error)
 }

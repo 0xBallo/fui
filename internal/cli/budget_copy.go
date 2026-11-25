@@ -13,7 +13,7 @@ import (
 func newBudgetCopyCmd(deps *Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "copy",
-		Short:   "Copy a month's budgets into another month",
+		Short:   "Copy a month's budgets into another month (yearly budgets are not copied)",
 		Args:    noArgs(),
 		Example: "  fui budget copy --from 2026-10 --to 2026-11",
 		RunE: func(cmd *cobra.Command, _ []string) error {

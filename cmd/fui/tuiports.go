@@ -71,6 +71,30 @@ func (u budgetUseCases) Tags(ctx context.Context) ([]string, error) {
 	return out, nil
 }
 
+func (u budgetUseCases) TargetNames(ctx context.Context, targets []domain.BudgetTarget) (cats, tags []string, err error) {
+	allCats, err := u.lists.ListCategories(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list categories: %w", err)
+	}
+	allTags, err := u.lists.ListTags(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list tags: %w", err)
+	}
+	for _, t := range targets {
+		for _, c := range allCats {
+			if t.CategoryID != 0 && c.ID == t.CategoryID {
+				cats = append(cats, c.Name)
+			}
+		}
+		for _, g := range allTags {
+			if t.TagID != 0 && g.ID == t.TagID {
+				tags = append(tags, g.Name)
+			}
+		}
+	}
+	return cats, tags, nil
+}
+
 func (u budgetUseCases) Today() (domain.Date, error) { return u.today() }
 
 func (u budgetUseCases) ApplyCopyPrevious(ctx context.Context, p budgeting.CopyPlan) error {

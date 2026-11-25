@@ -62,22 +62,32 @@ type budgetFields struct {
 }
 
 // namesLoadedMsg carries the existing category and tag names for the pickers.
-type namesLoadedMsg struct{ cats, tags []string }
+type namesLoadedMsg struct {
+	cats, tags       []string
+	curCats, curTags []string // names of the targets of the budget being edited
+}
 
 func (b *budgetFields) setSuggestions(n namesLoadedMsg) {
 	b.cats.all, b.tags.all = n.cats, n.tags
+	if len(b.cats.chosen)+len(b.tags.chosen) == 0 {
+		b.cats.chosen, b.tags.chosen = n.curCats, n.curTags
+	}
 	b.cats.refreshSuggestions()
 	b.tags.refreshSuggestions()
 }
 
 // loadNames fetches the category and tag names off the Update path. A failure only costs the
 // suggestions, so it is not reported: typed names are still validated on submit.
-func (m *Model) loadNames() tea.Cmd {
+func (m *Model) loadNames(current []domain.BudgetTarget) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		cats, _ := m.uc.Categories(ctx)
 		tags, _ := m.uc.Tags(ctx)
-		return namesLoadedMsg{cats: cats, tags: tags}
+		msg := namesLoadedMsg{cats: cats, tags: tags}
+		if len(current) > 0 {
+			msg.curCats, msg.curTags, _ = m.uc.TargetNames(ctx, current)
+		}
+		return msg
 	}
 }
 
@@ -120,11 +130,12 @@ func (m *Model) openBudgetForm(md mode) tea.Cmd {
 	m.form = components.NewForm(fields...)
 	m.mode = md
 	m.form.Focus()
-	return m.loadNames()
+	return m.loadNames(cur.Targets)
 }
 
-// prefill fills the edit form from b. Targets are stored as ids, so the pickers start empty and
-// an empty picker keeps the current targets.
+// prefill fills the edit form from b. Targets are stored as ids: the chips are filled once their
+// names are resolved (namesLoadedMsg); until then, or if the user removes them all, an empty
+// picker keeps the current targets.
 func (m *Model) prefill(b domain.Budget) {
 	m.bf.cats.field.SetValue("")
 	m.bf.period.SetValue(string(b.Period))

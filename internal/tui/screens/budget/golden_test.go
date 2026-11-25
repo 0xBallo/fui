@@ -103,6 +103,7 @@ func TestBudgetGoldenViews(t *testing.T) {
 		{"Cap", capHarness, ""},
 		{"Empty", emptyHarness, ""},
 		{"NewForm", emptyHarness, "n"},
+		{"EditForm", capHarness, "e"},
 	}
 	themes := []string{"latte", "frappe", "macchiato", "mocha", "terminal", "high-contrast"}
 	for _, c := range cases {
