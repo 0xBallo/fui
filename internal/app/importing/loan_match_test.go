@@ -18,9 +18,9 @@ var (
 	bothOn    = must(module.Validate([]module.ID{module.Core, module.Recurring, module.Loans}))
 )
 
-// seedLoan creates a 12-month loan debited from acct and the pending installments due through
+// seedPendingLoan creates a 12-month loan debited from acct and the pending installments due through
 // 2026-03-01, which it returns ordered by date.
-func (e env) seedLoan(t tb, acct domain.Account) []domain.Transaction {
+func (e env) seedPendingLoan(t tb, acct domain.Account) []domain.Transaction {
 	t.Helper()
 	ctx := context.Background()
 	svc := lending.New(e.store, clock.NewFixed(date("2026-01-15").In(time.UTC)), e.backup, lending.Config{})
@@ -55,7 +55,7 @@ func debit(ref, id string, d domain.Date, amount int64) fuiproto.Record {
 func TestMatchInstallmentConfirmsPending(t *testing.T) {
 	e := newEnv(nil)
 	acct := e.seedAccount(t, "Main", "bank", "main")
-	pend := e.seedLoan(t, acct)
+	pend := e.seedPendingLoan(t, acct)
 	first := pend[0]
 
 	src := stream("bank", "sha", account("main", "Main", "EUR"),
@@ -108,7 +108,7 @@ func TestMatchInstallmentConfirmsPending(t *testing.T) {
 func TestMatchInstallmentOutsideWindow(t *testing.T) {
 	e := newEnv(nil)
 	acct := e.seedAccount(t, "Main", "bank", "main")
-	first := e.seedLoan(t, acct)[0]
+	first := e.seedPendingLoan(t, acct)[0]
 	late, err := first.Date.AddDays(10)
 	if err != nil {
 		t.Fatal(err)
@@ -123,7 +123,7 @@ func TestMatchInstallmentOutsideWindow(t *testing.T) {
 func TestMatchInstallmentGatedByModule(t *testing.T) {
 	e := newEnv(nil)
 	acct := e.seedAccount(t, "Main", "bank", "main")
-	first := e.seedLoan(t, acct)[0]
+	first := e.seedPendingLoan(t, acct)[0]
 	src := stream("bank", "sha", account("main", "Main", "EUR"), debit("main", "a", first.Date, first.Amount.Minor()))
 	for name, mods := range map[string]module.Set{"none": {}, "recurring only": recurOnly} {
 		row := e.plan(t, src, withModules(mods)).Rows[0]
@@ -136,7 +136,7 @@ func TestMatchInstallmentGatedByModule(t *testing.T) {
 func TestMatchInstallmentAndRecurrenceCandidates(t *testing.T) {
 	e := newEnv(nil)
 	acct := e.seedAccount(t, "Main", "bank", "main")
-	inst := e.seedLoan(t, acct)[0]
+	inst := e.seedPendingLoan(t, acct)[0]
 	rec := e.seedPendingRecurrenceTx(t, acct, date("2026-02-20"), -500, "Rent")
 
 	src := stream("bank", "sha", account("main", "Main", "EUR"),
@@ -166,7 +166,7 @@ func TestMatchInstallmentAndRecurrenceCandidates(t *testing.T) {
 func TestApplyInstallmentAmountMismatchWarns(t *testing.T) {
 	e := newEnv(nil)
 	acct := e.seedAccount(t, "Main", "bank", "main")
-	first := e.seedLoan(t, acct)[0]
+	first := e.seedPendingLoan(t, acct)[0]
 
 	// The bank debited more than the schedule: the pending tx is adjusted so it matches the row.
 	other := first
