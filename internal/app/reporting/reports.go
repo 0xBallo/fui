@@ -19,7 +19,14 @@ type ReportRequest struct {
 	Account string // balance-over-time: account name (archived accounts included)
 	Loan    string // remaining-debt: loan name; interest-paid: optional filter
 	Limit   int    // top-payees: number of rows, default 10
-	// Granularity is the bucket of the net-worth series; zero means month.
+	// Filter narrows the transactions the balance-over-time (accounts only), top-payees,
+	// spending and cash-flow reports count. Its From, To, Month and Year are ignored: the period
+	// is Period.
+	Filter app.ListTxRequest
+	// GroupBy is the dimension of the spending (default category) and cash-flow (default month)
+	// reports.
+	GroupBy domain.ReportGroup
+	// Granularity is the bucket of the balance-over-time and net-worth series; zero means month.
 	Granularity domain.Granularity
 }
 
@@ -43,7 +50,9 @@ type SeriesResult struct {
 
 func periodLabel(p domain.Period) string { return p.From().String() + ".." + p.To().String() }
 
-// BalanceOverTime reports the month-end balance of one account over the period.
+// BalanceOverTime reports the balance of one account at the end of every bucket of the period
+// (month by default, see ReportRequest.Granularity). The account is req.Account, or the
+// accounts of req.Filter, which are then summed and must share one currency.
 func (a *Analytics) BalanceOverTime(ctx context.Context, req ReportRequest) (SeriesResult, error) {
 	if err := a.gate(); err != nil {
 		return SeriesResult{}, err
@@ -58,20 +67,41 @@ func (a *Analytics) BalanceOverTime(ctx context.Context, req ReportRequest) (Ser
 		if err != nil {
 			return fmt.Errorf("list accounts: %w", err)
 		}
-		acct, err := pickAccount(accts, req.Account)
-		if err != nil {
-			return err
+		refs := req.Filter.Accounts
+		if req.Account != "" || len(refs) == 0 {
+			refs = []string{req.Account}
 		}
-		out, err = a.series(p, func(at domain.Date) (domain.Money, error) {
-			return balanceAt(ctx, r, acct, at)
+		picked := make([]domain.Account, 0, len(refs))
+		for _, ref := range refs {
+			acct, err := pickAccount(accts, ref)
+			if err != nil {
+				return err
+			}
+			picked = append(picked, acct)
+		}
+		out, err = a.series(p, req.Granularity, func(at domain.Date) (domain.Money, error) {
+			total := zeroMoney(picked[0].Currency)
+			for _, acct := range picked {
+				bal, err := balanceAt(ctx, r, acct, at)
+				if err != nil {
+					return domain.Money{}, err
+				}
+				if total, err = total.Add(bal); err != nil {
+					return domain.Money{}, err
+				}
+			}
+			return total, nil
 		})
 		return err
 	})
 	return out, err
 }
 
-func (a *Analytics) series(p domain.Period, at func(domain.Date) (domain.Money, error)) (SeriesResult, error) {
-	ends, err := a.monthEnds(p)
+func (a *Analytics) series(p domain.Period, gran domain.Granularity, at func(domain.Date) (domain.Money, error)) (SeriesResult, error) {
+	if gran == "" {
+		gran = domain.GranMonth
+	}
+	ends, err := gran.BucketEnds(p, a.cfg.MonthStartDay)
 	if err != nil {
 		return SeriesResult{}, err
 	}
@@ -127,7 +157,7 @@ func (a *Analytics) RemainingDebt(ctx context.Context, req ReportRequest) (DebtR
 			return err
 		}
 		out.Loan = loan.Name
-		out.SeriesResult, err = a.series(p, func(at domain.Date) (domain.Money, error) {
+		out.SeriesResult, err = a.series(p, req.Granularity, func(at domain.Date) (domain.Money, error) {
 			bal, err := balanceAt(ctx, r, acct, at)
 			if err != nil {
 				return domain.Money{}, err
@@ -317,13 +347,12 @@ func (a *Analytics) TopPayees(ctx context.Context, req ReportRequest) (PayeesRes
 	limit := cmp.Or(req.Limit, DefaultTopPayees)
 	out := PayeesResult{Period: periodLabel(p), Rows: []PayeeRow{}}
 	err = a.store.Read(ctx, func(r app.Repos) error {
-		f, err := domain.NewTxFilter(domain.TxFilterSpec{From: p.From(), To: p.To()})
+		txs, err := a.reportRows(ctx, r, req, p, rowOptions{
+			excludeKinds:    append([]domain.TxKind{domain.KindExchange}, transferKinds...),
+			defaultStatuses: []domain.TxStatus{domain.StatusBooked, domain.StatusReconciled},
+		})
 		if err != nil {
 			return err
-		}
-		txs, err := r.Transactions().List(ctx, f, nil, 0)
-		if err != nil {
-			return fmt.Errorf("list transactions: %w", err)
 		}
 		payees, err := r.Payees().List(ctx)
 		if err != nil {
@@ -351,16 +380,14 @@ func (a *Analytics) TopPayees(ctx context.Context, req ReportRequest) (PayeesRes
 }
 
 // payeeRows totals the spending of txs per payee, keeping the payees with a positive total.
-func (a *Analytics) payeeRows(ctx context.Context, r app.Repos, txs []domain.Transaction, names map[domain.PayeeID]string) ([]PayeeRow, domain.Money, error) {
+func (a *Analytics) payeeRows(ctx context.Context, r app.Repos, txs []reportRow, names map[domain.PayeeID]string) ([]PayeeRow, domain.Money, error) {
 	type acc struct {
 		total domain.Money
-		count int
+		seen  map[domain.TransactionID]struct{} // a split transaction counts once
 	}
 	by := map[domain.PayeeID]*acc{}
 	for _, t := range txs {
-		switch {
-		case t.PayeeID == 0, t.Status == domain.StatusPending,
-			t.Kind == domain.KindTransfer, t.Kind == domain.KindExchange, t.Kind == domain.KindInvestment:
+		if t.PayeeID == 0 {
 			continue
 		}
 		base, err := a.toBase(ctx, r, t.Amount, t.Date)
@@ -372,10 +399,10 @@ func (a *Analytics) payeeRows(ctx context.Context, r app.Repos, txs []domain.Tra
 		}
 		e := by[t.PayeeID]
 		if e == nil {
-			e = &acc{total: zeroMoney(a.cfg.BaseCurrency)}
+			e = &acc{total: zeroMoney(a.cfg.BaseCurrency), seen: map[domain.TransactionID]struct{}{}}
 			by[t.PayeeID] = e
 		}
-		e.count++
+		e.seen[t.ID] = struct{}{}
 		if e.total, err = e.total.Add(base); err != nil {
 			return nil, domain.Money{}, err
 		}
@@ -386,7 +413,7 @@ func (a *Analytics) payeeRows(ctx context.Context, r app.Repos, txs []domain.Tra
 		if e.total.Sign() <= 0 {
 			continue
 		}
-		rows = append(rows, PayeeRow{Payee: names[id], Total: amountOf(e.total), Count: e.count})
+		rows = append(rows, PayeeRow{Payee: names[id], Total: amountOf(e.total), Count: len(e.seen)})
 		var err error
 		if total, err = total.Add(e.total); err != nil {
 			return nil, domain.Money{}, err
