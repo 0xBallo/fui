@@ -55,6 +55,7 @@ type Service struct {
 	clock      app.Clock
 	backup     app.Backuper
 	connectors Connectors
+	detector   CSVDetector
 }
 
 // New builds a Service. connectors may be nil when only file sources are planned.

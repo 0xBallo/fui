@@ -1,0 +1,69 @@
+{
+  "profile": {
+    "DateColumn": "Date",
+    "AmountColumn": "Amount",
+    "DebitColumn": "",
+    "CreditColumn": "",
+    "DescriptionColumn": "Description",
+    "ExternalIDColumn": "Transaction ID",
+    "Delimiter": ",",
+    "Encoding": "",
+    "DateFormat": "YYYY-MM-DD",
+    "DecimalSeparator": ".",
+    "SkipRows": 0,
+    "TargetAccount": ""
+  },
+  "delimiter": 44,
+  "date_format": "YYYY-MM-DD",
+  "decimal_sep": 46,
+  "has_header": true,
+  "columns": [
+    {
+      "header": "Date",
+      "role": "date",
+      "confidence": 90
+    },
+    {
+      "header": "Description",
+      "role": "description",
+      "confidence": 90
+    },
+    {
+      "header": "Amount",
+      "role": "amount",
+      "confidence": 90
+    },
+    {
+      "header": "Transaction ID",
+      "role": "id",
+      "confidence": 90
+    }
+  ],
+  "sample": [
+    [
+      "2026-10-02",
+      "Coffee shop",
+      "-3.50",
+      "tx-1"
+    ],
+    [
+      "2026-10-03",
+      "Salary",
+      "2500.00",
+      "tx-2"
+    ],
+    [
+      "2026-10-04",
+      "Books, used",
+      "-12.99",
+      "tx-3"
+    ],
+    [
+      "2026-10-05",
+      "Refund",
+      "1200.5",
+      "tx-4"
+    ]
+  ],
+  "warnings": []
+}

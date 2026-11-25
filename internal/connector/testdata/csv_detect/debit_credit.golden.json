@@ -1,0 +1,69 @@
+{
+  "profile": {
+    "DateColumn": "Data",
+    "AmountColumn": "",
+    "DebitColumn": "Dare",
+    "CreditColumn": "Avere",
+    "DescriptionColumn": "Causale",
+    "ExternalIDColumn": "",
+    "Delimiter": ";",
+    "Encoding": "",
+    "DateFormat": "DD-MM-YY",
+    "DecimalSeparator": ",",
+    "SkipRows": 0,
+    "TargetAccount": ""
+  },
+  "delimiter": 59,
+  "date_format": "DD-MM-YY",
+  "decimal_sep": 44,
+  "has_header": true,
+  "columns": [
+    {
+      "header": "Data",
+      "role": "date",
+      "confidence": 90
+    },
+    {
+      "header": "Causale",
+      "role": "description",
+      "confidence": 90
+    },
+    {
+      "header": "Dare",
+      "role": "debit",
+      "confidence": 90
+    },
+    {
+      "header": "Avere",
+      "role": "credit",
+      "confidence": 90
+    }
+  ],
+  "sample": [
+    [
+      "02-10-26",
+      "Bolletta gas",
+      "60,00",
+      ""
+    ],
+    [
+      "03-10-26",
+      "Stipendio",
+      "",
+      "1500,00"
+    ],
+    [
+      "04-10-26",
+      "Spesa",
+      "35,40",
+      ""
+    ],
+    [
+      "05-10-26",
+      "Rimborso",
+      "",
+      "20,00"
+    ]
+  ],
+  "warnings": []
+}

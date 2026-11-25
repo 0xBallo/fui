@@ -1,0 +1,57 @@
+{
+  "profile": {
+    "DateColumn": "column 1",
+    "AmountColumn": "column 3",
+    "DebitColumn": "",
+    "CreditColumn": "",
+    "DescriptionColumn": "column 2",
+    "ExternalIDColumn": "",
+    "Delimiter": ",",
+    "Encoding": "",
+    "DateFormat": "YYYY-MM-DD",
+    "DecimalSeparator": ".",
+    "SkipRows": 0,
+    "TargetAccount": ""
+  },
+  "delimiter": 44,
+  "date_format": "YYYY-MM-DD",
+  "decimal_sep": 46,
+  "has_header": false,
+  "columns": [
+    {
+      "header": "column 1",
+      "role": "date",
+      "confidence": 80
+    },
+    {
+      "header": "column 2",
+      "role": "description",
+      "confidence": 40
+    },
+    {
+      "header": "column 3",
+      "role": "amount",
+      "confidence": 60
+    }
+  ],
+  "sample": [
+    [
+      "2026-10-02",
+      "Coffee shop",
+      "-3.50"
+    ],
+    [
+      "2026-10-03",
+      "Salary",
+      "2500.00"
+    ],
+    [
+      "2026-10-04",
+      "Books",
+      "-12.99"
+    ]
+  ],
+  "warnings": [
+    "the file has no header row: add one before importing, the profile names columns by header"
+  ]
+}

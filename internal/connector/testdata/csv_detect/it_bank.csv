@@ -1,0 +1,9 @@
+Estratto conto;;;;
+Intestatario: Mario Rossi;;;;
+Data contabile;Data valuta;Descrizione;Importo;Saldo
+02/10/2026;03/10/2026;Pagamento POS Supermercato;-45,30;1.954,70
+03/10/2026;03/10/2026;Bonifico stipendio;1.800,00;3.754,70
+05/10/2026;05/10/2026;Addebito utenza luce;-82,15;3.672,55
+07/10/2026;08/10/2026;Prelievo bancomat;-100,00;3.572,55
+09/10/2026;09/10/2026;Commissioni;-2,00;3.570,55
+10/10/2026;10/10/2026;Caffe;-1,20;3.569,35
