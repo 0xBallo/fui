@@ -13,12 +13,16 @@ import (
 func NewInvestCmd(deps *Deps, svc *investing.Service) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "invest",
-		Short: "Record buy, sell and dividend operations",
+		Short: "Record, list, edit and remove buy, sell, dividend and coupon operations",
 	}
 	cmd.AddCommand(
 		newInvestBuyCmd(deps, svc),
 		newInvestSellCmd(deps, svc),
 		newInvestDividendCmd(deps, svc),
+		newInvestCouponCmd(deps, svc),
+		newInvestListCmd(deps, svc),
+		newInvestEditCmd(deps, svc),
+		newInvestRemoveCmd(deps, svc),
 	)
 	annotateModule(cmd, module.Investments)
 	return cmd
@@ -104,7 +108,7 @@ func runInvestOp(cmd *cobra.Command, deps *Deps, svc *investing.Service, kind do
 	case domain.OpDividend:
 		plan, err = svc.PlanDividend(ctx, req)
 	case domain.OpCoupon:
-		fallthrough
+		plan, err = svc.PlanCoupon(ctx, req)
 	default:
 		return &domain.Error{Code: domain.CodeInvalidValue, Message: "unsupported operation kind"}
 	}

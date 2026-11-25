@@ -182,8 +182,13 @@ func wireStore(ctx context.Context, cfg *config.Config, appClock app.Clock, deps
 		_ = store.Close()
 		return nil, fmt.Errorf("parse base currency %q: %w", cfg.Currency, err)
 	}
+	modules, err := cfg.ModulesEnabled()
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("resolve modules.enabled: %w", err)
+	}
 	deps.Service = app.New(store, appClock, store, app.Config{
-		Locale: domain.Locale(cfg.Locale), BaseCurrency: baseCurrency,
+		Locale: domain.Locale(cfg.Locale), BaseCurrency: baseCurrency, Modules: modules,
 	})
 	rep, err := newReporting(store, store, appClock, cfg, baseCurrency)
 	if err != nil {
@@ -198,11 +203,6 @@ func wireStore(ctx context.Context, cfg *config.Config, appClock app.Clock, deps
 		Currency: cfg.Currency,
 	}).WithCSVDetector(connector.CSVFileDetector{})
 	deps.Rules = rules.New(store, store).WithClock(appClock)
-	modules, err := cfg.ModulesEnabled()
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("resolve modules.enabled: %w", err)
-	}
 	deps.Budgeting = budgeting.New(store, appClock, budgeting.Config{
 		Locale: domain.Locale(cfg.Locale), BaseCurrency: baseCurrency, MonthStartDay: cfg.MonthStartDay,
 		Mode: domain.BudgetMode(cfg.Budget.Mode), Modules: modules,

@@ -89,7 +89,7 @@ func securityPriceDTO(v SecurityPriceView) SecurityPriceDTO {
 func securityPriceRows(lines []SecurityPriceView, loc domain.Locale, machine bool) Rows {
 	t := Rows{Header: []string{"SECURITY_ID", "DATE", "PRICE", "CURRENCY"}, MoneyCols: []int{2}}
 	for _, line := range lines {
-		price := line.Price.String()
+		price := FormatPrice(line.Price, loc)
 		if machine {
 			price = line.Price.String()
 		}
@@ -143,7 +143,7 @@ func securityOpRows(ops []domain.SecurityOp, loc domain.Locale, machine bool) Ro
 		MoneyCols: []int{6, 7},
 	}
 	for _, op := range ops {
-		unitPrice := op.UnitPrice.String()
+		unitPrice := FormatPrice(op.UnitPrice, loc)
 		fees := FormatMoney(op.Fees, loc)
 		date := FormatDate(op.Date, loc)
 		if machine {
@@ -238,7 +238,7 @@ func positionRows(lines []investing.PositionLine, loc domain.Locale, machine boo
 		unrealized := "-"
 		value := "-"
 		if pos.HasPrice {
-			lastPrice = pos.LastPrice.String()
+			lastPrice = FormatPrice(pos.LastPrice, loc)
 			priceDate = FormatDate(pos.PriceDate, loc)
 			marketValue = FormatMoney(pos.MarketValue, loc)
 			unrealized = FormatMoney(pos.Unrealized, loc)

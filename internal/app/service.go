@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 )
 
 // Config holds the user settings the use cases depend on.
@@ -17,6 +18,7 @@ type Config struct {
 	Locale       domain.Locale  // number and date input format; default en-US
 	Location     *time.Location // zone that defines "today"; default time.Local
 	BaseCurrency domain.Currency
+	Modules      module.Set // enabled modules; gates wallet accounts on crypto
 }
 
 // Service runs the use cases over a Store.

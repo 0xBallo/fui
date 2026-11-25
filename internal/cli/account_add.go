@@ -18,7 +18,7 @@ func newAccountAddCmd(deps *Deps) *cobra.Command {
 		},
 	}
 	cmd.Flags().String("description", "", "description")
-	cmd.Flags().String("kind", "", "cash, checking, credit_card, savings, investment or loan")
+	cmd.Flags().String("kind", "", "cash, checking, credit_card, savings, investment, loan or wallet (needs the crypto module)")
 	cmd.Flags().String("currency", "", "ISO 4217 currency (required)")
 	cmd.Flags().String("opening-balance", "", "balance on opened-on (default: 0)")
 	cmd.Flags().String("opened-on", "", "date the account was opened (default: today)")
