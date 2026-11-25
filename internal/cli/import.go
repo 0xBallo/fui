@@ -48,17 +48,9 @@ func runImport(cmd *cobra.Command, deps *Deps, file string) error {
 	if err != nil {
 		return err
 	}
-	connector, err := importConnector(cmd, file)
+	req, err := importPlanRequest(cmd, deps, file)
 	if err != nil {
 		return err
-	}
-	mappings, err := parseMappings(cmd)
-	if err != nil {
-		return err
-	}
-	createAccounts, _ := cmd.Flags().GetBool("create-accounts")
-	req := importing.PlanRequest{
-		Connector: connector, Fetch: fetchRequest(cmd, file), CreateAccounts: createAccounts, Mappings: mappings,
 	}
 	ctx := cmd.Context()
 	plan, err := svc.PlanImport(ctx, req)
@@ -85,6 +77,37 @@ func runImport(cmd *cobra.Command, deps *Deps, file string) error {
 		}
 		return render.WriteImportResult(deps.Stdout, rt.format, res)
 	})
+}
+
+// importPlanRequest builds the plan request from the flags and the enabled modules.
+func importPlanRequest(cmd *cobra.Command, deps *Deps, file string) (importing.PlanRequest, error) {
+	connector, err := importConnector(cmd, file)
+	if err != nil {
+		return importing.PlanRequest{}, err
+	}
+	mappings, err := parseMappings(cmd)
+	if err != nil {
+		return importing.PlanRequest{}, err
+	}
+	createAccounts, _ := cmd.Flags().GetBool("create-accounts")
+	req := importing.PlanRequest{
+		Connector: connector, Fetch: fetchRequest(cmd, file), CreateAccounts: createAccounts, Mappings: mappings,
+	}
+	req.Modules, err = enabledImportModules(deps)
+	return req, err
+}
+
+// enabledImportModules returns the enabled modules the plan needs to gate module records and
+// installment matching; the zero set when there is no config.
+func enabledImportModules(deps *Deps) (module.Set, error) {
+	if deps.Config == nil {
+		return module.Set{}, nil
+	}
+	set, err := deps.Config.ModulesEnabled()
+	if err != nil {
+		return module.Set{}, fmt.Errorf("resolve modules.enabled: %w", err)
+	}
+	return set, nil
 }
 
 // importConnector returns --connector, defaulting to fui for .fui.jsonl files.
