@@ -32,11 +32,7 @@ var transferKinds = []domain.TxKind{domain.KindTransfer, domain.KindInvestment}
 // transaction; the category filter applies to each row after splitting, so a split transaction
 // matches by its split categories.
 func (a *Analytics) reportRows(ctx context.Context, r app.Repos, req ReportRequest, p domain.Period, opt rowOptions) ([]reportRow, error) {
-	filter := req.Filter
-	filter.From, filter.To, filter.Month, filter.Year = "", "", "", 0
-	spec, err := app.ResolveTxFilterSpec(ctx, r, a.clock, app.Config{
-		Locale: a.cfg.Locale, Location: a.cfg.Location, BaseCurrency: a.cfg.BaseCurrency,
-	}, filter)
+	spec, err := a.resolveFilter(ctx, r, req.Filter)
 	if err != nil {
 		return nil, err
 	}
@@ -82,6 +78,14 @@ func (a *Analytics) reportRows(ctx context.Context, r app.Repos, req ReportReque
 		out = append(out, rows...)
 	}
 	return out, nil
+}
+
+// resolveFilter resolves the names of filter into a spec, ignoring its period fields.
+func (a *Analytics) resolveFilter(ctx context.Context, r app.Repos, filter app.ListTxRequest) (domain.TxFilterSpec, error) {
+	filter.From, filter.To, filter.Month, filter.Year = "", "", "", 0
+	return app.ResolveTxFilterSpec(ctx, r, a.clock, app.Config{
+		Locale: a.cfg.Locale, Location: a.cfg.Location, BaseCurrency: a.cfg.BaseCurrency,
+	}, filter)
 }
 
 // splitRows expands t into one row per split (the transaction itself when it is not split),

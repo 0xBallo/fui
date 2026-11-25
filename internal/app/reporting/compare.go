@@ -8,11 +8,13 @@ import (
 	"github.com/0xballo/fui/internal/domain"
 )
 
-// CompareRequest names two relative periods (see ValidRelativePeriod); A defaults to last-month and
-// B to this-month. ByCategory adds one row per category.
+// CompareRequest names two periods (see ValidPeriodSpec); A defaults to last-month and
+// B to this-month. ByCategory adds one row per category. Filter narrows the transactions
+// counted; its period fields are ignored.
 type CompareRequest struct {
 	A, B       string
 	ByCategory bool
+	Filter     app.ListTxRequest
 }
 
 // CompareRowView is one comparison line; DeltaPermille is null when A is zero.
@@ -47,25 +49,20 @@ func (a *Analytics) ComparePeriods(ctx context.Context, req CompareRequest) (Com
 	if err != nil {
 		return CompareReport{}, err
 	}
-	pa, err := ResolveRelative(req.A, today, a.cfg.MonthStartDay)
+	pa, err := ResolvePeriodSpec(req.A, today, a.cfg.MonthStartDay)
 	if err != nil {
 		return CompareReport{}, err
 	}
-	pb, err := ResolveRelative(req.B, today, a.cfg.MonthStartDay)
+	pb, err := ResolvePeriodSpec(req.B, today, a.cfg.MonthStartDay)
 	if err != nil {
 		return CompareReport{}, err
 	}
 	out := CompareReport{A: periodText(pa), B: periodText(pb), Rows: []CompareRowView{}}
 	from, to := span(pa, pb)
 	err = a.store.Read(ctx, func(r app.Repos) error {
-		txs, err := bookedSplit(ctx, r, domain.TxFilterSpec{From: from, To: to})
+		txs, err := a.compareRows(ctx, r, req.Filter, from, to)
 		if err != nil {
 			return err
-		}
-		for j, t := range txs {
-			if txs[j].Amount, err = a.toBase(ctx, r, t.Amount, t.Date); err != nil {
-				return err
-			}
 		}
 		cmp, err := domain.ComparePeriods(pa, pb, txs, req.ByCategory)
 		if err != nil {
@@ -91,6 +88,29 @@ func (a *Analytics) ComparePeriods(ctx context.Context, req CompareRequest) (Com
 		return nil
 	})
 	return out, err
+}
+
+// compareRows lists the booked and reconciled rows matching filter in [from, to], one per split,
+// converted to the base currency.
+func (a *Analytics) compareRows(ctx context.Context, r app.Repos, filter app.ListTxRequest, from, to domain.Date) ([]domain.Transaction, error) {
+	p, err := domain.NewPeriod(from, to)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := a.reportRows(ctx, r, ReportRequest{Filter: filter}, p, rowOptions{
+		defaultStatuses: []domain.TxStatus{domain.StatusBooked, domain.StatusReconciled},
+	})
+	if err != nil {
+		return nil, err
+	}
+	txs := make([]domain.Transaction, len(rows))
+	for i, row := range rows {
+		txs[i] = row.Transaction
+		if txs[i].Amount, err = a.toBase(ctx, r, row.Amount, row.Date); err != nil {
+			return nil, err
+		}
+	}
+	return txs, nil
 }
 
 func rowView(r domain.CompareRow) CompareRowView {
