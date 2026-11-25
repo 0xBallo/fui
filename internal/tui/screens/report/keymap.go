@@ -11,6 +11,7 @@ type KeyMap struct {
 	Refresh  key.Binding
 	Drill    key.Binding
 	Params   key.Binding
+	Filter   key.Binding
 	Save     key.Binding
 	Saved    key.Binding
 	RunSaved key.Binding
@@ -30,6 +31,7 @@ func DefaultKeyMap() KeyMap {
 		Refresh:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "run")),
 		Drill:    key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open transactions")),
 		Params:   key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "change period/params")),
+		Filter:   key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter/group by")),
 		Save:     key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "save report")),
 		Saved:    key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "saved reports")),
 		RunSaved: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "run selected")),
@@ -49,5 +51,5 @@ func (k KeyMap) bindings(drill bool) []key.Binding {
 	if drill {
 		out = append(out, k.Drill)
 	}
-	return append(out, k.Params, k.Save, k.Saved, k.RunSaved, k.DelSaved, k.Export, k.Back, k.Explain)
+	return append(out, k.Params, k.Filter, k.Save, k.Saved, k.RunSaved, k.DelSaved, k.Export, k.Back, k.Explain)
 }

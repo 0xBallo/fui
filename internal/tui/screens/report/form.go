@@ -1,12 +1,8 @@
 package report
 
 import (
-	"fmt"
-	"os"
-
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/tui/components"
 	"github.com/0xballo/fui/internal/tui/screens"
 )
@@ -67,12 +63,16 @@ func (m *Model) openSaveForm() {
 	m.form.Focus()
 }
 
-// openExportForm opens the path and format fields to export the currently displayed report.
+// openExportForm opens the what, path and format fields to export the displayed report result or
+// its transactions.
 func (m *Model) openExportForm() {
+	m.fields.what = components.NewAutocomplete("What:", "result", m.th)
+	m.fields.what.SetSuggestions([]string{exportResult, exportTransactions})
+	m.fields.what.SetValue(exportResult)
 	m.fields.path = components.NewAutocomplete("Output path:", "e.g. export.csv", m.th)
 	m.fields.format = components.NewAutocomplete("Format:", "csv", m.th)
-	m.fields.format.SetSuggestions([]string{"csv", "json"})
-	m.form = components.NewForm(&m.fields.path, &m.fields.format)
+	m.fields.format.SetSuggestions([]string{"csv", "json", "fui"})
+	m.form = components.NewForm(&m.fields.what, &m.fields.path, &m.fields.format)
 	m.mode = modeExportForm
 	m.form.Focus()
 }
@@ -104,6 +104,11 @@ func (m *Model) submitForm() tea.Cmd {
 	switch m.mode {
 	case modeParamsForm:
 		return m.submitParams()
+	case modeFilterForm:
+		if err := m.submitFilter(); err != nil {
+			return errCmd(err)
+		}
+		return m.runCurrent()
 	case modeSaveForm:
 		return m.submitSave()
 	case modeExportForm:
@@ -122,42 +127,4 @@ func (m *Model) submitParams() tea.Cmd {
 	m.horizonText = m.fields.horizon.Value()
 	m.minBalText = m.fields.minBalance.Value()
 	return m.runCurrent()
-}
-
-// submitExport writes the displayed report result to the entered path as csv or json through
-// the ExportResult port.
-func (m *Model) submitExport() tea.Cmd {
-	m.mode = modeReport
-	path := m.fields.path.Value()
-	format := m.fields.format.Value()
-	if format == "" {
-		format = "csv"
-	}
-	if path == "" {
-		return errCmd(&domain.Error{Code: domain.CodeMissingField, Message: "output path is required", Details: map[string]any{"field": "path"}})
-	}
-	if format != "csv" && format != "json" {
-		return errCmd(&domain.Error{
-			Code: domain.CodeInvalidValue, Message: "unknown export format " + format + " (use csv or json)",
-			Details: map[string]any{"field": "format", "value": format},
-		})
-	}
-	data := m.result.data
-	if data == nil {
-		return errCmd(&domain.Error{Code: domain.CodeInvalidValue, Message: "no report to export"})
-	}
-	return func() tea.Msg {
-		f, err := os.Create(path) // #nosec G304 -- path is provided by the user through the TUI form.
-		if err != nil {
-			return screens.ErrorMsg{Err: fmt.Errorf("create output file: %w", err)}
-		}
-		if err := m.uc.ExportResult(f, format, data); err != nil {
-			_ = f.Close()
-			return screens.ErrorMsg{Err: err}
-		}
-		if err := f.Close(); err != nil {
-			return screens.ErrorMsg{Err: fmt.Errorf("close output file: %w", err)}
-		}
-		return exportDoneMsg{path: path}
-	}
 }

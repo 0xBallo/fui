@@ -67,6 +67,7 @@ func (m *Model) drill() tea.Cmd {
 	if !ok {
 		return nil
 	}
+	req = mergeFilter(m.result.filter, req)
 	return func() tea.Msg { return screens.SwitchScreenMsg{Target: screens.TabTransactions, Filter: &req} }
 }
 

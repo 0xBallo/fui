@@ -2,6 +2,7 @@ package report
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -62,13 +63,31 @@ func (m *Model) runSaved() tea.Cmd {
 		return nil
 	}
 	name := row.ID
+	spec := m.savedSpec(name)
 	return func() tea.Msg {
 		out, err := m.uc.Run(context.Background(), name)
 		if err != nil {
 			return screens.ErrorMsg{Err: err}
 		}
-		return reportLoadedMsg{result: reportResult{kind: out.Kind, label: out.Name, saved: out.Name, data: out.Data}}
+		res := reportResult{kind: out.Kind, label: out.Name, saved: out.Name, data: out.Data, groupBy: spec.GroupBy, granularity: spec.Granularity}
+		if spec.Filter != nil {
+			res.filter = *spec.Filter
+		}
+		return reportLoadedMsg{result: res}
 	}
+}
+
+// savedSpec decodes the stored spec of the saved report name from the loaded list; a report
+// that is not listed or has unreadable params yields the zero spec (no filter).
+func (m *Model) savedSpec(name string) reporting.SavedSpec {
+	var spec reporting.SavedSpec
+	for _, s := range m.saved {
+		if s.Name == name {
+			_ = json.Unmarshal([]byte(s.ParamsJSON), &spec) // the use case reports a bad spec when it runs
+			break
+		}
+	}
+	return spec
 }
 
 func (m *Model) openRemoveConfirm() {
@@ -121,6 +140,11 @@ func (m *Model) submitSave() tea.Cmd {
 	if g, ok := m.result.data.(reporting.GroupedResult); ok {
 		spec.GroupBy = g.GroupBy // makes the spec v2, so the saved report returns grouped rows again
 	}
+	if filterActive(m.result.filter) {
+		f := m.result.filter
+		spec.Filter = &f
+	}
+	spec.Granularity = m.result.granularity
 	kind := m.result.kind
 	return func() tea.Msg {
 		ctx := context.Background()

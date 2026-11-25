@@ -171,9 +171,22 @@ func TestDrillCompareRow(t *testing.T) {
 	}
 }
 
-func exportVia(t *testing.T, s scr.Screen, path, format string) scr.Screen {
+// exportVia drives the export form: what is "" for the default (result) or "transactions".
+func exportVia(t *testing.T, s scr.Screen, what, path, format string) scr.Screen {
 	t.Helper()
 	s, cmd := sendRunes(s, "e")
+	s = run(t, s, cmd)
+	if what != "" {
+		for range len("result") {
+			s, cmd = sendKey(s, tea.KeyBackspace)
+			s = run(t, s, cmd)
+		}
+		s, cmd = sendRunes(s, what)
+		s = run(t, s, cmd)
+	}
+	s, cmd = sendKey(s, tea.KeyEnter) // accept the suggestion
+	s = run(t, s, cmd)
+	s, cmd = sendKey(s, tea.KeyEnter) // leave the what field
 	s = run(t, s, cmd)
 	s, cmd = sendRunes(s, path)
 	s = run(t, s, cmd)
@@ -199,7 +212,7 @@ func TestExportResult(t *testing.T) {
 			seedGrouped(t, h)
 			s := kindScreen(t, h, theme.Default(), 2)
 			path := filepath.Join(t.TempDir(), "out")
-			exportVia(t, s, path, tc.format)
+			exportVia(t, s, "", path, tc.format)
 			data, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatalf("ReadFile: %v", err)
@@ -219,9 +232,12 @@ func TestExportResultRejectsFormat(t *testing.T) {
 	seedGrouped(t, h)
 	s := kindScreen(t, h, theme.Default(), 2)
 	s, _ = sendRunes(s, "e")
+	s, _ = sendKey(s, tea.KeyEnter)
+	s, _ = sendKey(s, tea.KeyEnter)
 	s, _ = sendRunes(s, filepath.Join(t.TempDir(), "out"))
 	s, _ = sendKey(s, tea.KeyEnter)
 	s, _ = sendRunes(s, "fui")
+	s, _ = sendKey(s, tea.KeyEnter) // accept the suggestion
 	_, cmd := sendKey(s, tea.KeyEnter)
 	if cmd == nil {
 		t.Fatal("expected an error command")
