@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/clock"
 	"github.com/0xballo/fui/internal/domain"
 )
 
@@ -18,11 +19,19 @@ const EntityRule = "rule"
 type Service struct {
 	store  app.Store
 	backup app.Backuper
+	clock  app.Clock
 }
 
-// New builds a Service.
+// New builds a Service stamping undo journal entries with the system clock.
 func New(store app.Store, backup app.Backuper) *Service {
-	return &Service{store: store, backup: backup}
+	return &Service{store: store, backup: backup, clock: clock.NewSystem()}
+}
+
+// WithClock returns a copy of s stamping undo journal entries with c.
+func (s *Service) WithClock(c app.Clock) *Service {
+	cp := *s
+	cp.clock = c
+	return &cp
 }
 
 // ConditionsSpec is the user-typed form of domain.RuleConditions; Accounts are names. Amounts

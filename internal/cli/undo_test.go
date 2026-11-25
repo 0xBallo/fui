@@ -85,3 +85,51 @@ func domainIs(err error, code domain.Code) bool {
 	var de *domain.Error
 	return err != nil && errors.As(err, &de) && de.Code == code
 }
+
+func TestUndoPrintsWarnings(t *testing.T) {
+	deps := newTestDeps(t)
+	seedAccount(t, deps, "Main")
+	ctx := context.Background()
+	p, err := deps.Service.PlanAddTx(ctx, app.AddTxRequest{Account: "Main", Amount: "-5", Date: "2026-01-10", Description: "seed", Payee: "Shop"})
+	if err != nil {
+		t.Fatalf("PlanAddTx: %v", err)
+	}
+	if _, err := deps.Service.ApplyAddTx(ctx, p); err != nil {
+		t.Fatalf("ApplyAddTx: %v", err)
+	}
+	mustRunCmd(t, deps, newTxEditCmd(deps), []string{"1", "--payee", ""})
+	rp, err := deps.Service.PlanRemovePayee(ctx, app.RemovePayeeRequest{Payee: "Shop"})
+	if err != nil {
+		t.Fatalf("PlanRemovePayee: %v", err)
+	}
+	if err := deps.Service.ApplyRemovePayee(ctx, rp); err != nil {
+		t.Fatalf("ApplyRemovePayee: %v", err)
+	}
+
+	stderr := &bytes.Buffer{}
+	deps.Stderr = stderr
+	out := outBuf(deps)
+	mustRunCmd(t, deps, newUndoCmd(deps), []string{"--dry-run", "--json"})
+	var plan struct {
+		Warnings []string `json:"warnings"`
+		Changes  []any    `json:"changes"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &plan); err != nil {
+		t.Fatalf("json: %v: %s", err, out.String())
+	}
+	if len(plan.Warnings) != 1 || len(plan.Changes) == 0 || !strings.Contains(plan.Warnings[0], "payee") {
+		t.Fatalf("dry-run json = %s", out.String())
+	}
+
+	out = outBuf(deps)
+	mustRunCmd(t, deps, newUndoCmd(deps), []string{"--dry-run"})
+	if !strings.Contains(stderr.String(), "warning: transaction 1: payee") || strings.Contains(out.String(), "warning") {
+		t.Fatalf("text dry-run: stdout=%q stderr=%q", out.String(), stderr.String())
+	}
+
+	out = outBuf(deps)
+	mustRunCmd(t, deps, newUndoCmd(deps), []string{"--yes", "--json"})
+	if !strings.Contains(out.String(), `"warnings":["transaction 1: payee`) {
+		t.Fatalf("apply json = %s", out.String())
+	}
+}

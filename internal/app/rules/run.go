@@ -224,7 +224,15 @@ func (s *Service) ApplyApply(ctx context.Context, p ApplyPlan) error {
 	if _, err := s.backup.Backup(ctx, app.BackupReasonBulk); err != nil {
 		return fmt.Errorf("backup before bulk change: %w", err)
 	}
+	ids := make([]domain.TransactionID, len(p.Effects))
+	for i, e := range p.Effects {
+		ids[i] = e.Tx.ID
+	}
 	return s.write(ctx, func(r app.Repos) error {
+		j, err := app.BeginJournal(ctx, r, ids...)
+		if err != nil {
+			return err
+		}
 		for _, e := range p.Effects {
 			if err := r.Transactions().Update(ctx, e.Tx); err != nil {
 				return fmt.Errorf("update transaction %d: %w", e.Tx.ID, err)
@@ -235,6 +243,7 @@ func (s *Service) ApplyApply(ctx context.Context, p ApplyPlan) error {
 				}
 			}
 		}
-		return nil
+		// Rules fill category, payee and tags only; never the status.
+		return j.Commit(ctx, r, s.clock, app.OpKindRulesApply, app.UndoFieldCategory, app.UndoFieldTags, app.UndoFieldPayee)
 	})
 }
