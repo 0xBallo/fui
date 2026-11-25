@@ -115,7 +115,7 @@ Pairs were chosen to keep owned paths disjoint (§5).
 | G07 | TL | `feat/g07-dump` | #76 | merged |
 | G08 | TL | `feat/g08-invest` | #74 | merged |
 | G09 | TL | `feat/g09-insight-sim` | #75 | merged |
-| G10 | TL | `feat/g10-integration` | G10_PR | in review |
+| G10 | TL | `feat/g10-integration` | #77 | in review |
 
 ## 8. Remaining known gaps (after v0.5)
 
