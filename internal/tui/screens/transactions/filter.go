@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -63,6 +64,19 @@ func (m *Model) openFilterForm() {
 	)
 	m.mode = modeFilter
 	m.filterForm.Focus()
+}
+
+// ApplyFilter replaces the current filter with req, as when drilling down from a report, and
+// reloads from the top of the list. Paging fields of req are ignored. The filter shows as chips,
+// removable with the usual chip keys.
+func (m *Model) ApplyFilter(req app.ListTxRequest) tea.Cmd {
+	req.After, req.Limit = nil, 0
+	m.req = req
+	m.chipFocus = 0
+	m.mode = modeList
+	m.next = nil
+	m.table.SetCursor(0)
+	return m.load()
 }
 
 func (m *Model) handleFilterKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
@@ -174,8 +188,8 @@ type filterChip struct {
 	kind, label, value string
 }
 
-// activeChips lists every non-empty filter field of m.req as a removable chip, in a stable order.
-func (m *Model) activeChips() []filterChip {
+// periodChips lists the date-range chips of m.req.
+func (m *Model) periodChips() []filterChip {
 	var chips []filterChip
 	if m.req.From != "" {
 		chips = append(chips, filterChip{"from", "From", m.req.From})
@@ -183,11 +197,29 @@ func (m *Model) activeChips() []filterChip {
 	if m.req.To != "" {
 		chips = append(chips, filterChip{"to", "To", m.req.To})
 	}
+	if m.req.Month != "" {
+		chips = append(chips, filterChip{"month", "Month", m.req.Month})
+	}
+	if m.req.Year != 0 {
+		chips = append(chips, filterChip{"year", "Year", strconv.Itoa(m.req.Year)})
+	}
+	return chips
+}
+
+// activeChips lists every non-empty filter field of m.req as a removable chip, in a stable order.
+func (m *Model) activeChips() []filterChip {
+	chips := m.periodChips()
 	for _, a := range m.req.Accounts {
 		chips = append(chips, filterChip{"account", "Account", a})
 	}
 	for _, c := range m.req.Categories {
 		chips = append(chips, filterChip{"category", "Category", c})
+	}
+	for _, p := range m.req.Payees {
+		chips = append(chips, filterChip{"payee", "Payee", p})
+	}
+	for _, t := range m.req.Tags {
+		chips = append(chips, filterChip{"tag", "Tag", t})
 	}
 	for _, s := range m.req.Statuses {
 		chips = append(chips, filterChip{"status", "Status", s})
@@ -270,34 +302,55 @@ func (m *Model) removeFocusedChip() tea.Cmd {
 		m.chipFocus = len(chips) - 1
 	}
 	c := chips[m.chipFocus]
+	m.clearChip(c)
+	if m.chipFocus > 0 {
+		m.chipFocus--
+	}
+	return m.load()
+}
+
+// clearChip resets the filter field chip c stands for.
+func (m *Model) clearChip(c filterChip) {
 	switch c.kind {
 	case "from":
 		m.req.From = ""
 	case "to":
 		m.req.To = ""
+	case "month":
+		m.req.Month = ""
+	case "year":
+		m.req.Year = 0
 	case "min":
 		m.req.MinAmount = ""
 	case "max":
 		m.req.MaxAmount = ""
 	case "text":
 		m.req.Text = ""
-	case "account":
-		m.req.Accounts = removeValue(m.req.Accounts, c.value)
-	case "category":
-		m.req.Categories = removeValue(m.req.Categories, c.value)
-	case "status":
-		m.req.Statuses = removeValue(m.req.Statuses, c.value)
-	case "kind":
-		m.req.Kinds = removeValue(m.req.Kinds, c.value)
 	case "uncategorized":
 		m.req.Uncategorized = false
 	case "sign":
 		m.req.Sign = ""
+	default:
+		m.clearListChip(c)
 	}
-	if m.chipFocus > 0 {
-		m.chipFocus--
+}
+
+// clearListChip removes the single value chip c stands for from its multi-value filter field.
+func (m *Model) clearListChip(c filterChip) {
+	switch c.kind {
+	case "account":
+		m.req.Accounts = removeValue(m.req.Accounts, c.value)
+	case "category":
+		m.req.Categories = removeValue(m.req.Categories, c.value)
+	case "payee":
+		m.req.Payees = removeValue(m.req.Payees, c.value)
+	case "tag":
+		m.req.Tags = removeValue(m.req.Tags, c.value)
+	case "status":
+		m.req.Statuses = removeValue(m.req.Statuses, c.value)
+	case "kind":
+		m.req.Kinds = removeValue(m.req.Kinds, c.value)
 	}
-	return m.load()
 }
 
 // removeValue returns s without its first occurrence of v, leaving s untouched.

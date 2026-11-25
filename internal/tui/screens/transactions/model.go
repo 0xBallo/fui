@@ -120,7 +120,10 @@ type Model struct {
 	pendingTarget domain.TransactionID
 }
 
-var _ screens.Screen = (*Model)(nil)
+var (
+	_ screens.Screen         = (*Model)(nil)
+	_ screens.FilterReceiver = (*Model)(nil)
+)
 
 // New builds the transactions screen over uc, formatting amounts and dates with loc.
 func New(uc UseCases, loc domain.Locale, th theme.Theme) *Model {

@@ -5,13 +5,16 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/exp/golden"
 	"github.com/charmbracelet/x/exp/teatest"
 	"github.com/muesli/termenv"
 
+	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/tui"
+	"github.com/0xballo/fui/internal/tui/screens"
 )
 
 // forceColorProfile pins lipgloss's default renderer to profile for the duration of the test,
@@ -105,4 +108,45 @@ func TestTransactionsSnapshotHighContrast(t *testing.T) {
 func TestTransactionsSnapshotNoColor(t *testing.T) {
 	forceColorProfile(t, termenv.Ascii)
 	themeSnapshot(t, "mocha", "2", "booked")
+}
+
+// filteredTransactionsSnapshot opens Transactions through a drill-down SwitchScreenMsg at 80x24
+// and diffs the final view against testdata/<test name>.golden.
+func filteredTransactionsSnapshot(t *testing.T, theme string) {
+	t.Helper()
+	fx := newSnapshotFixture(t)
+	uc := useCases{Service: fx.Service, Reporting: fx.NewReporting(t)}
+	var m tea.Model = tui.New(uc, tui.Config{Locale: domain.LocaleENUS, Theme: theme})
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, cmd := m.Update(screens.SwitchScreenMsg{
+		Target: screens.TabTransactions,
+		Filter: &app.ListTxRequest{Categories: []string{"Groceries"}, From: "2026-06-01", To: "2026-06-30"},
+	})
+	m = run(t, m, cmd)
+	golden.RequireEqual(t, []byte(m.View()))
+}
+
+func TestFilteredTransactionsSnapshotLatte(t *testing.T) {
+	forceColorProfile(t, termenv.TrueColor)
+	filteredTransactionsSnapshot(t, "latte")
+}
+
+func TestFilteredTransactionsSnapshotMocha(t *testing.T) {
+	forceColorProfile(t, termenv.TrueColor)
+	filteredTransactionsSnapshot(t, "mocha")
+}
+
+func TestFilteredTransactionsSnapshotTerminal(t *testing.T) {
+	forceColorProfile(t, termenv.TrueColor)
+	filteredTransactionsSnapshot(t, "terminal")
+}
+
+func TestFilteredTransactionsSnapshotHighContrast(t *testing.T) {
+	forceColorProfile(t, termenv.TrueColor)
+	filteredTransactionsSnapshot(t, "high-contrast")
+}
+
+func TestFilteredTransactionsSnapshotNoColor(t *testing.T) {
+	forceColorProfile(t, termenv.Ascii)
+	filteredTransactionsSnapshot(t, "mocha")
 }
