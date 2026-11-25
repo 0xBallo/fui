@@ -1,0 +1,31 @@
+# kpi networth itemizes each asset (value, linked-loan debt, net) when module assets is on.
+exec fui init --preset expense --currency EUR
+exec fui module enable assets
+exec fui module enable loans
+exec fui module enable analytics
+
+exec fui account add Checking --kind checking --currency EUR --opening-balance 1000
+exec fui asset add Car --kind vehicle --value 15000 --purchase-date 2026-01-01
+exec fui asset add Bike --kind vehicle --value 500 --purchase-date 2026-01-01
+exec fui loan add 'Car Loan' --kind loan --principal 12000 --disbursed 2026-01-01 --term-months 60 --rate-type fixed --rate 4,00 --debit Checking --computed
+exec fui asset link Car 'Car Loan'
+
+exec fui kpi networth --at 2026-01-15
+stdout 'ASSET Car'
+stdout 'ASSET Bike'
+stdout 'TOTAL'
+exec fui kpi networth --at 2026-01-15 --json
+stdout '"asset_lines":\['
+stdout '"name":"Car","currency":"EUR","value":1500000'
+stdout '"loan":"Car Loan"'
+stdout '"name":"Bike","currency":"EUR","value":50000,"debt":0,"net":50000,"loan":""'
+exec fui kpi networth --at 2026-01-15 --csv
+stdout 'ASSET Car,EUR,,,15000.00,'
+stdout 'ASSET Bike,EUR,,,500.00,0.00,500.00'
+
+# assets module off: output unchanged
+exec fui module disable assets
+exec fui kpi networth --at 2026-01-15 --json
+! stdout 'asset_lines'
+exec fui kpi networth --at 2026-01-15
+! stdout 'ASSET '
