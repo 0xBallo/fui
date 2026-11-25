@@ -209,45 +209,19 @@ func parseSimRates(s string) (simulating.Rates, error) {
 
 // parsePercentBP parses a percentage with up to two decimals into basis points; an empty value is 0.
 func parsePercentBP(in string) (int64, error) {
-	s := strings.ReplaceAll(strings.TrimSuffix(strings.TrimSpace(in), "%"), ",", ".")
-	if s == "" {
+	if strings.TrimSpace(in) == "" {
 		return 0, nil
 	}
-	neg := strings.HasPrefix(s, "-")
-	s = strings.TrimPrefix(strings.TrimPrefix(s, "-"), "+")
-	whole, frac, _ := strings.Cut(s, ".")
-	if whole == "" && frac == "" || len(frac) > 2 {
-		return 0, fmt.Errorf("invalid percentage %q", in)
-	}
-	if whole == "" {
-		whole = "0"
-	}
-	frac += strings.Repeat("0", 2-len(frac))
-	w, err := strconv.ParseUint(whole, 10, 32)
-	if err != nil {
-		return 0, fmt.Errorf("invalid percentage %q", in)
-	}
-	f, err := strconv.ParseUint(frac, 10, 8)
-	if err != nil {
-		return 0, fmt.Errorf("invalid percentage %q", in)
-	}
-	bp := int64(w)*100 + int64(f)
-	if neg {
-		bp = -bp
-	}
-	return bp, nil
+	return simulating.ParsePercentBP(in)
 }
 
-// cashFlowEventFields maps each event form field to its event kind and the number of colon
-// separated parts it takes; the syntax matches the `simulate cashflow` flags.
-var cashFlowEventFields = []struct {
-	key, kind string
-	parts     int
-}{
-	{"oneoff", "one_off", 2},
-	{"change", "recurring_change", 2},
-	{"stopincome", "stop_income", 1},
-	{"loan", "new_loan", 4},
+// cashFlowEventFields maps each event form field to its event kind; the syntax is parsed by
+// simulating.ParseEvent, shared with the `simulate cashflow` flags.
+var cashFlowEventFields = []struct{ key, kind string }{
+	{"oneoff", simulating.EventOneOff},
+	{"change", simulating.EventRecurringChange},
+	{"stopincome", simulating.EventStopIncome},
+	{"loan", simulating.EventNewLoan},
 }
 
 func buildCashFlow(v map[string]string, loc domain.Locale, cur domain.Currency) (simulating.CashFlowParams, error) {
@@ -261,7 +235,7 @@ func buildCashFlow(v map[string]string, loc domain.Locale, cur domain.Currency) 
 			if strings.TrimSpace(entry) == "" {
 				continue
 			}
-			ev, err := parseSimEvent(f.key, f.kind, f.parts, entry, loc, cur)
+			ev, err := simulating.ParseEvent(f.kind, entry, loc, cur)
 			if err != nil {
 				return out, err
 			}
@@ -274,31 +248,4 @@ func buildCashFlow(v map[string]string, loc domain.Locale, cur domain.Currency) 
 		}
 	}
 	return out, nil
-}
-
-func parseSimEvent(field, kind string, parts int, entry string, loc domain.Locale, cur domain.Currency) (simulating.CashFlowEvent, error) {
-	fs := strings.Split(strings.TrimSpace(entry), ":")
-	if len(fs) != parts {
-		return simulating.CashFlowEvent{}, simInvalid(field, entry)
-	}
-	ev := simulating.CashFlowEvent{Kind: kind, Date: strings.TrimSpace(fs[0])}
-	if parts > 1 {
-		money, err := domain.ParseAmount(fs[1], loc, cur)
-		if err != nil {
-			return ev, simInvalid(field, entry)
-		}
-		ev.AmountMinor = money.Minor()
-	}
-	if parts == 4 {
-		bp, err := parsePercentBP(fs[2])
-		if err != nil {
-			return ev, simInvalid(field, entry)
-		}
-		years, err := parseCount(field, fs[3])
-		if err != nil {
-			return ev, err
-		}
-		ev.RateBP, ev.Years = bp, years
-	}
-	return ev, nil
 }
