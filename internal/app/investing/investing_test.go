@@ -62,6 +62,7 @@ func newEnv(t tb, mods module.Set) *env {
 			{Name: "Broker", Kind: domain.AccountInvestment, Currency: eur, OpeningBalance: must(domain.NewMoney(0, eur)), OpenedOn: day("2026-01-01")},
 			{Name: "Cash", Kind: domain.AccountChecking, Currency: eur, OpeningBalance: must(domain.NewMoney(0, eur)), OpenedOn: day("2026-01-01")},
 			{Name: "Dollars", Kind: domain.AccountChecking, Currency: usd, OpeningBalance: must(domain.NewMoney(0, usd)), OpenedOn: day("2026-01-01")},
+			{Name: "Broker2", Kind: domain.AccountInvestment, Currency: eur, OpeningBalance: must(domain.NewMoney(0, eur)), OpenedOn: day("2026-01-01")},
 		} {
 			if _, err := r.Accounts().Insert(ctx, a); err != nil {
 				return err
@@ -208,7 +209,7 @@ func TestOpsAndCashLink(t *testing.T) {
 		t.Fatalf("oversell: got %v", err)
 	}
 	// Another account holds nothing.
-	if _, err := e.svc.PlanSell(ctx, investing.OpRequest{Account: "Cash", Security: "VWCE", Date: "2026-02-02", Quantity: "1", Price: "100"}); !hasCode(err, domain.CodeInsufficientQuantity) {
+	if _, err := e.svc.PlanSell(ctx, investing.OpRequest{Account: "Broker2", Security: "VWCE", Date: "2026-02-02", Quantity: "1", Price: "100"}); !hasCode(err, domain.CodeInsufficientQuantity) {
 		t.Fatalf("other account: got %v", err)
 	}
 	sell, err := e.svc.PlanSell(ctx, investing.OpRequest{Account: "Broker", CashAccount: "Cash", Security: "VWCE", Date: "2026-03-01", Quantity: "4", Price: "110", Fees: "1"})
@@ -320,7 +321,7 @@ func TestListPositions(t *testing.T) {
 	for _, o := range []investing.OpRequest{
 		{Kind: domain.OpBuy, Account: "Broker", Security: "VWCE", Date: "2026-01-10", Quantity: "10", Price: "100"},
 		{Kind: domain.OpBuy, Account: "Broker", Security: "USS", Date: "2026-01-10", Quantity: "5", Price: "20"},
-		{Kind: domain.OpBuy, Account: "Cash", Security: "VWCE", Date: "2026-01-12", Quantity: "1", Price: "90"},
+		{Kind: domain.OpBuy, Account: "Broker2", Security: "VWCE", Date: "2026-01-12", Quantity: "1", Price: "90"},
 	} {
 		if _, err := e.op(t, o); err != nil {
 			t.Fatal(err)

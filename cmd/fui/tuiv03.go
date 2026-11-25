@@ -34,6 +34,54 @@ func (u positionsUseCases) ApplySetPrice(ctx context.Context, p investing.SetPri
 	return u.build().ApplySetPrice(ctx, p)
 }
 
+func (u positionsUseCases) PlanAddSecurity(ctx context.Context, req investing.AddSecurityRequest) (investing.AddSecurityPlan, error) {
+	return u.build().PlanAddSecurity(ctx, req)
+}
+
+func (u positionsUseCases) ApplyAddSecurity(ctx context.Context, p investing.AddSecurityPlan) (domain.Security, error) {
+	return u.build().ApplyAddSecurity(ctx, p)
+}
+
+func (u positionsUseCases) PlanBuy(ctx context.Context, req investing.OpRequest) (investing.OpPlan, error) {
+	return u.build().PlanBuy(ctx, req)
+}
+
+func (u positionsUseCases) PlanSell(ctx context.Context, req investing.OpRequest) (investing.OpPlan, error) {
+	return u.build().PlanSell(ctx, req)
+}
+
+func (u positionsUseCases) PlanDividend(ctx context.Context, req investing.OpRequest) (investing.OpPlan, error) {
+	return u.build().PlanDividend(ctx, req)
+}
+
+func (u positionsUseCases) PlanCoupon(ctx context.Context, req investing.OpRequest) (investing.OpPlan, error) {
+	return u.build().PlanCoupon(ctx, req)
+}
+
+func (u positionsUseCases) ApplyOp(ctx context.Context, p investing.OpPlan) (domain.SecurityOp, error) {
+	return u.build().ApplyOp(ctx, p)
+}
+
+func (u positionsUseCases) ListOps(ctx context.Context, req investing.ListOpsRequest) ([]investing.OpLine, error) {
+	return u.build().ListOps(ctx, req)
+}
+
+func (u positionsUseCases) PlanEditOp(ctx context.Context, req investing.EditOpRequest) (investing.EditOpPlan, error) {
+	return u.build().PlanEditOp(ctx, req)
+}
+
+func (u positionsUseCases) ApplyEditOp(ctx context.Context, p investing.EditOpPlan) (domain.SecurityOp, error) {
+	return u.build().ApplyEditOp(ctx, p)
+}
+
+func (u positionsUseCases) PlanRemoveOp(ctx context.Context, id domain.SecurityOpID) (investing.RemoveOpPlan, error) {
+	return u.build().PlanRemoveOp(ctx, id)
+}
+
+func (u positionsUseCases) ApplyRemoveOp(ctx context.Context, p investing.RemoveOpPlan) error {
+	return u.build().ApplyRemoveOp(ctx, p)
+}
+
 // netWorthUseCases adapts reporting.Analytics to dashboard.NetWorthUseCases.
 type netWorthUseCases struct{ analytics func() *reporting.Analytics }
 

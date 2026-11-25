@@ -5,7 +5,16 @@ import (
 	"fmt"
 
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 )
+
+// requireKindModule refuses a wallet account while the crypto module is off.
+func (s *Service) requireKindModule(kind domain.AccountKind) error {
+	if kind != domain.AccountWallet {
+		return nil
+	}
+	return WrapModuleError(s.cfg.Modules.Require(module.Crypto))
+}
 
 // AddAccountRequest carries user-typed values; empty OpeningBalance means 0 and empty OpenedOn today.
 type AddAccountRequest struct {
@@ -47,6 +56,9 @@ func (s *Service) newAccount(req AddAccountRequest) (domain.Account, error) {
 	kind, err := domain.ParseAccountKind(req.Kind)
 	if err != nil {
 		return domain.Account{}, fmt.Errorf("account kind: %w", err)
+	}
+	if err := s.requireKindModule(kind); err != nil {
+		return domain.Account{}, err
 	}
 	cur, err := domain.ParseCurrency(req.Currency)
 	if err != nil {
@@ -215,6 +227,9 @@ func (s *Service) editedAccount(a domain.Account, req EditAccountRequest) (domai
 		k, err := domain.ParseAccountKind(*req.Kind)
 		if err != nil {
 			return domain.Account{}, fmt.Errorf("account kind: %w", err)
+		}
+		if err := s.requireKindModule(k); err != nil {
+			return domain.Account{}, err
 		}
 		a.Kind = k
 	}

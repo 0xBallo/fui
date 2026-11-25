@@ -332,3 +332,25 @@ func TestSettingsRecurrencesSectionNeedsRecurringModule(t *testing.T) {
 		t.Fatalf("recurring enabled: tab expected:\n%s", scr.View())
 	}
 }
+
+func TestSettingsAssetsSectionNeedsAssetsModule(t *testing.T) {
+	cfg, scr := newFixture(t)
+	ids := []module.ID{module.Core}
+	if err := cfg.SetModulesEnabled(t.Context(), ids); err != nil {
+		t.Fatalf("SetModulesEnabled: %v", err)
+	}
+	m := scr.(*settings.Model)
+	m.SetLists(settings.Lists{Assets: struct{ lists.AssetsUseCases }{}})
+	scr = run(t, scr, scr.Init())
+	if strings.Contains(scr.View(), "Assets") {
+		t.Fatalf("assets disabled: tab must be hidden:\n%s", scr.View())
+	}
+
+	if err := cfg.SetModulesEnabled(t.Context(), []module.ID{module.Core, module.Assets}); err != nil {
+		t.Fatalf("SetModulesEnabled: %v", err)
+	}
+	scr = run(t, scr, scr.Init())
+	if !strings.Contains(scr.View(), "Assets") {
+		t.Fatalf("assets enabled: tab expected:\n%s", scr.View())
+	}
+}

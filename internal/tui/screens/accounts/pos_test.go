@@ -18,6 +18,7 @@ import (
 )
 
 type positionsStub struct {
+	accounts.PositionsUseCases
 	linesByAccount map[string][]investing.PositionLine
 	planReq        investing.SetPriceRequest
 	applyCount     int
@@ -52,7 +53,7 @@ func TestAccountsInvestmentPositionsAndPriceEntry(t *testing.T) {
 					Quantity:    mustQuantity(t, "10", 0),
 					AvgCost:     mustMoney(t, 100_00, "EUR"),
 					HasPrice:    true,
-					LastPrice:   mustMoney(t, 110_00, "EUR"),
+					LastPrice:   mustPrice(t, 110_00, "EUR"),
 					MarketValue: mustMoney(t, 1_100_00, "EUR"),
 					Unrealized:  mustMoney(t, 100_00, "EUR"),
 				},
@@ -171,4 +172,17 @@ func mustQuantity(t *testing.T, value string, scale int) domain.Quantity {
 		t.Fatalf("ParseQuantity(%q, %d): %v", value, scale, err)
 	}
 	return q
+}
+
+func mustPrice(t *testing.T, minor int64, code string) domain.Price {
+	t.Helper()
+	c, err := domain.ParseCurrency(code)
+	if err != nil {
+		t.Fatalf("ParseCurrency: %v", err)
+	}
+	p, err := domain.NewPrice(minor, c.Decimals(), c)
+	if err != nil {
+		t.Fatalf("NewPrice: %v", err)
+	}
+	return p
 }

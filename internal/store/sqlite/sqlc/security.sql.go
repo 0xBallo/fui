@@ -56,7 +56,7 @@ func (q *Queries) DeleteSecurityPrice(ctx context.Context, arg DeleteSecurityPri
 }
 
 const getSecurity = `-- name: GetSecurity :one
-SELECT id, name, ticker, isin, kind, currency, quantity_scale, created_at, updated_at
+SELECT id, name, ticker, isin, kind, currency, quantity_scale, price_scale, created_at, updated_at
 FROM securities
 WHERE id = ?1
 `
@@ -72,6 +72,7 @@ func (q *Queries) GetSecurity(ctx context.Context, id int64) (Security, error) {
 		&i.Kind,
 		&i.Currency,
 		&i.QuantityScale,
+		&i.PriceScale,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -114,7 +115,8 @@ INSERT INTO securities (
     isin,
     kind,
     currency,
-    quantity_scale
+    quantity_scale,
+    price_scale
 )
 VALUES (
     ?1,
@@ -122,9 +124,10 @@ VALUES (
     ?3,
     ?4,
     ?5,
-    ?6
+    ?6,
+    ?7
 )
-RETURNING id, name, ticker, isin, kind, currency, quantity_scale, created_at, updated_at
+RETURNING id, name, ticker, isin, kind, currency, quantity_scale, price_scale, created_at, updated_at
 `
 
 type InsertSecurityParams struct {
@@ -134,6 +137,7 @@ type InsertSecurityParams struct {
 	Kind          string
 	Currency      string
 	QuantityScale int64
+	PriceScale    int64
 }
 
 func (q *Queries) InsertSecurity(ctx context.Context, arg InsertSecurityParams) (Security, error) {
@@ -144,6 +148,7 @@ func (q *Queries) InsertSecurity(ctx context.Context, arg InsertSecurityParams) 
 		arg.Kind,
 		arg.Currency,
 		arg.QuantityScale,
+		arg.PriceScale,
 	)
 	var i Security
 	err := row.Scan(
@@ -154,6 +159,7 @@ func (q *Queries) InsertSecurity(ctx context.Context, arg InsertSecurityParams) 
 		&i.Kind,
 		&i.Currency,
 		&i.QuantityScale,
+		&i.PriceScale,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -244,7 +250,7 @@ func (q *Queries) InsertSecurityOp(ctx context.Context, arg InsertSecurityOpPara
 }
 
 const listSecurities = `-- name: ListSecurities :many
-SELECT id, name, ticker, isin, kind, currency, quantity_scale, created_at, updated_at
+SELECT id, name, ticker, isin, kind, currency, quantity_scale, price_scale, created_at, updated_at
 FROM securities
 ORDER BY id
 `
@@ -266,6 +272,7 @@ func (q *Queries) ListSecurities(ctx context.Context) ([]Security, error) {
 			&i.Kind,
 			&i.Currency,
 			&i.QuantityScale,
+			&i.PriceScale,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {

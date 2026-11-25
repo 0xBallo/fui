@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/assetting"
 	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/cli/render"
 	"github.com/0xballo/fui/internal/domain"
@@ -24,6 +25,32 @@ type kpiNetWorthDTO struct {
 	Positions *kpiNetWorthAmountDTO    `json:"positions,omitempty"`
 	Assets    *kpiNetWorthAmountDTO    `json:"assets,omitempty"`
 	Debts     *kpiNetWorthAmountDTO    `json:"debts,omitempty"`
+	// AssetLines itemizes each asset in its own currency (not base-converted); it is
+	// informational and not part of the totals.
+	AssetLines []kpiNetWorthAssetDTO `json:"asset_lines,omitempty"`
+}
+
+type kpiNetWorthAssetDTO struct {
+	Name     string `json:"name"`
+	Currency string `json:"currency"`
+	Value    int64  `json:"value"`
+	Debt     int64  `json:"debt"`
+	Net      int64  `json:"net"`
+	Loan     string `json:"loan"`
+}
+
+func netWorthAssetLines(items []assetting.Item) []kpiNetWorthAssetDTO {
+	if items == nil {
+		return nil
+	}
+	out := make([]kpiNetWorthAssetDTO, len(items))
+	for i, it := range items {
+		out[i] = kpiNetWorthAssetDTO{
+			Name: it.Asset.Name, Currency: it.Latest.Value.Currency().Code(),
+			Value: it.Latest.Value.Minor(), Debt: it.Debt.Minor(), Net: it.Net.Minor(), Loan: it.Loan,
+		}
+	}
+	return out
 }
 
 func writeKPINetWorth(
@@ -33,6 +60,7 @@ func writeKPINetWorth(
 	color bool,
 	nw app.NetWorth,
 	point reporting.NetWorthPoint,
+	items []assetting.Item,
 ) error {
 	components, err := netWorthComponents(nw, point)
 	if err != nil {
@@ -42,16 +70,44 @@ func writeKPINetWorth(
 		return render.WriteJSON(w, kpiNetWorthDTO{
 			AsOf: point.Date, Currency: components.Total.Currency().Code(), Total: components.Total.Minor(), Lines: netWorthLines(nw),
 			Liquidity: components.Liquidity, Positions: components.Positions, Assets: components.Assets, Debts: components.Debts,
+			AssetLines: netWorthAssetLines(items),
 		})
 	}
 	rows, err := kpiNetWorthRows(nw, components, loc, f == render.CSV)
 	if err != nil {
 		return err
 	}
+	appendAssetRows(&rows, items, loc, f == render.CSV)
 	if f == render.CSV {
 		return render.WriteCSV(w, rows)
 	}
 	return render.WriteTable(w, rows, color)
+}
+
+// appendAssetRows adds one "ASSET <name>" row per asset after the totals, with three extra
+// VALUE/DEBT/NET columns that exist only when there is at least one asset; the existing
+// columns and rows are otherwise untouched.
+func appendAssetRows(rows *render.Rows, items []assetting.Item, loc domain.Locale, csv bool) {
+	if len(items) == 0 {
+		return
+	}
+	fmtMoney := func(m domain.Money) string {
+		if csv {
+			return render.FormatMoneyMachine(m)
+		}
+		return render.FormatMoney(m, loc)
+	}
+	rows.Header = append(rows.Header, "ASSET VALUE", "ASSET DEBT", "ASSET NET")
+	rows.MoneyCols = append(rows.MoneyCols, 4, 5, 6)
+	for i := range rows.Body {
+		rows.Body[i] = append(rows.Body[i], "", "", "")
+	}
+	for _, it := range items {
+		rows.Body = append(rows.Body, []string{
+			"ASSET " + it.Asset.Name, it.Latest.Value.Currency().Code(), "", "",
+			fmtMoney(it.Latest.Value), fmtMoney(it.Debt), fmtMoney(it.Net),
+		})
+	}
 }
 
 type netWorthComponentSet struct {

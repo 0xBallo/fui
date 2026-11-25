@@ -32,6 +32,7 @@ type assetItemDTO struct {
 	Debt          int64  `json:"debt"`
 	Net           int64  `json:"net"`
 	LoanID        *int64 `json:"loan_id,omitempty"`
+	Loan          string `json:"loan,omitempty"`
 }
 
 type assetValuationDTO struct {
@@ -77,7 +78,7 @@ func writeAssetList(w io.Writer, f render.Format, loc domain.Locale, color bool,
 		return render.WriteJSON(w, out)
 	}
 	rows := render.Rows{
-		Header:    []string{"NAME", "KIND", "CURRENCY", "VALUE DATE", "VALUE", "DEBT", "NET"},
+		Header:    []string{"NAME", "KIND", "CURRENCY", "VALUE DATE", "VALUE", "DEBT", "NET", "LOAN"},
 		MoneyCols: []int{4, 5, 6},
 		Body:      make([][]string, 0, len(items)),
 	}
@@ -90,6 +91,7 @@ func writeAssetList(w io.Writer, f render.Format, loc domain.Locale, color bool,
 			render.FormatMoney(item.Latest.Value, loc),
 			render.FormatMoney(item.Debt, loc),
 			render.FormatMoney(item.Net, loc),
+			item.Loan,
 		}
 		if f == render.CSV {
 			row[4] = render.FormatMoneyMachine(item.Latest.Value)
@@ -177,6 +179,7 @@ func assetItemToDTO(item assetting.Item) assetItemDTO {
 		Value:         item.Latest.Value.Minor(),
 		Debt:          item.Debt.Minor(),
 		Net:           item.Net.Minor(),
+		Loan:          item.Loan,
 	}
 	if item.Asset.LoanID != 0 {
 		loanID := int64(item.Asset.LoanID)
@@ -190,4 +193,80 @@ func optionalID(id *int64) string {
 		return ""
 	}
 	return strconv.FormatInt(*id, 10)
+}
+
+type assetShowDTO struct {
+	assetItemDTO
+	At      string              `json:"at"`
+	History []assetHistoryEntry `json:"history"`
+}
+
+type assetHistoryEntry struct {
+	Date  string `json:"date"`
+	Value int64  `json:"value"`
+}
+
+type assetActionDTO struct {
+	Action string `json:"action"`
+	Asset  string `json:"asset"`
+	Loan   string `json:"loan,omitempty"`
+	Date   string `json:"date,omitempty"`
+}
+
+func writeAssetShow(w io.Writer, f render.Format, loc domain.Locale, color bool, v assetting.View) error {
+	if f == render.JSON {
+		dto := assetShowDTO{
+			assetItemDTO: assetItemToDTO(v.Item), At: v.At.String(),
+			History: make([]assetHistoryEntry, len(v.History)),
+		}
+		for i, h := range v.History {
+			dto.History[i] = assetHistoryEntry{Date: h.Date.String(), Value: h.Value.Minor()}
+		}
+		return render.WriteJSON(w, dto)
+	}
+	rows := render.Rows{Header: []string{"DATE", "VALUE"}, MoneyCols: []int{1}, Body: make([][]string, 0, len(v.History))}
+	for _, h := range v.History {
+		val := render.FormatMoney(h.Value, loc)
+		if f == render.CSV {
+			val = render.FormatMoneyMachine(h.Value)
+		}
+		rows.Body = append(rows.Body, []string{h.Date.String(), val})
+	}
+	if f == render.CSV {
+		return render.WriteCSV(w, rows)
+	}
+	loan := v.Loan
+	if loan == "" {
+		loan = "-"
+	}
+	_, err := fmt.Fprintf(w, "name: %s\nkind: %s\ncurrency: %s\npurchase: %s %s\nvalue at %s: %s (valued %s)\nloan: %s\ndebt: %s\nnet: %s\n",
+		v.Asset.Name, v.Asset.Kind, v.Asset.PurchaseValue.Currency().Code(),
+		v.Asset.PurchaseDate, render.FormatMoney(v.Asset.PurchaseValue, loc),
+		v.At, render.FormatMoney(v.Latest.Value, loc), v.Latest.Date,
+		loan, render.FormatMoney(v.Debt, loc), render.FormatMoney(v.Net, loc))
+	if err != nil {
+		return fmt.Errorf("write asset: %w", err)
+	}
+	if len(v.History) == 0 {
+		return nil
+	}
+	if _, err := fmt.Fprintln(w, "valuations:"); err != nil {
+		return fmt.Errorf("write asset: %w", err)
+	}
+	return render.WriteTable(w, rows, color)
+}
+
+func writeAssetAction(w io.Writer, f render.Format, dto assetActionDTO) error {
+	if f == render.JSON {
+		return render.WriteJSON(w, dto)
+	}
+	rows := render.Rows{Header: []string{"ACTION", "ASSET", "LOAN", "DATE"}, Body: [][]string{{dto.Action, dto.Asset, dto.Loan, dto.Date}}}
+	if f == render.CSV {
+		return render.WriteCSV(w, rows)
+	}
+	_, err := fmt.Fprintf(w, "%s asset %s\n", dto.Action, dto.Asset)
+	if err != nil {
+		return fmt.Errorf("write asset: %w", err)
+	}
+	return nil
 }

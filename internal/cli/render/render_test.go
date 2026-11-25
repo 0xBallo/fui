@@ -48,3 +48,32 @@ func TestWriteRuleListShowsHintConditions(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatPrice(t *testing.T) {
+	eur, err := domain.ParseCurrency("EUR")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		minor int64
+		scale int
+		loc   domain.Locale
+		want  string
+	}{
+		{1234, 8, domain.LocaleENUS, "0.00001234"},
+		{1234, 8, domain.LocaleITIT, "0,00001234"},
+		{123456789012, 4, domain.LocaleITIT, "12.345.678,9012"},
+		{123456789012, 4, domain.LocaleENUS, "12,345,678.9012"},
+		{-50, 2, domain.LocaleENUS, "-0.50"},
+		{700, 2, domain.LocaleITIT, "7,00"},
+	}
+	for _, tt := range tests {
+		p, err := domain.NewPrice(tt.minor, tt.scale, eur)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := FormatPrice(p, tt.loc); got != tt.want {
+			t.Errorf("FormatPrice(%d,%d,%s) = %q, want %q", tt.minor, tt.scale, tt.loc, got, tt.want)
+		}
+	}
+}

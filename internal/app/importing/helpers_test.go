@@ -84,6 +84,11 @@ func account(ref, name, currency string, mods ...func(*fuiproto.AccountRecord)) 
 	return fuiproto.Record{Type: fuiproto.RecordTypeAccount, Account: a}
 }
 
+// broker is an investment account record, the kind security operations require.
+func broker(ref, name, currency string) fuiproto.Record {
+	return account(ref, name, currency, func(a *fuiproto.AccountRecord) { a.Kind = fuiproto.AccountKindInvestment })
+}
+
 func withIBAN(iban string) func(*fuiproto.AccountRecord) {
 	return func(a *fuiproto.AccountRecord) { a.IBAN = iban }
 }
@@ -237,3 +242,5 @@ var lastID = regexp.MustCompile(`LastID:map\[[^\]]*\]`)
 
 // snapshot is the memstore dump without the ID counters, which an undo cannot rewind.
 func snapshot(s *memstore.Store) string { return lastID.ReplaceAllString(s.Snapshot(), "") }
+
+func price(minor int64) domain.Price { return must(domain.NewPrice(minor, 2, eur())) }

@@ -62,6 +62,17 @@ func (s *Service) gate(kind domain.SecurityKind) error {
 	return nil
 }
 
+// checkAccount allows a position of sec in acct: investment accounts hold anything, wallets only
+// crypto, and a wallet exists only while the crypto module is on.
+func (s *Service) checkAccount(acct domain.Account, sec domain.Security) error {
+	if acct.Kind == domain.AccountWallet {
+		if err := s.cfg.Modules.Require(module.Crypto); err != nil {
+			return app.WrapModuleError(err)
+		}
+	}
+	return domain.CheckOpAccount(acct.Kind, sec.Kind)
+}
+
 func (s *Service) today() (domain.Date, error) {
 	d, err := domain.FromTime(s.clock.Now().In(s.cfg.Location))
 	if err != nil {
@@ -121,15 +132,23 @@ func findAccount(ctx context.Context, r app.Repos, name string) (domain.Account,
 	return all[i], nil
 }
 
-// ListSecurities returns every security ordered by ID.
+// visible reports whether securities of kind show up in lists: crypto ones are hidden while the
+// crypto module is off.
+func (s *Service) visible(kind domain.SecurityKind) bool { return s.gate(kind) == nil }
+
+// ListSecurities returns every visible security ordered by ID.
 func (s *Service) ListSecurities(ctx context.Context) ([]domain.Security, error) {
 	if err := s.gate(""); err != nil {
 		return nil, err
 	}
 	var out []domain.Security
-	err := s.store.Read(ctx, func(r app.Repos) (err error) {
-		out, err = r.Securities().List(ctx)
-		return err
+	err := s.store.Read(ctx, func(r app.Repos) error {
+		all, err := r.Securities().List(ctx)
+		if err != nil {
+			return err
+		}
+		out = slices.DeleteFunc(all, func(x domain.Security) bool { return !s.visible(x.Kind) })
+		return nil
 	})
 	return out, err
 }
@@ -249,7 +268,7 @@ func (s *Service) PlanSetPrice(ctx context.Context, req SetPriceRequest) (SetPri
 		if err := s.gate(sec.Kind); err != nil {
 			return err
 		}
-		price, err := domain.ParseAmount(req.Price, s.cfg.Locale, sec.Currency)
+		price, err := domain.ParsePrice(req.Price, sec.Currency, sec.PriceScale, s.cfg.Locale)
 		if err != nil {
 			return fmt.Errorf("price: %w", err)
 		}
@@ -269,7 +288,7 @@ func (s *Service) PlanSetPrice(ctx context.Context, req SetPriceRequest) (SetPri
 		}
 		out = SetPricePlan{Plan: app.Plan{Changes: []app.Change{{
 			Op: op, Entity: EntitySecurityPrice, Summary: fmt.Sprintf("%s price of %s on %s", op, sec.Name, d),
-			Fields: moneyFields(map[string]any{"security": sec.Name, "date": d.String()}, "price", price),
+			Fields: priceFields(map[string]any{"security": sec.Name, "date": d.String()}, "price", price),
 		}}}, Price: domain.SecurityPrice{Security: sec.ID, Date: d, Price: price}}
 		return nil
 	})
@@ -282,6 +301,13 @@ func (s *Service) ApplySetPrice(ctx context.Context, p SetPricePlan) error {
 		return err
 	}
 	return s.write(ctx, func(r app.Repos) error { return r.Securities().UpsertPrice(ctx, p.Price) })
+}
+
+func priceFields(f map[string]any, prefix string, p domain.Price) map[string]any {
+	f[prefix] = p.Minor()
+	f[prefix+"_scale"] = p.Scale()
+	f[prefix+"_currency"] = p.Currency().Code()
+	return f
 }
 
 func moneyFields(f map[string]any, prefix string, m domain.Money) map[string]any {
@@ -329,6 +355,12 @@ func (s *Service) PlanDividend(ctx context.Context, req OpRequest) (OpPlan, erro
 	return s.PlanOp(ctx, req)
 }
 
+// PlanCoupon plans a bond coupon, income like a dividend; crypto securities pay none.
+func (s *Service) PlanCoupon(ctx context.Context, req OpRequest) (OpPlan, error) {
+	req.Kind = domain.OpCoupon
+	return s.PlanOp(ctx, req)
+}
+
 // PlanOp validates the operation against the stored history of the position.
 func (s *Service) PlanOp(ctx context.Context, req OpRequest) (OpPlan, error) {
 	if err := s.gate(""); err != nil {
@@ -346,15 +378,30 @@ func (s *Service) PlanOp(ctx context.Context, req OpRequest) (OpPlan, error) {
 	return out, err
 }
 
-func (s *Service) buildOp(ctx context.Context, r app.Repos, req OpRequest, d domain.Date) (OpPlan, error) {
+// opTargets resolves and validates the security and account of an operation request.
+func (s *Service) opTargets(ctx context.Context, r app.Repos, req OpRequest) (domain.Security, domain.Account, error) {
 	sec, err := findSecurity(ctx, r, req.Security)
 	if err != nil {
-		return OpPlan{}, err
+		return domain.Security{}, domain.Account{}, err
 	}
 	if err := s.gate(sec.Kind); err != nil {
-		return OpPlan{}, err
+		return domain.Security{}, domain.Account{}, err
+	}
+	if req.Kind == domain.OpCoupon && sec.Kind == domain.SecurityCrypto {
+		return domain.Security{}, domain.Account{}, &domain.Error{
+			Code: domain.CodeInvalidValue, Message: "crypto securities pay no coupons",
+			Details: map[string]any{"field": "kind", "value": string(req.Kind)},
+		}
 	}
 	acct, err := findAccount(ctx, r, req.Account)
+	if err != nil {
+		return domain.Security{}, domain.Account{}, err
+	}
+	return sec, acct, s.checkAccount(acct, sec)
+}
+
+func (s *Service) buildOp(ctx context.Context, r app.Repos, req OpRequest, d domain.Date) (OpPlan, error) {
+	sec, acct, err := s.opTargets(ctx, r, req)
 	if err != nil {
 		return OpPlan{}, err
 	}
@@ -362,7 +409,7 @@ func (s *Service) buildOp(ctx context.Context, r app.Repos, req OpRequest, d dom
 	if err != nil {
 		return OpPlan{}, fmt.Errorf("quantity: %w", err)
 	}
-	price, err := domain.ParseAmount(req.Price, s.cfg.Locale, sec.Currency)
+	price, err := domain.ParsePrice(req.Price, sec.Currency, sec.PriceScale, s.cfg.Locale)
 	if err != nil {
 		return OpPlan{}, fmt.Errorf("price: %w", err)
 	}
@@ -382,7 +429,7 @@ func (s *Service) buildOp(ctx context.Context, r app.Repos, req OpRequest, d dom
 	change := app.Change{
 		Op: app.OpCreate, Entity: EntitySecurityOp,
 		Summary: fmt.Sprintf("%s %s %s of %s", op.Kind, qty, sec.Name, d),
-		Fields: moneyFields(map[string]any{
+		Fields: priceFields(map[string]any{
 			"kind": string(op.Kind), "date": d.String(), "account": acct.Name, "security": sec.Name,
 			"quantity": qty.String(),
 		}, "unit_price", price),
@@ -487,6 +534,13 @@ func (s *Service) ApplyOp(ctx context.Context, p OpPlan) (domain.SecurityOp, err
 			return err
 		}
 		op := p.Op
+		acct, err := r.Accounts().Get(ctx, op.Account)
+		if err != nil {
+			return fmt.Errorf("account: %w", err)
+		}
+		if err := s.checkAccount(acct, sec); err != nil {
+			return err
+		}
 		if err := checkHeld(ctx, r, sec, op.Account, &op, 0); err != nil {
 			return err
 		}

@@ -6,8 +6,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/assetting"
 	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 )
 
 // newKPINetWorthCmd computes UC-04's net worth: every account balance converted to the base
@@ -41,7 +43,31 @@ func runKPINetWorth(cmd *cobra.Command, deps *Deps) error {
 	if err != nil {
 		return err
 	}
-	return writeKPINetWorth(deps.Stdout, rt.format, deps.Locale(), rt.color, nw, point)
+	items, err := netWorthAssetItems(cmd, deps, at)
+	if err != nil {
+		return err
+	}
+	return writeKPINetWorth(deps.Stdout, rt.format, deps.Locale(), rt.color, nw, point, items)
+}
+
+// netWorthAssetItems itemizes the assets for display only; totals never depend on it. It
+// returns nil when the assets module is off or the service is not wired.
+func netWorthAssetItems(cmd *cobra.Command, deps *Deps, at string) ([]assetting.Item, error) {
+	if deps.Assets == nil {
+		return nil, nil
+	}
+	enabled, err := enabledModulesFromDeps(deps)
+	if err != nil {
+		return nil, err
+	}
+	if !enabled.Has(module.Assets) {
+		return nil, nil
+	}
+	items, err := deps.Assets.List(cmd.Context(), enabled, at)
+	if err != nil {
+		return nil, fmt.Errorf("list assets: %w", err)
+	}
+	return items, nil
 }
 
 func netWorthPoint(cmd *cobra.Command, deps *Deps, at string) (reporting.NetWorthPoint, error) {

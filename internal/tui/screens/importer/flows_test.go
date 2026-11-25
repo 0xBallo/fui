@@ -18,8 +18,13 @@ import (
 
 func addAccount(t *testing.T, fx fixture, name string) {
 	t.Helper()
+	addAccountKind(t, fx, name, "checking")
+}
+
+func addAccountKind(t *testing.T, fx fixture, name, kind string) {
+	t.Helper()
 	plan, err := fx.PlanAddAccount(context.Background(), app.AddAccountRequest{
-		Name: name, Kind: "checking", Currency: "EUR", OpeningBalance: "0", OpenedOn: "2026-01-01",
+		Name: name, Kind: kind, Currency: "EUR", OpeningBalance: "0", OpenedOn: "2026-01-01",
 	})
 	if err != nil {
 		t.Fatalf("PlanAddAccount: %v", err)
@@ -49,7 +54,7 @@ func richStream() []fuiproto.Record {
 		fuiproto.Record{Type: fuiproto.RecordTypeBalance, Balance: &fuiproto.BalanceRecord{Account: "Account A", Date: "2026-06-04", Amount: 123}},
 		fuiproto.Record{Type: fuiproto.RecordTypeError, Error: &fuiproto.ErrorRecord{Line: 9, Message: "bad date"}},
 		fuiproto.Record{Type: fuiproto.RecordTypeSecurityOp, SecurityOp: &fuiproto.SecurityOpRecord{
-			Account: "Account A", Date: "2026-06-05", Kind: fuiproto.SecurityOpKindBuy, Quantity: 1000000, UnitPrice: 100,
+			Account: "Account B", Date: "2026-06-05", Kind: fuiproto.SecurityOpKindBuy, Quantity: 1000000, UnitPrice: 100,
 			Security: fuiproto.SecurityMeta{Name: "World ETF", Ticker: "VWCE", Kind: fuiproto.SecurityKindETF, Currency: "EUR", QuantityScale: 6},
 		}},
 	)
@@ -60,7 +65,7 @@ func richPreview(t *testing.T, th theme.Theme, mods *recordingModules, profiles 
 	t.Helper()
 	fx := newFixture()
 	addAccount(t, fx, "Account A")
-	addAccount(t, fx, "Account B")
+	addAccountKind(t, fx, "Account B", "investment") // security operations need an investment account
 	fx.connectors.fixtures["fui"] = richStream()
 	m := importer.New(fx, domain.LocaleENUS, th)
 	if mods != nil {

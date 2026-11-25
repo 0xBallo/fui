@@ -669,3 +669,5 @@ func TestForecastMinimumBalance(t *testing.T) {
 		t.Fatal("bad minimum accepted")
 	}
 }
+
+func price(m int64) domain.Price { return must(domain.NewPrice(m, 2, eur())) }

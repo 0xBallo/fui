@@ -16,7 +16,7 @@ type Position struct {
 	Income    Money // dividends and coupons, net of fees
 
 	HasPrice    bool  // a price on or before AsOf is known
-	LastPrice   Money // valid only if HasPrice
+	LastPrice   Price // valid only if HasPrice
 	PriceDate   Date  // valid only if HasPrice
 	MarketValue Money // Quantity × LastPrice; valid only if HasPrice
 	Unrealized  Money // MarketValue − CostBasis; valid only if HasPrice
@@ -135,7 +135,7 @@ func (l *ledger) apply(op SecurityOp) error {
 			map[string]any{"left": l.sec.Currency.Code(), "right": op.UnitPrice.Currency().Code()},
 			"operation currency %s does not match security currency %s", op.UnitPrice.Currency(), l.sec.Currency)
 	}
-	gross := new(big.Rat).Mul(op.Quantity.rat(), new(big.Rat).SetInt64(op.UnitPrice.minor))
+	gross := new(big.Rat).Mul(op.Quantity.rat(), op.UnitPrice.minorRat())
 	fees := new(big.Rat).SetInt64(op.Fees.minor)
 	if op.Kind != OpBuy && op.Kind != OpSell {
 		l.income.Add(l.income, gross.Sub(gross, fees))

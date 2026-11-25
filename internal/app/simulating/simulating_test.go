@@ -57,10 +57,10 @@ func TestRunInvestmentUsesCurrentPositionsValue(t *testing.T) {
 	})
 	mustSecurityOp(t, e.store, domain.SecurityOp{
 		Date: date(t, 2026, 1, 10), Account: acc.ID, Security: sec.ID, Kind: domain.OpBuy,
-		Quantity: quantity(t, 2, 0), UnitPrice: money(t, 40_00), Fees: money(t, 0),
+		Quantity: quantity(t, 2, 0), UnitPrice: price(t, 40_00, "EUR"), Fees: money(t, 0),
 	})
 	mustSecurityPrice(t, e.store, domain.SecurityPrice{
-		Security: sec.ID, Date: date(t, 2026, 1, 12), Price: money(t, 75_00),
+		Security: sec.ID, Date: date(t, 2026, 1, 12), Price: price(t, 75_00, "EUR"),
 	})
 	got, err := e.svc.Run(context.Background(), e.enabled, RunRequest{Kind: KindInvestment, Investment: &InvestmentParams{
 		InitialCurrentPositions: true, Years: 1, Compounding: "annual", Rates: Rates{},
@@ -88,10 +88,10 @@ func TestRunInvestmentCurrentPositionsConvertsFX(t *testing.T) {
 	})
 	mustSecurityOp(t, e.store, domain.SecurityOp{
 		Date: date(t, 2026, 1, 10), Account: acc.ID, Security: sec.ID, Kind: domain.OpBuy,
-		Quantity: quantity(t, 5, 0), UnitPrice: moneyIn(t, 20_00, "USD"), Fees: moneyIn(t, 0, "USD"),
+		Quantity: quantity(t, 5, 0), UnitPrice: price(t, 20_00, "USD"), Fees: moneyIn(t, 0, "USD"),
 	})
 	mustSecurityPrice(t, e.store, domain.SecurityPrice{
-		Security: sec.ID, Date: date(t, 2026, 1, 12), Price: moneyIn(t, 30_00, "USD"),
+		Security: sec.ID, Date: date(t, 2026, 1, 12), Price: price(t, 30_00, "USD"),
 	})
 	mustFX(t, e.store, domain.FXRate{
 		Currency: usd(t),
@@ -120,10 +120,10 @@ func TestRunInvestmentCurrentPositionsMissingRate(t *testing.T) {
 	})
 	mustSecurityOp(t, e.store, domain.SecurityOp{
 		Date: date(t, 2026, 1, 10), Account: acc.ID, Security: sec.ID, Kind: domain.OpBuy,
-		Quantity: quantity(t, 1, 0), UnitPrice: moneyIn(t, 10_00, "USD"), Fees: moneyIn(t, 0, "USD"),
+		Quantity: quantity(t, 1, 0), UnitPrice: price(t, 10_00, "USD"), Fees: moneyIn(t, 0, "USD"),
 	})
 	mustSecurityPrice(t, e.store, domain.SecurityPrice{
-		Security: sec.ID, Date: date(t, 2026, 1, 12), Price: moneyIn(t, 12_00, "USD"),
+		Security: sec.ID, Date: date(t, 2026, 1, 12), Price: price(t, 12_00, "USD"),
 	})
 	_, err := e.svc.Run(context.Background(), e.enabled, RunRequest{Kind: KindInvestment, Investment: &InvestmentParams{
 		InitialCurrentPositions: true, Years: 1, Compounding: "annual", Rates: Rates{},
@@ -145,7 +145,7 @@ func TestRunInvestmentCurrentPositionsUsesCostBasisWithoutPrice(t *testing.T) {
 	})
 	mustSecurityOp(t, e.store, domain.SecurityOp{
 		Date: date(t, 2026, 1, 10), Account: acc.ID, Security: sec.ID, Kind: domain.OpBuy,
-		Quantity: quantity(t, 2, 0), UnitPrice: money(t, 40_00), Fees: money(t, 0),
+		Quantity: quantity(t, 2, 0), UnitPrice: price(t, 40_00, "EUR"), Fees: money(t, 0),
 	})
 	got, err := e.svc.Run(context.Background(), e.enabled, RunRequest{Kind: KindInvestment, Investment: &InvestmentParams{
 		InitialCurrentPositions: true, Years: 1, Compounding: "annual", Rates: Rates{},
@@ -663,4 +663,17 @@ func quantity(t *testing.T, scaled int64, scale int) domain.Quantity {
 		t.Fatal(err)
 	}
 	return q
+}
+
+func price(t *testing.T, minor int64, code string) domain.Price {
+	t.Helper()
+	c, err := domain.ParseCurrency(code)
+	if err != nil {
+		t.Fatalf("ParseCurrency: %v", err)
+	}
+	p, err := domain.NewPrice(minor, c.Decimals(), c)
+	if err != nil {
+		t.Fatalf("NewPrice: %v", err)
+	}
+	return p
 }

@@ -267,6 +267,7 @@ type Security struct {
 	Kind          string
 	Currency      string
 	QuantityScale int64
+	PriceScale    int64
 	CreatedAt     string
 	UpdatedAt     string
 }

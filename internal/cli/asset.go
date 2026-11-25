@@ -13,12 +13,17 @@ import (
 func NewAssetCmd(deps *Deps, svc *assetting.Service) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "asset",
-		Short: "Add, list and value assets",
+		Short: "Add, list, show, edit, value, link and remove assets",
 	}
 	cmd.AddCommand(
 		newAssetAddCmd(deps, svc),
 		newAssetListCmd(deps, svc),
 		newAssetValueCmd(deps, svc),
+		newAssetShowCmd(deps, svc),
+		newAssetEditCmd(deps, svc),
+		newAssetRemoveCmd(deps, svc),
+		newAssetLinkCmd(deps, svc),
+		newAssetUnlinkCmd(deps, svc),
 	)
 	annotateModule(cmd, module.Assets)
 	return cmd

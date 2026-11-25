@@ -133,7 +133,7 @@ func TestSecurityOpImportBatch(t *testing.T) {
 		mk := func(day string, b domain.ImportBatchID) domain.SecurityOp {
 			return domain.SecurityOp{
 				Date: mustDate(t, day), Account: acc.ID, Security: sec.ID, Kind: domain.OpBuy, Quantity: qty,
-				UnitPrice: mustMoney(t, 100, eur), Fees: mustMoney(t, 0, eur), ImportBatchID: b,
+				UnitPrice: mustPrice(t, 100, eur), Fees: mustMoney(t, 0, eur), ImportBatchID: b,
 			}
 		}
 		second, err := mustSecurityRepo(t, r).InsertOp(ctx, mk("2026-03-02", batch.ID))

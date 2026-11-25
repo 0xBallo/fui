@@ -72,6 +72,7 @@ func (a *Analytics) bucketEnds(p domain.Period, g domain.Granularity) ([]domain.
 // supporting another module (e.g. crypto wallets) is one more entry.
 var moduleAccountKinds = map[module.ID][]domain.AccountKind{
 	module.Investments: {domain.AccountInvestment},
+	module.Crypto:      {domain.AccountWallet},
 }
 
 // accountEnabled reports whether accounts of kind take part in net worth and runway under the

@@ -13,6 +13,7 @@ import (
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/module"
 	"github.com/0xballo/fui/internal/tui"
+	"github.com/0xballo/fui/internal/tui/screens/accounts"
 	"github.com/0xballo/fui/internal/tui/screens/report"
 	"github.com/0xballo/fui/internal/tui/screens/screentest"
 )
@@ -35,7 +36,7 @@ func (v03Insights) AcceptSubscription(context.Context, string) (reporting.Accept
 	return reporting.AcceptResult{}, nil
 }
 
-type v03Positions struct{}
+type v03Positions struct{ accounts.PositionsUseCases }
 
 func (v03Positions) ListPositions(context.Context, investing.PositionsRequest) ([]investing.PositionLine, error) {
 	return []investing.PositionLine{{Security: domain.Security{ID: 1, Name: "VWCE ETF"}}}, nil

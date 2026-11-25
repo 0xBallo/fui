@@ -32,4 +32,16 @@ type PositionsUseCases interface {
 	ListPositions(ctx context.Context, req investing.PositionsRequest) ([]investing.PositionLine, error)
 	PlanSetPrice(ctx context.Context, req investing.SetPriceRequest) (investing.SetPricePlan, error)
 	ApplySetPrice(ctx context.Context, p investing.SetPricePlan) error
+	PlanAddSecurity(ctx context.Context, req investing.AddSecurityRequest) (investing.AddSecurityPlan, error)
+	ApplyAddSecurity(ctx context.Context, p investing.AddSecurityPlan) (domain.Security, error)
+	PlanBuy(ctx context.Context, req investing.OpRequest) (investing.OpPlan, error)
+	PlanSell(ctx context.Context, req investing.OpRequest) (investing.OpPlan, error)
+	PlanDividend(ctx context.Context, req investing.OpRequest) (investing.OpPlan, error)
+	PlanCoupon(ctx context.Context, req investing.OpRequest) (investing.OpPlan, error)
+	ApplyOp(ctx context.Context, p investing.OpPlan) (domain.SecurityOp, error)
+	ListOps(ctx context.Context, req investing.ListOpsRequest) ([]investing.OpLine, error)
+	PlanEditOp(ctx context.Context, req investing.EditOpRequest) (investing.EditOpPlan, error)
+	ApplyEditOp(ctx context.Context, p investing.EditOpPlan) (domain.SecurityOp, error)
+	PlanRemoveOp(ctx context.Context, id domain.SecurityOpID) (investing.RemoveOpPlan, error)
+	ApplyRemoveOp(ctx context.Context, p investing.RemoveOpPlan) error
 }

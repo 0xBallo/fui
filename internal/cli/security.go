@@ -20,6 +20,8 @@ func NewSecurityCmd(deps *Deps, svc *investing.Service) *cobra.Command {
 		newSecurityAddCmd(deps, svc),
 		newSecurityListCmd(deps, svc),
 		newSecurityPriceCmd(deps, svc),
+		newSecurityEditCmd(deps, svc),
+		newSecurityRemoveCmd(deps, svc),
 	)
 	annotateModule(cmd, module.Investments)
 	return cmd

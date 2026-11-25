@@ -69,7 +69,7 @@ func WriteSecurity(w io.Writer, f Format, sec domain.Security) error {
 type SecurityPriceView struct {
 	SecurityID int64
 	Date       domain.Date
-	Price      domain.Money
+	Price      domain.Price
 }
 
 // SecurityPriceDTO is the --json shape of one manual security price.
@@ -89,9 +89,9 @@ func securityPriceDTO(v SecurityPriceView) SecurityPriceDTO {
 func securityPriceRows(lines []SecurityPriceView, loc domain.Locale, machine bool) Rows {
 	t := Rows{Header: []string{"SECURITY_ID", "DATE", "PRICE", "CURRENCY"}, MoneyCols: []int{2}}
 	for _, line := range lines {
-		price := FormatMoney(line.Price, loc)
+		price := FormatPrice(line.Price, loc)
 		if machine {
-			price = FormatMoneyMachine(line.Price)
+			price = line.Price.String()
 		}
 		date := FormatDate(line.Date, loc)
 		if machine {
@@ -143,11 +143,11 @@ func securityOpRows(ops []domain.SecurityOp, loc domain.Locale, machine bool) Ro
 		MoneyCols: []int{6, 7},
 	}
 	for _, op := range ops {
-		unitPrice := FormatMoney(op.UnitPrice, loc)
+		unitPrice := FormatPrice(op.UnitPrice, loc)
 		fees := FormatMoney(op.Fees, loc)
 		date := FormatDate(op.Date, loc)
 		if machine {
-			unitPrice = FormatMoneyMachine(op.UnitPrice)
+			unitPrice = op.UnitPrice.String()
 			fees = FormatMoneyMachine(op.Fees)
 			date = FormatDateMachine(op.Date)
 		}
@@ -238,7 +238,7 @@ func positionRows(lines []investing.PositionLine, loc domain.Locale, machine boo
 		unrealized := "-"
 		value := "-"
 		if pos.HasPrice {
-			lastPrice = FormatMoney(pos.LastPrice, loc)
+			lastPrice = FormatPrice(pos.LastPrice, loc)
 			priceDate = FormatDate(pos.PriceDate, loc)
 			marketValue = FormatMoney(pos.MarketValue, loc)
 			unrealized = FormatMoney(pos.Unrealized, loc)
@@ -256,7 +256,7 @@ func positionRows(lines []investing.PositionLine, loc domain.Locale, machine boo
 			unrealized = ""
 			value = ""
 			if pos.HasPrice {
-				lastPrice = FormatMoneyMachine(pos.LastPrice)
+				lastPrice = pos.LastPrice.String()
 				priceDate = FormatDateMachine(pos.PriceDate)
 				marketValue = FormatMoneyMachine(pos.MarketValue)
 				unrealized = FormatMoneyMachine(pos.Unrealized)

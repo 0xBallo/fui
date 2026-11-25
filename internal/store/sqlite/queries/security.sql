@@ -5,7 +5,8 @@ INSERT INTO securities (
     isin,
     kind,
     currency,
-    quantity_scale
+    quantity_scale,
+    price_scale
 )
 VALUES (
     @name,
@@ -13,7 +14,8 @@ VALUES (
     @isin,
     @kind,
     @currency,
-    @quantity_scale
+    @quantity_scale,
+    @price_scale
 )
 RETURNING *;
 

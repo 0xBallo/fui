@@ -143,14 +143,14 @@ func TestSecurityRepoCRUD(t *testing.T) {
 		if err := securities.UpsertPrice(ctx, domain.SecurityPrice{
 			Security: inserted.ID,
 			Date:     mustDate(t, "2026-04-01"),
-			Price:    mustMoney(t, 1250, eur),
+			Price:    mustPrice(t, 1250, eur),
 		}); err != nil {
 			return err
 		}
 		if err := securities.UpsertPrice(ctx, domain.SecurityPrice{
 			Security: inserted.ID,
 			Date:     mustDate(t, "2026-04-01"),
-			Price:    mustMoney(t, 1300, eur),
+			Price:    mustPrice(t, 1300, eur),
 		}); err != nil {
 			return err
 		}
@@ -164,7 +164,7 @@ func TestSecurityRepoCRUD(t *testing.T) {
 			Security:  inserted.ID,
 			Kind:      domain.OpBuy,
 			Quantity:  qty,
-			UnitPrice: mustMoney(t, 1200, eur),
+			UnitPrice: mustPrice(t, 1200, eur),
 			Fees:      mustMoney(t, 45, eur),
 			CashTx:    cashTx.ID,
 		})
@@ -233,7 +233,7 @@ func TestSecurityRepoCRUD(t *testing.T) {
 			Security:  inserted.ID,
 			Kind:      domain.OpBuy,
 			Quantity:  qty,
-			UnitPrice: mustMoney(t, 1000, eur),
+			UnitPrice: mustPrice(t, 1000, eur),
 			Fees:      mustMoney(t, 0, eur),
 			CashTx:    cashTx.ID,
 		})
@@ -292,7 +292,7 @@ func TestSecurityFKRestrict(t *testing.T) {
 		if err := securities.UpsertPrice(ctx, domain.SecurityPrice{
 			Security: security.ID,
 			Date:     mustDate(t, "2026-05-01"),
-			Price:    mustMoney(t, 1234, eur),
+			Price:    mustPrice(t, 1234, eur),
 		}); err != nil {
 			return err
 		}
@@ -306,7 +306,7 @@ func TestSecurityFKRestrict(t *testing.T) {
 			Security:  security.ID,
 			Kind:      domain.OpBuy,
 			Quantity:  qty,
-			UnitPrice: mustMoney(t, 1230, eur),
+			UnitPrice: mustPrice(t, 1230, eur),
 			Fees:      mustMoney(t, 10, eur),
 		})
 		return err
@@ -415,7 +415,7 @@ func TestResetWipesSecurities(t *testing.T) {
 				if err := securities.UpsertPrice(ctx, domain.SecurityPrice{
 					Security: security.ID,
 					Date:     mustDate(t, "2026-04-01"),
-					Price:    mustMoney(t, 1300, eur),
+					Price:    mustPrice(t, 1300, eur),
 				}); err != nil {
 					return err
 				}
@@ -429,7 +429,7 @@ func TestResetWipesSecurities(t *testing.T) {
 					Security:  security.ID,
 					Kind:      domain.OpBuy,
 					Quantity:  qty,
-					UnitPrice: mustMoney(t, 1200, eur),
+					UnitPrice: mustPrice(t, 1200, eur),
 					Fees:      mustMoney(t, 10, eur),
 				})
 				return err
@@ -553,7 +553,7 @@ func TestSecurityRepoValidationAndReadOnly(t *testing.T) {
 		if err := repo.Delete(ctx, security.ID); !errors.Is(err, errReadOnly) {
 			t.Fatalf("Delete read-only err = %v, want errReadOnly", err)
 		}
-		if err := repo.UpsertPrice(ctx, domain.SecurityPrice{Security: security.ID, Date: mustDate(t, "2026-01-01"), Price: mustMoney(t, 1, eur)}); !errors.Is(err, errReadOnly) {
+		if err := repo.UpsertPrice(ctx, domain.SecurityPrice{Security: security.ID, Date: mustDate(t, "2026-01-01"), Price: mustPrice(t, 1, eur)}); !errors.Is(err, errReadOnly) {
 			t.Fatalf("UpsertPrice read-only err = %v, want errReadOnly", err)
 		}
 		if err := repo.DeletePrice(ctx, security.ID, mustDate(t, "2026-01-01")); !errors.Is(err, errReadOnly) {
@@ -569,7 +569,7 @@ func TestSecurityRepoValidationAndReadOnly(t *testing.T) {
 			Security:  security.ID,
 			Kind:      domain.OpBuy,
 			Quantity:  qty,
-			UnitPrice: mustMoney(t, 1, eur),
+			UnitPrice: mustPrice(t, 1, eur),
 			Fees:      mustMoney(t, 0, eur),
 		}); !errors.Is(err, errReadOnly) {
 			t.Fatalf("InsertOp read-only err = %v, want errReadOnly", err)
@@ -587,13 +587,13 @@ func TestSecurityRepoValidationAndReadOnly(t *testing.T) {
 
 	if err := store.WithTx(ctx, func(r app.Repos) error {
 		repo := mustSecurityRepo(t, r)
-		if err := repo.UpsertPrice(ctx, domain.SecurityPrice{Security: security.ID, Date: mustDate(t, "2026-01-01"), Price: mustMoney(t, 10, usd)}); !errors.Is(err, domain.ErrCurrencyMismatch) {
+		if err := repo.UpsertPrice(ctx, domain.SecurityPrice{Security: security.ID, Date: mustDate(t, "2026-01-01"), Price: mustPrice(t, 10, usd)}); !errors.Is(err, domain.ErrCurrencyMismatch) {
 			t.Fatalf("UpsertPrice currency mismatch err = %v, want ErrCurrencyMismatch", err)
 		}
-		if err := repo.UpsertPrice(ctx, domain.SecurityPrice{Security: 0, Date: mustDate(t, "2026-01-01"), Price: mustMoney(t, 10, eur)}); !errors.Is(err, domain.ErrMissingField) {
+		if err := repo.UpsertPrice(ctx, domain.SecurityPrice{Security: 0, Date: mustDate(t, "2026-01-01"), Price: mustPrice(t, 10, eur)}); !errors.Is(err, domain.ErrMissingField) {
 			t.Fatalf("UpsertPrice missing security err = %v, want ErrMissingField", err)
 		}
-		if err := repo.UpsertPrice(ctx, domain.SecurityPrice{Security: security.ID, Date: mustDate(t, "2026-01-01"), Price: mustMoney(t, 0, eur)}); !errors.Is(err, domain.ErrInvalidValue) {
+		if err := repo.UpsertPrice(ctx, domain.SecurityPrice{Security: security.ID, Date: mustDate(t, "2026-01-01"), Price: mustPrice(t, 0, eur)}); !errors.Is(err, domain.ErrInvalidValue) {
 			t.Fatalf("UpsertPrice zero price err = %v, want ErrInvalidValue", err)
 		}
 		if _, err := repo.PriceOnOrBefore(ctx, security.ID, domain.Date{}); !errors.Is(err, domain.ErrMissingField) {
@@ -621,7 +621,7 @@ func TestSecurityRepoValidationAndReadOnly(t *testing.T) {
 			Security:  security.ID,
 			Kind:      domain.OpBuy,
 			Quantity:  qty,
-			UnitPrice: mustMoney(t, 10, eur),
+			UnitPrice: mustPrice(t, 10, eur),
 			Fees:      mustMoney(t, 0, eur),
 		})
 		if !errors.Is(err, domain.ErrNotFound) {
@@ -633,11 +633,87 @@ func TestSecurityRepoValidationAndReadOnly(t *testing.T) {
 			Security:  security.ID,
 			Kind:      domain.OpBuy,
 			Quantity:  qty,
-			UnitPrice: mustMoney(t, 10, usd),
+			UnitPrice: mustPrice(t, 10, usd),
 			Fees:      mustMoney(t, 0, usd),
 		})
 		if !errors.Is(err, domain.ErrCurrencyMismatch) {
 			t.Fatalf("InsertOp currency mismatch err = %v, want ErrCurrencyMismatch", err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSecurityRepoSubCentPriceRoundTrip(t *testing.T) {
+	store, _ := newTestStore(t)
+	ctx := context.Background()
+	usd := mustCurrency(t, "USD")
+	day := mustDate(t, "2026-05-01")
+
+	if err := store.WithTx(ctx, func(r app.Repos) error {
+		acct, err := r.Accounts().Insert(ctx, domain.Account{
+			Name: "Wallet", Kind: domain.AccountWallet, Currency: usd,
+			OpeningBalance: mustMoney(t, 0, usd), OpenedOn: day,
+		})
+		if err != nil {
+			return err
+		}
+		securities := mustSecurityRepo(t, r)
+		sec, err := securities.Insert(ctx, domain.Security{
+			Name: "Shib", Ticker: "shib", Kind: domain.SecurityCrypto, Currency: usd, QuantityScale: 0,
+		})
+		if err != nil {
+			return err
+		}
+		if sec.PriceScale != 8 {
+			t.Errorf("default crypto PriceScale = %d, want 8", sec.PriceScale)
+		}
+		price, err := domain.NewPrice(1234, 8, usd)
+		if err != nil {
+			return err
+		}
+		if err := securities.UpsertPrice(ctx, domain.SecurityPrice{Security: sec.ID, Date: day, Price: price}); err != nil {
+			return err
+		}
+		qty, _ := domain.NewQuantity(1000000, 0)
+		op, err := securities.InsertOp(ctx, domain.SecurityOp{
+			Date: day, Account: acct.ID, Security: sec.ID, Kind: domain.OpBuy, Quantity: qty, UnitPrice: price,
+		})
+		if err != nil {
+			return err
+		}
+		gotPrice, err := securities.PriceOnOrBefore(ctx, sec.ID, day)
+		if err != nil || gotPrice.Price != price || gotPrice.Price.String() != "0.00001234" {
+			t.Errorf("price = %v, %v; want 0.00001234", gotPrice.Price, err)
+		}
+		gotOp, err := securities.GetOp(ctx, op.ID)
+		if err != nil || gotOp.UnitPrice != price {
+			t.Errorf("op price = %v, %v", gotOp.UnitPrice, err)
+		}
+		if ops, err := securities.ListOpsBySecurity(ctx, sec.ID, domain.Date{}, domain.Date{}); err != nil || len(ops) != 1 || ops[0].UnitPrice != price {
+			t.Errorf("ListOpsBySecurity = %+v, %v", ops, err)
+		}
+
+		wrong, _ := domain.NewPrice(12, 2, usd)
+		if err := securities.UpsertPrice(ctx, domain.SecurityPrice{Security: sec.ID, Date: day, Price: wrong}); !errors.Is(err, domain.ErrInvalidValue) {
+			t.Errorf("price at wrong scale err = %v", err)
+		}
+		if _, err := securities.InsertOp(ctx, domain.SecurityOp{
+			Date: day, Account: acct.ID, Security: sec.ID, Kind: domain.OpBuy, Quantity: qty, UnitPrice: wrong,
+		}); !errors.Is(err, domain.ErrInvalidValue) {
+			t.Errorf("op at wrong scale err = %v", err)
+		}
+
+		// The price scale is fixed at creation: an update cannot change it.
+		sec.PriceScale = 4
+		sec.Name = "Shiba"
+		if err := securities.Update(ctx, sec); err != nil {
+			return err
+		}
+		got, err := securities.Get(ctx, sec.ID)
+		if err != nil || got.PriceScale != 8 || got.Name != "Shiba" {
+			t.Errorf("after update = %+v, %v", got, err)
 		}
 		return nil
 	}); err != nil {

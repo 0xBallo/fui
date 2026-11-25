@@ -312,7 +312,7 @@ func TestPlanAndApplySplitRows(t *testing.T) {
 
 func TestPlanSecurityOpsModuleGate(t *testing.T) {
 	e := newEnv(nil)
-	src := stream("fui", "", account("r1", "Broker", "EUR"),
+	src := stream("fui", "", broker("r1", "Broker", "EUR"),
 		txRec("r1", "cash-1", "2026-10-01", -100, "buy cash leg"),
 		fuiproto.Record{Type: fuiproto.RecordTypeSecurityOp, SecurityOp: &fuiproto.SecurityOpRecord{
 			Account:   "r1",
@@ -342,7 +342,7 @@ func TestPlanSecurityOpsModuleGate(t *testing.T) {
 func TestPlanAndApplySecurityOps(t *testing.T) {
 	e := newEnv(nil)
 	investments := must(module.Validate([]module.ID{module.Core, module.Investments}))
-	src := stream("fui", "", account("r1", "Broker", "EUR"),
+	src := stream("fui", "", broker("r1", "Broker", "EUR"),
 		txRec("r1", "cash-1", "2026-10-01", -100, "buy cash leg", kind(fuiproto.TransactionKindInvestment)),
 		fuiproto.Record{Type: fuiproto.RecordTypeSecurityOp, SecurityOp: &fuiproto.SecurityOpRecord{
 			Account:   "r1",

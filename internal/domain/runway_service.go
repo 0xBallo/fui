@@ -88,7 +88,7 @@ func runwayLiquidity(base Currency, balances []RunwayBalance) (Money, error) {
 				}
 				debt = next
 			}
-		case AccountInvestment, AccountLoan:
+		case AccountInvestment, AccountWallet, AccountLoan:
 			// Excluded from liquidity by definition of the KPI.
 		}
 	}

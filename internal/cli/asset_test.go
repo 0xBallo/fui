@@ -62,6 +62,52 @@ func TestAssetDryRun(t *testing.T) {
 	}
 }
 
+func TestAssetManageCommands(t *testing.T) {
+	h := newHarness(t)
+	mods := assetsModules(t)
+	run := func(args ...string) string {
+		t.Helper()
+		out, _, err := runWithAssetCommands(h, mods, args...)
+		if err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		return out
+	}
+	run("asset", "add", "House", "--kind", "property", "--value", "300000", "--purchase-date", "2026-01-01")
+	run("asset", "value", "House", "320000", "--date", "2026-06-01")
+
+	if out := run("asset", "show", "House", "--json"); !strings.Contains(out, `"history":[{"date":"2026-06-01","value":32000000}]`) {
+		t.Fatalf("show json = %q", out)
+	}
+	if out := run("asset", "show", "House"); !strings.Contains(out, "valuations:") || !strings.Contains(out, "loan: -") {
+		t.Fatalf("show table = %q", out)
+	}
+	if out := run("asset", "show", "House", "--csv"); !strings.Contains(out, "2026-06-01,320000") {
+		t.Fatalf("show csv = %q", out)
+	}
+	if out := run("asset", "edit", "House", "--name", "Home", "--json"); !strings.Contains(out, `"name":"Home"`) {
+		t.Fatalf("edit = %q", out)
+	}
+	if _, _, err := runWithAssetCommands(h, mods, "asset", "edit", "Home"); err == nil {
+		t.Fatal("edit without changes: want error")
+	}
+	if out := run("asset", "value", "rm", "Home", "2026-06-01", "--dry-run", "--json"); !strings.Contains(out, `"entity":"valuation"`) {
+		t.Fatalf("value rm dry-run = %q", out)
+	}
+	if out := run("asset", "value", "rm", "Home", "2026-06-01", "--json"); !strings.Contains(out, `"action":"valuation removed from"`) {
+		t.Fatalf("value rm = %q", out)
+	}
+	if _, _, err := runWithAssetCommands(h, mods, "asset", "unlink", "Home"); err == nil {
+		t.Fatal("unlink without link: want error")
+	}
+	if out := run("asset", "rm", "Home", "--yes", "--csv"); !strings.Contains(out, "removed,Home") {
+		t.Fatalf("rm = %q", out)
+	}
+	if out := run("asset", "list", "--json"); strings.Contains(out, "Home") {
+		t.Fatalf("list after rm = %q", out)
+	}
+}
+
 func TestAssetCommandModuleAnnotation(t *testing.T) {
 	h := newHarness(t)
 	deps := h.deps(nil, nil)

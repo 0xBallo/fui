@@ -3,6 +3,7 @@ package importing_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -41,13 +42,13 @@ func loanRecs() []fuiproto.Record {
 }
 
 func brokerStream() importing.Source {
-	return stream("fui", "", account("r1", "Broker", "EUR"),
+	return stream("fui", "", broker("r1", "Broker", "EUR"),
 		txRec("r1", "cash-1", "2026-10-01", -100, "buy cash leg"), secOpRec("cash-1"))
 }
 
 func TestModuleRecordsListed(t *testing.T) {
 	e := newEnv(nil)
-	recs := append([]fuiproto.Record{account("r1", "Broker", "EUR"), secOpRec("")}, loanRecs()...)
+	recs := append([]fuiproto.Record{broker("r1", "Broker", "EUR"), secOpRec("")}, loanRecs()...)
 	plan := e.plan(t, stream("fui", "", recs...), createAccounts)
 	want := []importing.ModuleRecords{
 		{Module: module.Investments, Count: 1, Kinds: []string{"security_op"}, Lines: []int{3}},
@@ -65,7 +66,7 @@ func TestModuleRecordsListed(t *testing.T) {
 func TestApplyModules(t *testing.T) {
 	t.Run("skipped without enabling", func(t *testing.T) {
 		e := newEnv(nil)
-		recs := append([]fuiproto.Record{account("r1", "Broker", "EUR"), txRec("r1", "c", "2026-10-01", -100, "x"), secOpRec("c")}, loanRecs()...)
+		recs := append([]fuiproto.Record{broker("r1", "Broker", "EUR"), txRec("r1", "c", "2026-10-01", -100, "x"), secOpRec("c")}, loanRecs()...)
 		res := must(e.svc.ApplyImport(context.Background(), e.plan(t, stream("fui", "", recs...), createAccounts)))
 		if res.SecurityOps != 0 || res.Securities != 0 || res.Transactions != 1 {
 			t.Fatalf("result = %+v", res)
@@ -132,4 +133,67 @@ func contains(ids []module.ID, id module.ID) bool {
 		}
 	}
 	return false
+}
+
+func cryptoOpRec() fuiproto.Record {
+	rec := secOpRec("c")
+	rec.SecurityOp.Security = fuiproto.SecurityMeta{
+		Name: "Bitcoin", Ticker: "BTC", Kind: fuiproto.SecurityKindCrypto, Currency: "EUR", QuantityScale: 8,
+	}
+	return rec
+}
+
+func TestSecurityOpNeedsInvestmentAccount(t *testing.T) {
+	inv := must(module.Validate([]module.ID{module.Core, module.Investments}))
+	e := newEnv(nil)
+	src := stream("fui", "", account("r1", "Checking", "EUR"), txRec("r1", "c", "2026-10-01", -100, "buy"), secOpRec("c"))
+	plan := e.plan(t, src, createAccounts, withModules(inv))
+	if len(plan.SecurityOps) != 0 || len(plan.Errors) != 1 || !strings.Contains(plan.Errors[0].Message, "cannot be held in a checking account") {
+		t.Fatalf("ops=%d errors=%+v, want no op and one account-kind error", len(plan.SecurityOps), plan.Errors)
+	}
+}
+
+func TestCryptoOpNeedsCryptoModule(t *testing.T) {
+	src := stream("fui", "", broker("r1", "Broker", "EUR"), txRec("r1", "c", "2026-10-01", -100, "buy"), cryptoOpRec())
+	inv := must(module.Validate([]module.ID{module.Core, module.Investments}))
+	both := must(module.Validate([]module.ID{module.Core, module.Investments, module.Crypto}))
+
+	t.Run("crypto off is tagged and skipped", func(t *testing.T) {
+		e := newEnv(nil)
+		plan := e.plan(t, src, createAccounts, withModules(inv))
+		want := []importing.ModuleRecords{{Module: module.Crypto, Count: 1, Kinds: []string{"security_op"}, Lines: []int{4}}}
+		if diff := cmp.Diff(want, plan.ModuleRecords); diff != "" {
+			t.Fatalf("module records (-want +got):\n%s", diff)
+		}
+		res := must(e.svc.ApplyImport(context.Background(), plan))
+		if res.SecurityOps != 0 || res.Securities != 0 || len(res.Warnings) != 1 {
+			t.Fatalf("result = %+v", res)
+		}
+	})
+	t.Run("investments off asks for crypto", func(t *testing.T) {
+		plan := newEnv(nil).plan(t, src, createAccounts)
+		if len(plan.ModuleRecords) != 1 || plan.ModuleRecords[0].Module != module.Crypto {
+			t.Fatalf("module records = %+v", plan.ModuleRecords)
+		}
+	})
+	t.Run("enabling crypto imports it", func(t *testing.T) {
+		e := newEnv(nil)
+		plan := e.plan(t, src, createAccounts, withModules(inv))
+		res := must(e.svc.ApplyImportWith(context.Background(), plan, importing.ApplyOptions{
+			EnableModules: []module.ID{module.Crypto}, Modules: inv, ModuleWriter: &fakeModuleWriter{},
+		}))
+		if res.SecurityOps != 1 || res.Securities != 1 {
+			t.Fatalf("result = %+v", res)
+		}
+	})
+	t.Run("crypto on imports directly", func(t *testing.T) {
+		e := newEnv(nil)
+		plan := e.plan(t, src, createAccounts, withModules(both))
+		if len(plan.ModuleRecords) != 0 {
+			t.Fatalf("module records = %+v", plan.ModuleRecords)
+		}
+		if res := must(e.svc.ApplyImport(context.Background(), plan)); res.SecurityOps != 1 {
+			t.Fatalf("result = %+v", res)
+		}
+	})
 }

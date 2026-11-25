@@ -87,6 +87,10 @@ func (b *builder) addSecurityOp(_ context.Context, rec *fuiproto.SecurityOpRecor
 		return nil
 	}
 	sec = b.resolveSecurity(sec)
+	if err := domain.CheckOpAccount(info.kind, sec.Kind); err != nil {
+		b.err(line, "security_op on account %q: %v", rec.Account, err)
+		return nil
+	}
 
 	op, err := parseSecurityOp(rec, info.id, sec)
 	if err != nil {
@@ -214,7 +218,12 @@ func parseSecurityOp(rec *fuiproto.SecurityOpRecord, accountID domain.AccountID,
 	if err != nil {
 		return domain.SecurityOp{}, fmt.Errorf("quantity: %w", err)
 	}
-	price, err := domain.NewMoney(rec.UnitPrice, sec.Currency)
+	priceMoney, err := domain.NewMoney(rec.UnitPrice, sec.Currency)
+	if err != nil {
+		return domain.SecurityOp{}, fmt.Errorf("unit price: %w", err)
+	}
+	// Records carry the price in minor units of the currency; rescale exactly to the security's precision.
+	price, err := domain.ParsePrice(domain.FormatMachine(priceMoney), sec.Currency, sec.PriceScale, domain.LocaleENUS)
 	if err != nil {
 		return domain.SecurityOp{}, fmt.Errorf("unit price: %w", err)
 	}

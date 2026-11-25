@@ -185,3 +185,71 @@ func runWithInvestingCommands(h *harness, mods module.Set, args ...string) (stdo
 	runErr = root.ExecuteContext(context.Background())
 	return out.String(), errw.String(), runErr
 }
+
+func TestSecurityEditRemoveInvestListEditRm(t *testing.T) {
+	h := newHarness(t)
+	h.account("Broker", "investment", "EUR", "0")
+	h.account("Cash", "checking", "EUR", "10000")
+	mods := investingModules(t, true)
+	run := func(args ...string) string {
+		t.Helper()
+		out, _, err := runWithInvestingCommands(h, mods, args...)
+		if err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		return out
+	}
+	fail := func(args ...string) error {
+		t.Helper()
+		_, _, err := runWithInvestingCommands(h, mods, args...)
+		if err == nil {
+			t.Fatalf("%v: expected error", args)
+		}
+		return err
+	}
+	run("security", "add", "Old Co", "--kind", "stock", "--ticker", "OLD", "--currency", "EUR")
+	run("security", "add", "BTP 2030", "--kind", "bond", "--ticker", "BTP", "--currency", "EUR")
+
+	if out := run("security", "edit", "OLD", "--name", "New Co", "--dry-run"); !strings.Contains(out, "update security") {
+		t.Fatalf("edit dry-run = %q", out)
+	}
+	if out := run("security", "edit", "OLD", "--name", "New Co", "--json"); !strings.Contains(out, `"name":"New Co"`) {
+		t.Fatalf("edit = %q", out)
+	}
+	_ = fail("security", "edit", "OLD")
+
+	run("invest", "buy", "BTP", "--account", "Broker", "--cash-account", "Cash", "--quantity", "10", "--price", "100", "--date", "2026-03-01")
+	run("invest", "coupon", "BTP", "--account", "Broker", "--quantity", "10", "--price", "1.5", "--date", "2026-04-01")
+	if out := run("invest", "list", "--kind", "coupon", "--csv"); !strings.Contains(out, "2026-04-01,coupon,Broker,BTP 2030,10,1.50") {
+		t.Fatalf("list coupon csv = %q", out)
+	}
+	if out := run("invest", "list", "--account", "Broker", "--security", "BTP", "--json"); strings.Count(out, `"kind"`) != 2 {
+		t.Fatalf("list json = %q", out)
+	}
+	_ = fail("invest", "list", "--kind", "nope")
+
+	if out := run("invest", "edit", "1", "--quantity", "12", "--json"); !strings.Contains(out, `"quantity":"12"`) {
+		t.Fatalf("invest edit = %q", out)
+	}
+	_ = fail("invest", "edit", "1")
+	_ = fail("invest", "edit", "abc", "--fees", "1")
+
+	if out := run("invest", "rm", "1", "--dry-run"); !strings.Contains(out, "delete") || !strings.Contains(out, "transaction") {
+		t.Fatalf("invest rm dry-run = %q", out)
+	}
+	err := fail("security", "rm", "BTP", "--yes")
+	if !strings.Contains(err.Error(), "operations") {
+		t.Fatalf("security rm error = %v", err)
+	}
+	if out := run("position", "list", "--by-security", "--csv"); !strings.Contains(out, "BTP 2030,bond,12,1,") {
+		t.Fatalf("by-security = %q", out)
+	}
+	_ = fail("position", "list", "--by-security", "--account", "Broker")
+	run("invest", "rm", "2", "--yes")
+	if out := run("invest", "rm", "1", "--yes"); !strings.Contains(out, "cash transaction") {
+		t.Fatalf("invest rm = %q", out)
+	}
+	if out := run("security", "rm", "BTP", "--yes", "--json"); !strings.Contains(out, `"removed"`) {
+		t.Fatalf("security rm = %q", out)
+	}
+}

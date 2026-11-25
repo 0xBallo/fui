@@ -2,7 +2,7 @@
 # the records of disabled modules; --accept-transfers and --enable-modules settle them.
 exec fui init --preset expense --currency EUR
 exec fui account add AccountA --kind checking --currency EUR
-exec fui account add AccountB --kind savings --currency EUR
+exec fui account add AccountB --kind investment --currency EUR
 
 exec fui import s.fui.jsonl --map a=AccountA --map b=AccountB --dry-run
 stdout 'new tag: weekly'
@@ -52,5 +52,5 @@ stdout '"removed_transactions"'
 {"type":"transaction","account":"b","id":"t2","date":"2026-10-02","amount":5000,"currency":"EUR","description":"from A","status":"booked","kind":"transfer"}
 {"type":"transaction","account":"a","id":"t3","date":"2026-10-03","amount":-1200,"currency":"EUR","description":"Shop","payee":"Corner Shop","status":"booked","category":"Groceries","tags":["weekly"],"original":{"amount":-1400,"currency":"USD"},"raw":{"memo":"x"}}
 {"type":"balance","account":"a","date":"2026-10-05","amount":99999}
-{"type":"security_op","account":"a","date":"2026-10-04","kind":"buy","quantity":10,"unit_price":100,"security":{"name":"ACME","ticker":"ACME","currency":"EUR","kind":"stock","quantity_scale":0}}
+{"type":"security_op","account":"b","date":"2026-10-04","kind":"buy","quantity":10,"unit_price":100,"security":{"name":"ACME","ticker":"ACME","currency":"EUR","kind":"stock","quantity_scale":0}}
 {"type":"end","transactions":3,"errors":0}

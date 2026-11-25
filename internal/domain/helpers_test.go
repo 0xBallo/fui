@@ -23,3 +23,18 @@ func money(t tb, minor int64, code string) Money {
 	}
 	return m
 }
+
+// eurPrice returns a EUR price at 2 decimals.
+func eurPrice(t tb, minor int64) Price {
+	t.Helper()
+	return priceOf(t, minor, 2, "EUR")
+}
+
+func priceOf(t tb, minor int64, scale int, code string) Price {
+	t.Helper()
+	p, err := NewPrice(minor, scale, cur(t, code))
+	if err != nil {
+		t.Fatalf("NewPrice: %v", err)
+	}
+	return p
+}
