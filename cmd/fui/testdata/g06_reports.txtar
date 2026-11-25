@@ -30,6 +30,11 @@ stdout '"date":"2025-12-31"'
 exec fui report compare --a 2025-09 --b 2025-Q4 --category Groceries --by category --json
 stdout '"category":"Groceries"'
 ! stdout 'Transport'
+exec fui report compare --a 2025-09 --b 2025-Q4 --by category --chart
+stdout 'CHART'
+stdout '█'
+exec fui report compare --a 2025-09 --b 2025-Q4 --by category --chart --json
+! stdout '█'
 
 # an unknown filter value fails
 ! exec fui report spending --category Nope

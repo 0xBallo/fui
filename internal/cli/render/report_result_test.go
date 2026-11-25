@@ -122,8 +122,30 @@ func TestGroupedAndNetWorthTables(t *testing.T) {
 	}
 	buf.Reset()
 	cmp := reporting.CompareReport{Total: reporting.CompareRowView{A: amt(1), B: amt(2), Delta: amt(1)}}
-	if err := WriteCompareReport(&buf, Table, domain.LocaleENUS, false, cmp); err != nil || !strings.Contains(buf.String(), "TOTAL") {
+	if err := WriteCompareReport(&buf, Table, domain.LocaleENUS, false, cmp, false); err != nil || !strings.Contains(buf.String(), "TOTAL") {
 		t.Fatalf("compare table = %q, %v", buf.String(), err)
+	}
+	buf.Reset()
+	permille := int64(-250)
+	chartCmp := reporting.CompareReport{A: "a", B: "b", Rows: []reporting.CompareRowView{
+		{Category: "Food", A: amt(400), B: amt(300), Delta: amt(-100), DeltaPermille: &permille},
+		{Category: "Fun", A: amt(100), B: amt(200), Delta: amt(100)},
+	}, Total: reporting.CompareRowView{A: amt(500), B: amt(500), Delta: amt(0)}}
+	if err := WriteCompareReport(&buf, Table, domain.LocaleENUS, false, chartCmp, true); err != nil {
+		t.Fatal(err)
+	}
+	golden := filepath.Join("testdata", "report_result_compare_chart.txt")
+	if *update {
+		if err := os.WriteFile(golden, buf.Bytes(), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(golden)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(want) != buf.String() {
+		t.Errorf("compare chart mismatch\nwant:\n%s\ngot:\n%s", want, buf.String())
 	}
 }
 

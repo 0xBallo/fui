@@ -183,3 +183,41 @@ func TestRemoveChipClearsTagPayeeMonth(t *testing.T) {
 		t.Fatalf("chips left: %+v", m.activeChips())
 	}
 }
+
+func TestFilterFormKeepsIncomingCriteria(t *testing.T) {
+	full := app.ListTxRequest{
+		Month: "2026-06", Accounts: []string{"Checking", "Savings"}, Categories: []string{"Food"},
+		Tags: []string{"trip"}, Payees: []string{"Shop"}, Uncategorized: true,
+		MinAmount: "1", MaxAmount: "99", Statuses: []string{"booked"}, Kinds: []string{"normal"},
+		Text: "milk", Sign: domain.TxSignExpense, Batch: 3, Sort: domain.TxSortAmount, Desc: true,
+	}
+	byYear := app.ListTxRequest{Year: 2026, Sign: domain.TxSignAny}
+	for name, in := range map[string]app.ListTxRequest{"month": full, "year": byYear} {
+		t.Run(name+" unchanged", func(t *testing.T) {
+			rec := &recordingUC{UseCases: screentest.New(t).Service}
+			m := New(rec, domain.LocaleENUS, theme.Default())
+			m.req = in
+			m.openFilterForm()
+			m.submitFilter()
+			if diff := cmp.Diff(in, m.req); diff != "" {
+				t.Fatalf("request changed (-want +got):\n%s", diff)
+			}
+		})
+	}
+
+	t.Run("edit one field", func(t *testing.T) {
+		rec := &recordingUC{UseCases: screentest.New(t).Service}
+		m := New(rec, domain.LocaleENUS, theme.Default())
+		m.req = full
+		m.openFilterForm()
+		m.filterCategory.SetValue("Fun")
+		m.filterSign.SetValue("")
+		m.filterFrom.SetValue("2026-01-01")
+		m.submitFilter()
+		want := full
+		want.Categories, want.Sign, want.From, want.Month = []string{"Fun"}, "", "2026-01-01", ""
+		if diff := cmp.Diff(want, m.req); diff != "" {
+			t.Fatalf("request mismatch (-want +got):\n%s", diff)
+		}
+	})
+}
