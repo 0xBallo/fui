@@ -524,7 +524,7 @@ I report predefiniti rispondono alle domande ricorrenti, i report salvati permet
 
 **Filtri e raggruppamenti comuni** — ogni report accetta periodo, conti, categorie, tag, beneficiari, intervallo di importi, stato e testo nella descrizione (gli stessi filtri delle transazioni), e può raggruppare con `--group-by` per categoria, tag, beneficiario, conto, settimana, mese o anno; `--granularity` vale dove esiste una serie nel tempo. Nella TUI `Invio` su una riga apre le transazioni che la compongono e un modulo imposta i filtri. La spesa conta le sole uscite, senza compensare i rimborsi.
 
-**Confronto periodi** — i due periodi si indicano come `YYYY-MM`, `YYYY-Qn`, `YYYY` o con i periodi relativi (`this-month`, `last-month`…) e accettano gli stessi filtri; il confronto si salva con `fui report save NAME compare`. L'opzione `--chart` è accettata ma non ha ancora effetto visivo.
+**Confronto periodi** — i due periodi si indicano come `YYYY-MM`, `YYYY-Qn`, `YYYY` o con i periodi relativi (`this-month`, `last-month`…) e accettano gli stessi filtri; il confronto si salva con `fui report save NAME compare`.
 
 **Report salvati** (v0.2)
 
