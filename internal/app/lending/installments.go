@@ -373,7 +373,7 @@ func proposeRate(loan domain.Loan, inst domain.Installment, current domain.Annua
 // (or the interest expense when the installment has no principal), stores the matching leg on
 // the liability account and the interest and fees expense, creating the category when missing.
 func (s *Service) ApplyConfirm(ctx context.Context, p ConfirmPlan) error {
-	return s.write(ctx, false, func(r app.Repos) error { return applyConfirm(ctx, r, p) })
+	return s.write(ctx, false, func(r app.Repos) error { return applyConfirm(ctx, r, p, s.clock) })
 }
 
 // CatchUp creates the pending transactions of every installment due through today, so a command

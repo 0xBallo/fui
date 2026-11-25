@@ -43,7 +43,7 @@ func ConfirmWithin(ctx context.Context, r app.Repos, txID domain.TransactionID) 
 	if err != nil {
 		return ConfirmPlan{}, err
 	}
-	if err := applyConfirm(ctx, r, p); err != nil {
+	if err := applyConfirm(ctx, r, p, nil); err != nil {
 		return ConfirmPlan{}, err
 	}
 	return p, nil
@@ -128,8 +128,24 @@ func planConfirmTx(ctx context.Context, r app.Repos, tx domain.Transaction) (Con
 }
 
 // applyConfirm stores the plan: the category when missing, the transfer legs, the booked
-// original transaction and the interest expense.
-func applyConfirm(ctx context.Context, r app.Repos, p ConfirmPlan) error {
+// original transaction and the interest expense. A non-nil clock journals the write for undo;
+// the importer passes nil because its confirmation is undone with the import batch.
+func applyConfirm(ctx context.Context, r app.Repos, p ConfirmPlan, clock app.Clock) error {
+	if clock == nil {
+		return storeConfirm(ctx, r, p, nil)
+	}
+	j, err := app.BeginJournal(ctx, r, p.Principal.ID)
+	if err != nil {
+		return err
+	}
+	if err := storeConfirm(ctx, r, p, j); err != nil {
+		return err
+	}
+	return j.Commit(ctx, r, clock, app.OpKindLoanConfirm)
+}
+
+// storeConfirm writes the plan, tracking the rows it creates in j when j is not nil.
+func storeConfirm(ctx context.Context, r app.Repos, p ConfirmPlan, j *app.Journal) error {
 	cat := p.Category
 	if cat.ID == 0 {
 		var err error
@@ -147,8 +163,13 @@ func applyConfirm(ctx context.Context, r app.Repos, p ConfirmPlan) error {
 			return fmt.Errorf("create transfer: %w", err)
 		}
 		out.TransferGroupID, in.TransferGroupID = g.ID, g.ID
-		if _, err := r.Transactions().Insert(ctx, in); err != nil {
+		leg, err := r.Transactions().Insert(ctx, in)
+		if err != nil {
 			return fmt.Errorf("create principal leg: %w", err)
+		}
+		if j != nil {
+			j.Track(leg.ID)
+			j.TrackGroup(g.ID)
 		}
 	}
 	if err := r.Transactions().Update(ctx, out); err != nil {
@@ -156,8 +177,12 @@ func applyConfirm(ctx context.Context, r app.Repos, p ConfirmPlan) error {
 	}
 	if !exp.Amount.Currency().IsZero() {
 		exp.CategoryID = cat.ID
-		if _, err := r.Transactions().Insert(ctx, exp); err != nil {
+		row, err := r.Transactions().Insert(ctx, exp)
+		if err != nil {
 			return fmt.Errorf("create interest expense: %w", err)
+		}
+		if j != nil {
+			j.Track(row.ID)
 		}
 	}
 	return nil
