@@ -101,44 +101,57 @@ func toTransaction(row gen.Transaction) (domain.Transaction, error) {
 	}
 
 	tx := domain.Transaction{
-		ID:            domain.TransactionID(row.ID),
-		AccountID:     domain.AccountID(row.AccountID),
-		Date:          date,
-		Amount:        amount,
-		PayeeID:       domain.PayeeID(nullInt64OrZero(row.PayeeID)),
-		Description:   row.Description,
-		CategoryID:    domain.CategoryID(nullInt64OrZero(row.CategoryID)),
-		Notes:         row.Notes,
-		Status:        status,
-		Kind:          kind,
-		ExternalID:    nullStringOrEmpty(row.ExternalID),
-		Fingerprint:   row.Fingerprint,
-		ImportBatchID: domain.ImportBatchID(nullInt64OrZero(row.ImportBatchID)),
-		TransferGroupID: domain.TransferGroupID(
-			nullInt64OrZero(row.TransferGroupID),
-		),
-		RecurrenceID: domain.RecurrenceID(nullInt64OrZero(row.RecurrenceID)),
+		ID:              domain.TransactionID(row.ID),
+		AccountID:       domain.AccountID(row.AccountID),
+		Date:            date,
+		Amount:          amount,
+		PayeeID:         domain.PayeeID(nullInt64OrZero(row.PayeeID)),
+		Description:     row.Description,
+		CategoryID:      domain.CategoryID(nullInt64OrZero(row.CategoryID)),
+		Notes:           row.Notes,
+		Status:          status,
+		Kind:            kind,
+		ExternalID:      nullStringOrEmpty(row.ExternalID),
+		Fingerprint:     row.Fingerprint,
+		ImportBatchID:   domain.ImportBatchID(nullInt64OrZero(row.ImportBatchID)),
+		TransferGroupID: domain.TransferGroupID(nullInt64OrZero(row.TransferGroupID)),
+		RecurrenceID:    domain.RecurrenceID(nullInt64OrZero(row.RecurrenceID)),
+		Raw:             nullStringOrEmpty(row.Raw),
 	}
 
-	if row.OperationDate.Valid {
-		tx.OperationDate, err = domain.ParseDate(row.OperationDate.String)
-		if err != nil {
-			return domain.Transaction{}, fmt.Errorf("parse operation_date %q: %w", row.OperationDate.String, err)
+	for _, f := range []struct {
+		name string
+		src  sql.NullString
+		dst  *domain.Date
+	}{
+		{"operation_date", row.OperationDate, &tx.OperationDate},
+		{"value_date", row.ValueDate, &tx.ValueDate},
+		{"due_date", row.DueDate, &tx.DueDate},
+	} {
+		if !f.src.Valid {
+			continue
+		}
+		if *f.dst, err = domain.ParseDate(f.src.String); err != nil {
+			return domain.Transaction{}, fmt.Errorf("parse %s %q: %w", f.name, f.src.String, err)
 		}
 	}
-	if row.ValueDate.Valid {
-		tx.ValueDate, err = domain.ParseDate(row.ValueDate.String)
-		if err != nil {
-			return domain.Transaction{}, fmt.Errorf("parse value_date %q: %w", row.ValueDate.String, err)
-		}
+	tx.Original, err = toOriginalMoney(row.OriginalAmountMinor, row.OriginalCurrency)
+	return tx, err
+}
+
+func toOriginalMoney(minor sql.NullInt64, currency sql.NullString) (*domain.Money, error) {
+	if !minor.Valid || !currency.Valid {
+		return nil, nil //nolint:nilnil // nil means the transaction has no original amount
 	}
-	if row.DueDate.Valid {
-		tx.DueDate, err = domain.ParseDate(row.DueDate.String)
-		if err != nil {
-			return domain.Transaction{}, fmt.Errorf("parse due_date %q: %w", row.DueDate.String, err)
-		}
+	cur, err := domain.ParseCurrency(currency.String)
+	if err != nil {
+		return nil, fmt.Errorf("parse original currency %q: %w", currency.String, err)
 	}
-	return tx, nil
+	m, err := domain.NewMoney(minor.Int64, cur)
+	if err != nil {
+		return nil, fmt.Errorf("parse original amount: %w", err)
+	}
+	return &m, nil
 }
 
 func toFXRate(row gen.FxRate) (domain.FXRate, error) {

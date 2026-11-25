@@ -231,6 +231,7 @@ func (r securityRepo) UpdateOp(ctx context.Context, op domain.SecurityOp) error 
 		FeesMinor:         norm.Fees.Minor(),
 		FeesCurrency:      norm.Fees.Currency().Code(),
 		CashTxID:          toNullInt64(norm.CashTx),
+		ImportBatchID:     toNullInt64(norm.ImportBatchID),
 	})
 	if err != nil {
 		return mapConstraint(err)
@@ -291,6 +292,22 @@ func (r securityRepo) ListOpsBySecurity(
 	return out, nil
 }
 
+func (r securityRepo) ListOpsByBatch(ctx context.Context, batch domain.ImportBatchID) ([]domain.SecurityOp, error) {
+	rows, err := r.repos.queries.ListSecurityOpsByBatch(ctx, toNullInt64(batch))
+	if err != nil {
+		return nil, mapSQLError(err)
+	}
+	out := make([]domain.SecurityOp, 0, len(rows))
+	for _, row := range rows {
+		op, convErr := toSecurityOp(row)
+		if convErr != nil {
+			return nil, convErr
+		}
+		out = append(out, op)
+	}
+	return out, nil
+}
+
 func (r securityRepo) normalizeSecurityOp(ctx context.Context, op domain.SecurityOp) (domain.SecurityOp, error) {
 	norm, err := domain.NewSecurityOp(op)
 	if err != nil {
@@ -330,6 +347,7 @@ func toInsertSecurityOpParams(op domain.SecurityOp) gen.InsertSecurityOpParams {
 		FeesMinor:         op.Fees.Minor(),
 		FeesCurrency:      op.Fees.Currency().Code(),
 		CashTxID:          toNullInt64(op.CashTx),
+		ImportBatchID:     toNullInt64(op.ImportBatchID),
 	}
 }
 
@@ -417,15 +435,16 @@ func toSecurityOp(row gen.SecurityOp) (domain.SecurityOp, error) {
 		return domain.SecurityOp{}, fmt.Errorf("parse security operation fees: %w", err)
 	}
 	op, err := domain.NewSecurityOp(domain.SecurityOp{
-		ID:        domain.SecurityOpID(row.ID),
-		Date:      date,
-		Account:   domain.AccountID(row.AccountID),
-		Security:  domain.SecurityID(row.SecurityID),
-		Kind:      kind,
-		Quantity:  quantity,
-		UnitPrice: unitPrice,
-		Fees:      fees,
-		CashTx:    domain.TransactionID(nullInt64OrZero(row.CashTxID)),
+		ID:            domain.SecurityOpID(row.ID),
+		Date:          date,
+		Account:       domain.AccountID(row.AccountID),
+		Security:      domain.SecurityID(row.SecurityID),
+		Kind:          kind,
+		Quantity:      quantity,
+		UnitPrice:     unitPrice,
+		Fees:          fees,
+		CashTx:        domain.TransactionID(nullInt64OrZero(row.CashTxID)),
+		ImportBatchID: domain.ImportBatchID(nullInt64OrZero(row.ImportBatchID)),
 	})
 	if err != nil {
 		return domain.SecurityOp{}, fmt.Errorf("parse security operation row: %w", err)
