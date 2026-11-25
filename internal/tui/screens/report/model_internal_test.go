@@ -81,7 +81,7 @@ func TestViewFormAndFormTitle(t *testing.T) {
 	}
 
 	m.openExportForm()
-	if got := m.View(); !strings.Contains(got, "Export transactions") {
+	if got := m.View(); !strings.Contains(got, "Export report") {
 		t.Fatalf("expected export form view, got:\n%s", got)
 	}
 }

@@ -9,6 +9,7 @@ type KeyMap struct {
 	PrevKind key.Binding
 	NextKind key.Binding
 	Refresh  key.Binding
+	Drill    key.Binding
 	Params   key.Binding
 	Save     key.Binding
 	Saved    key.Binding
@@ -26,22 +27,27 @@ func DefaultKeyMap() KeyMap {
 		Down:     key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j/↓", "down")),
 		PrevKind: key.NewBinding(key.WithKeys("h", "left"), key.WithHelp("h/←", "previous report")),
 		NextKind: key.NewBinding(key.WithKeys("l", "right"), key.WithHelp("l/→", "next report")),
-		Refresh:  key.NewBinding(key.WithKeys("r", "enter"), key.WithHelp("r/enter", "run")),
+		Refresh:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "run")),
+		Drill:    key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open transactions")),
 		Params:   key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "change period/params")),
 		Save:     key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "save report")),
 		Saved:    key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "saved reports")),
 		RunSaved: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "run selected")),
 		DelSaved: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete selected")),
-		Export:   key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "export transactions")),
+		Export:   key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "export report")),
 		Back:     key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		Explain:  key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "explain reports")),
 	}
 }
 
 // Bindings returns all keys as a slice for help generation and collision checks.
-func (k KeyMap) Bindings() []key.Binding {
-	return []key.Binding{
-		k.Up, k.Down, k.PrevKind, k.NextKind, k.Refresh, k.Params,
-		k.Save, k.Saved, k.RunSaved, k.DelSaved, k.Export, k.Back, k.Explain,
+func (k KeyMap) Bindings() []key.Binding { return k.bindings(true) }
+
+// bindings lists the keys, leaving out the drill-down when the loaded report has none.
+func (k KeyMap) bindings(drill bool) []key.Binding {
+	out := []key.Binding{k.Up, k.Down, k.PrevKind, k.NextKind, k.Refresh}
+	if drill {
+		out = append(out, k.Drill)
 	}
+	return append(out, k.Params, k.Save, k.Saved, k.RunSaved, k.DelSaved, k.Export, k.Back, k.Explain)
 }

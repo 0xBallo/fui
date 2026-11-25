@@ -87,6 +87,10 @@ func (m *Model) runKind(ctx context.Context, kind string, req reporting.ReportRe
 		return m.uc.TopPayees(ctx, req)
 	case reporting.KindForecast:
 		return m.uc.Forecast(ctx, fReq)
+	case reporting.KindSpending:
+		return m.uc.Spending(ctx, req)
+	case reporting.KindCashFlow:
+		return m.uc.CashFlow(ctx, req)
 	}
 	return nil, &domain.Error{Code: domain.CodeInvalidValue, Message: "unknown report kind " + kind}
 }
