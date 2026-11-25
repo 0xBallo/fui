@@ -278,6 +278,12 @@ CREATE TABLE dismissed_insights (
     dismissed_at TEXT NOT NULL CHECK (length(dismissed_at) >= 20)
 ) STRICT;
 
+CREATE TABLE reconcile_ticks (
+    account_id INTEGER NOT NULL REFERENCES accounts (id) ON DELETE CASCADE,
+    transaction_id INTEGER NOT NULL REFERENCES transactions (id) ON DELETE CASCADE,
+    PRIMARY KEY (account_id, transaction_id)
+) STRICT, WITHOUT ROWID;
+
 CREATE TABLE reconciliations (
     id INTEGER PRIMARY KEY,
     account_id INTEGER NOT NULL REFERENCES accounts (id) ON DELETE RESTRICT,

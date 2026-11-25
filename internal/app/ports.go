@@ -390,6 +390,11 @@ type ReconciliationRepo interface {
 	Get(ctx context.Context, accountID domain.AccountID, date domain.Date) (Reconciliation, error)
 	// LastClosed returns the most recent closed reconciliation of account.
 	LastClosed(ctx context.Context, accountID domain.AccountID) (Reconciliation, error)
+	// Ticks returns the transactions of account ticked against the statement in progress, by ID.
+	Ticks(ctx context.Context, accountID domain.AccountID) ([]domain.TransactionID, error)
+	// SetTicks ticks or unticks ids; it is idempotent and fails with domain.ErrInvalidValue when a
+	// transaction does not belong to account.
+	SetTicks(ctx context.Context, accountID domain.AccountID, ids []domain.TransactionID, ticked bool) error
 }
 
 // SecurityRepo stores securities, their manual prices, and operations.

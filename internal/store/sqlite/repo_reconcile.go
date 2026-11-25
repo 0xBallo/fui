@@ -99,6 +99,52 @@ func (r reconciliationRepo) LastClosed(ctx context.Context, accountID domain.Acc
 	return toReconciliation(row)
 }
 
+func (r reconciliationRepo) Ticks(ctx context.Context, accountID domain.AccountID) ([]domain.TransactionID, error) {
+	rows, err := r.repos.queries.ListReconcileTicks(ctx, int64(accountID))
+	if err != nil {
+		return nil, mapSQLError(err)
+	}
+	out := make([]domain.TransactionID, len(rows))
+	for i, id := range rows {
+		out[i] = domain.TransactionID(id)
+	}
+	return out, nil
+}
+
+func (r reconciliationRepo) SetTicks(ctx context.Context, accountID domain.AccountID, ids []domain.TransactionID, ticked bool) error {
+	if err := r.repos.writable(); err != nil {
+		return err
+	}
+	if accountID == 0 {
+		return fmt.Errorf("reconciliation account: %w", domain.ErrMissingField)
+	}
+	if _, err := r.repos.queries.GetAccount(ctx, int64(accountID)); err != nil {
+		return mapNotFound(mapSQLError(err), fmt.Sprintf("account %d", accountID))
+	}
+	for _, id := range ids {
+		tx, err := r.repos.queries.GetTransaction(ctx, int64(id))
+		if err != nil {
+			return mapNotFound(mapSQLError(err), fmt.Sprintf("transaction %d", id))
+		}
+		if tx.AccountID != int64(accountID) {
+			return fmt.Errorf("transaction %d does not belong to account %d: %w", id, accountID, domain.ErrInvalidValue)
+		}
+		if ticked {
+			err = r.repos.queries.InsertReconcileTick(ctx, gen.InsertReconcileTickParams{
+				AccountID: int64(accountID), TransactionID: int64(id),
+			})
+		} else {
+			err = r.repos.queries.DeleteReconcileTick(ctx, gen.DeleteReconcileTickParams{
+				AccountID: int64(accountID), TransactionID: int64(id),
+			})
+		}
+		if err != nil {
+			return mapConstraint(err)
+		}
+	}
+	return nil
+}
+
 func toReconciliation(row gen.Reconciliation) (app.Reconciliation, error) {
 	date, err := domain.ParseDate(row.Date)
 	if err != nil {

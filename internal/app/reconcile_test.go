@@ -120,3 +120,87 @@ func TestReconcileRequiresCoreModule(t *testing.T) {
 		t.Fatalf("ApplyReconcile err = %v, want module_disabled", err)
 	}
 }
+
+func ticks(t *testing.T, e env, id domain.AccountID) []domain.TransactionID {
+	t.Helper()
+	var out []domain.TransactionID
+	wantNoErr(t, e.store.Read(t.Context(), func(r app.Repos) (err error) {
+		out, err = r.Reconciliations().Ticks(t.Context(), id)
+		return err
+	}))
+	return out
+}
+
+func TestReconcileTicks(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+	acct := e.account(t, "A", "checking", "EUR", "100")
+	e.account(t, "B", "checking", "EUR", "0")
+	tx1 := e.tx(t, app.AddTxRequest{Account: "A", Amount: "-10", Date: "2026-10-01", Status: "booked"})
+	tx2 := e.tx(t, app.AddTxRequest{Account: "A", Amount: "-5", Date: "2026-10-02", Status: "booked"})
+	foreign := e.tx(t, app.AddTxRequest{Account: "B", Amount: "-1", Date: "2026-10-02", Status: "booked"})
+	md := module.Default()
+	req := func(tick, untick []domain.TransactionID) app.ReconcileRequest {
+		return app.ReconcileRequest{Account: "A", StatementBalance: "85", Date: "2026-10-10", Tick: tick, Untick: untick}
+	}
+
+	// Partial ticks: difference != 0, persisted, not closed.
+	p, err := e.svc.PlanReconcile(ctx, md, req([]domain.TransactionID{tx1.ID}, nil))
+	wantNoErr(t, err)
+	if p.Difference.Minor() != -500 || p.Closing || len(p.Unreconciled) != 1 || p.Unreconciled[0].ID != tx2.ID {
+		t.Fatalf("partial plan = %+v", p)
+	}
+	wantNoErr(t, e.svc.ApplyReconcile(ctx, md, p))
+	if got := ticks(t, e, acct.ID); len(got) != 1 || got[0] != tx1.ID {
+		t.Fatalf("ticks = %v", got)
+	}
+	if v, err := e.svc.ShowTx(ctx, tx1.ID); err != nil || v.Transaction.Status != domain.StatusBooked {
+		t.Fatalf("tx1 = %+v, %v; want still booked", v.Transaction, err)
+	}
+
+	// Persisted ticks drive the next plan; untick drops them.
+	p, err = e.svc.PlanReconcile(ctx, md, req(nil, []domain.TransactionID{tx1.ID}))
+	wantNoErr(t, err)
+	if p.Difference.Minor() != -1500 || len(p.Ticked) != 0 {
+		t.Fatalf("untick plan = %+v", p)
+	}
+	wantNoErr(t, e.svc.ApplyReconcile(ctx, md, p))
+	if got := ticks(t, e, acct.ID); len(got) != 0 {
+		t.Fatalf("ticks after untick = %v", got)
+	}
+
+	// Foreign transaction is rejected.
+	_, err = e.svc.PlanReconcile(ctx, md, req([]domain.TransactionID{foreign.ID}, nil))
+	wantCode(t, err, domain.ErrInvalidValue)
+
+	// Full ticks close and clear the ticks.
+	p, err = e.svc.PlanReconcile(ctx, md, app.ReconcileRequest{
+		Account: "A", StatementBalance: "85", Date: "2026-10-10", Tick: []domain.TransactionID{tx1.ID, tx2.ID},
+	})
+	wantNoErr(t, err)
+	if !p.Closing || !p.Difference.IsZero() || len(p.ReconciledIDs) != 2 {
+		t.Fatalf("full plan = %+v", p)
+	}
+	wantNoErr(t, e.svc.ApplyReconcile(ctx, md, p))
+	for _, id := range []domain.TransactionID{tx1.ID, tx2.ID} {
+		v, err := e.svc.ShowTx(ctx, id)
+		wantNoErr(t, err)
+		if v.Transaction.Status != domain.StatusReconciled {
+			t.Fatalf("tx %d status = %s", id, v.Transaction.Status)
+		}
+	}
+	if got := ticks(t, e, acct.ID); len(got) != 0 {
+		t.Fatalf("ticks after close = %v", got)
+	}
+}
+
+func TestApplyReconcileRefusesClosingWithDifference(t *testing.T) {
+	e := newEnv(t)
+	acct := e.account(t, "A", "checking", "EUR", "100")
+	m, err := domain.NewMoney(5, acct.Currency)
+	wantNoErr(t, err)
+	err = e.svc.ApplyReconcile(t.Context(), module.Default(), app.ReconcilePlan{
+		Account: acct, Ticking: true, Closing: true, Difference: m,
+	})
+	wantCode(t, err, domain.ErrInvalidValue)
+}

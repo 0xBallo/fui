@@ -198,6 +198,11 @@ type PayeeAlias struct {
 	Alias   string
 }
 
+type ReconcileTick struct {
+	AccountID     int64
+	TransactionID int64
+}
+
 type Reconciliation struct {
 	ID                    int64
 	AccountID             int64
