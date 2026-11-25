@@ -27,6 +27,7 @@ func (m *Rules) openForm(cur *domain.Rule) {
 	fields := []*components.Autocomplete{
 		&m.fields.priority, &m.fields.enabled,
 		&m.fields.descContains, &m.fields.descEquals,
+		&m.fields.hintContains, &m.fields.hintEquals,
 		&m.fields.minAbs, &m.fields.maxAbs, &m.fields.sign,
 		&m.fields.accounts, &m.fields.category, &m.fields.payee, &m.fields.tags,
 	}
@@ -47,6 +48,8 @@ func (m *Rules) buildFormFields(cur *domain.Rule) {
 	f.enabled.SetSuggestions([]string{"yes", "no"})
 	f.descContains = components.NewAutocomplete("Description contains:", "optional", m.th)
 	f.descEquals = components.NewAutocomplete("Description equals:", "optional", m.th)
+	f.hintContains = components.NewAutocomplete("Hint contains:", "optional", m.th)
+	f.hintEquals = components.NewAutocomplete("Hint equals:", "optional", m.th)
 	f.minAbs = components.NewAutocomplete("Min abs amount (minor units):", "optional", m.th)
 	f.maxAbs = components.NewAutocomplete("Max abs amount (minor units):", "optional", m.th)
 	f.sign = components.NewAutocomplete("Sign:", "any/inflow/outflow", m.th)
@@ -72,6 +75,8 @@ func (m *Rules) prefillFormFields(cur *domain.Rule) {
 	f.enabled.SetValue(yesNo(cur.Enabled))
 	f.descContains.SetValue(cur.Conditions.DescriptionContains)
 	f.descEquals.SetValue(cur.Conditions.DescriptionEquals)
+	f.hintContains.SetValue(cur.Conditions.HintContains)
+	f.hintEquals.SetValue(cur.Conditions.HintEquals)
 	f.minAbs.SetValue(ptrString(cur.Conditions.Amount.MinAbsMinor))
 	f.maxAbs.SetValue(ptrString(cur.Conditions.Amount.MaxAbsMinor))
 	f.sign.SetValue(string(cur.Conditions.Amount.Sign))
@@ -108,6 +113,7 @@ func (m *Rules) conditionsSpec() rules.ConditionsSpec {
 	f := &m.fields
 	spec := rules.ConditionsSpec{
 		DescriptionContains: f.descContains.Value(), DescriptionEquals: f.descEquals.Value(),
+		HintContains: f.hintContains.Value(), HintEquals: f.hintEquals.Value(),
 		Sign: f.sign.Value(), Accounts: splitList(f.accounts.Value()),
 	}
 	spec.MinAbsMinor = parseOptionalInt64(f.minAbs.Value())

@@ -61,6 +61,8 @@ func runRuleAdd(cmd *cobra.Command, deps *Deps, name string) error {
 func registerRuleConditionFlags(cmd *cobra.Command) {
 	cmd.Flags().String("contains", "", "match when description contains this text")
 	cmd.Flags().String("equals", "", "match when description equals this text")
+	cmd.Flags().String("hint-contains", "", "match when the source category hint contains this text")
+	cmd.Flags().String("hint-equals", "", "match when the source category hint equals this text")
 	cmd.Flags().String("min", "", "minimum absolute amount")
 	cmd.Flags().String("max", "", "maximum absolute amount")
 	cmd.Flags().String("sign", "", "any, inflow or outflow")

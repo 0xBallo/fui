@@ -70,3 +70,19 @@ func TestCurrencyOfAccountNotFound(t *testing.T) {
 		t.Fatal("currencyOfAccount expected not_found")
 	}
 }
+
+func TestRuleConditionsFromFlagsHint(t *testing.T) {
+	cmd := newRuleAddCmd(&Deps{})
+	for k, v := range map[string]string{"hint-contains": "gro", "hint-equals": "Groceries"} {
+		if err := cmd.Flags().Set(k, v); err != nil {
+			t.Fatalf("set %s: %v", k, err)
+		}
+	}
+	got, err := ruleConditionsFromFlags(cmd.Flags(), &Deps{})
+	if err != nil {
+		t.Fatalf("ruleConditionsFromFlags: %v", err)
+	}
+	if got.HintContains != "gro" || got.HintEquals != "Groceries" {
+		t.Fatalf("conditions = %+v", got)
+	}
+}

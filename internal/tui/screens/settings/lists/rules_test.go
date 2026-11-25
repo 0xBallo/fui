@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/exp/golden"
+	"github.com/muesli/termenv"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/rules"
@@ -86,6 +89,8 @@ func TestRulesLoadAddEditRemove(t *testing.T) {
 	scr, _ = sendKey(scr, tea.KeyEnter) // enabled -> description contains
 	scr, _ = sendRunes(scr, "SUPERMARKET")
 	scr, _ = sendKey(scr, tea.KeyEnter) // -> description equals
+	scr, _ = sendKey(scr, tea.KeyEnter) // -> hint contains
+	scr, _ = sendKey(scr, tea.KeyEnter) // -> hint equals
 	scr, _ = sendKey(scr, tea.KeyEnter) // -> min abs
 	scr, _ = sendKey(scr, tea.KeyEnter) // -> max abs
 	scr, _ = sendKey(scr, tea.KeyEnter) // -> sign
@@ -137,6 +142,9 @@ func TestRulesLoadAddEditRemove(t *testing.T) {
 	scr, _ = sendKey(scr, tea.KeyEnter) // close "yes" suggestion
 	scr, _ = sendKey(scr, tea.KeyEnter) // enabled -> description contains
 	scr, _ = sendKey(scr, tea.KeyEnter) // -> description equals
+	scr, _ = sendKey(scr, tea.KeyEnter) // -> hint contains
+	scr, _ = sendRunes(scr, "groc")
+	scr, _ = sendKey(scr, tea.KeyEnter) // -> hint equals
 	scr, _ = sendKey(scr, tea.KeyEnter) // -> min abs
 	scr, _ = sendKey(scr, tea.KeyEnter) // -> max abs
 	scr, _ = sendKey(scr, tea.KeyEnter) // -> sign
@@ -151,6 +159,9 @@ func TestRulesLoadAddEditRemove(t *testing.T) {
 	if !strings.Contains(scr.View(), "20") {
 		t.Fatalf("expected the edited priority in the list, got:\n%s", scr.View())
 	}
+	if !strings.Contains(scr.View(), `hint contains "groc"`) {
+		t.Fatalf("expected the hint condition in the list, got:\n%s", scr.View())
+	}
 
 	// Remove the rule.
 	scr, cmd = sendRunes(scr, "d")
@@ -162,5 +173,36 @@ func TestRulesLoadAddEditRemove(t *testing.T) {
 	scr = run(t, scr, cmd)
 	if strings.Contains(scr.View(), "Groceries rule") {
 		t.Fatalf("expected the rule removed, got:\n%s", scr.View())
+	}
+}
+
+func TestRulesFormHintSnapshots(t *testing.T) {
+	themes := []struct {
+		name    string
+		theme   string
+		profile termenv.Profile
+	}{
+		{"latte", "latte", termenv.TrueColor},
+		{"mocha", "mocha", termenv.TrueColor},
+		{"terminal", "terminal", termenv.TrueColor},
+		{"high-contrast", "high-contrast", termenv.TrueColor},
+		{"no-color", "mocha", termenv.Ascii},
+	}
+	for _, tc := range themes {
+		t.Run(tc.name, func(t *testing.T) {
+			r := lipgloss.DefaultRenderer()
+			prev := r.ColorProfile()
+			r.SetColorProfile(tc.profile)
+			t.Cleanup(func() { r.SetColorProfile(prev) })
+
+			fx := screentest.New(t)
+			uc := rulesAdapter{Service: rules.New(fx.Store, stubBackup{}), lookups: lookups{svc: fx.Service}}
+			th := theme.Resolve(theme.Config{Theme: tc.theme}, nil)
+			scr := screens.Screen(lists.NewRules(uc, th))
+			scr.SetSize(80, 24)
+			scr = run(t, scr, scr.Init())
+			scr, _ = sendRunes(scr, "a")
+			golden.RequireEqual(t, []byte(scr.View()))
+		})
 	}
 }
