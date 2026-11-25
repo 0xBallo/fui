@@ -112,8 +112,8 @@ func (u reportUseCases) BalanceOverTime(ctx context.Context, r reporting.ReportR
 	return u.analytics().BalanceOverTime(ctx, r)
 }
 
-func (u reportUseCases) NetWorth(ctx context.Context, r reporting.ReportRequest) (reporting.SeriesResult, error) {
-	return u.analytics().NetWorth(ctx, r)
+func (u reportUseCases) NetWorth(ctx context.Context, r reporting.ReportRequest) (reporting.NetWorthResult, error) {
+	return u.analytics().NetWorthReport(ctx, r)
 }
 
 func (u reportUseCases) RemainingDebt(ctx context.Context, r reporting.ReportRequest) (reporting.DebtResult, error) {

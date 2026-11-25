@@ -327,6 +327,7 @@ func newReporting(
 	if err != nil {
 		return cli.Reporting{}, fmt.Errorf("resolve modules.enabled: %w", err)
 	}
+	runway = runway.WithModules(modules)
 	analytics := reporting.NewAnalytics(store, clk, source, reporting.Config{
 		Locale:        domain.Locale(cfg.Locale),
 		BaseCurrency:  baseCurrency,

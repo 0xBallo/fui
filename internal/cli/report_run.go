@@ -74,11 +74,11 @@ func executeAnalyticsReport(
 		}
 		return render.WriteInterestReport(deps.Stdout, rt.format, deps.Locale(), rt.color, out, chart)
 	case "networth":
-		out, err := analytics.NetWorth(cmd.Context(), req)
+		out, err := analytics.NetWorthReport(cmd.Context(), req)
 		if err != nil {
 			return err
 		}
-		return render.WriteSeriesReport(deps.Stdout, rt.format, deps.Locale(), rt.color, out, chart)
+		return render.WriteSeriesReport(deps.Stdout, rt.format, deps.Locale(), rt.color, out.Series(), chart)
 	case "top-payees":
 		out, err := analytics.TopPayees(cmd.Context(), req)
 		if err != nil {

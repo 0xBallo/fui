@@ -197,7 +197,7 @@ func (a *Analytics) Run(ctx context.Context, ref string) (SavedResult, error) {
 	case KindInterest:
 		out.Data, err = a.InterestPaid(ctx, req)
 	case KindNetWorth:
-		out.Data, err = a.NetWorth(ctx, req)
+		out.Data, err = a.NetWorthReport(ctx, req)
 	case KindPayees:
 		out.Data, err = a.TopPayees(ctx, req)
 	case KindForecast:

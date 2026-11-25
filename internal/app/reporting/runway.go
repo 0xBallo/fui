@@ -6,12 +6,14 @@ import (
 	"fmt"
 
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 )
 
 // Runway computes the runway KPI.
 type Runway struct {
 	deps      dependencies
 	positions PositionsValuer
+	modules   *module.Set
 }
 
 // PositionsValuer values the security positions at a date in the base currency.
@@ -23,6 +25,13 @@ type PositionsValuer interface {
 // WithPositions returns a Runway able to honour RunwayParams.IncludeInvestments.
 func (useCase Runway) WithPositions(valuer PositionsValuer) Runway {
 	useCase.positions = valuer
+	return useCase
+}
+
+// WithModules returns a Runway that leaves out the accounts of kinds whose module is not in
+// set (see moduleAccountKinds); without it every account counts.
+func (useCase Runway) WithModules(set module.Set) Runway {
+	useCase.modules = &set
 	return useCase
 }
 
@@ -131,6 +140,9 @@ func (useCase Runway) loadBalances(ctx context.Context, asOf domain.Date, params
 	items := make([]domain.RunwayBalance, 0, len(accounts))
 	missing := map[domain.Currency]domain.Date{}
 	for _, account := range accounts {
+		if useCase.modules != nil && !accountKindEnabled(*useCase.modules, account.Kind) {
+			continue
+		}
 		balance, err := useCase.deps.source.BalanceAt(ctx, account.ID, asOf)
 		if err != nil {
 			return nil, nil, fmt.Errorf("balance of account %d: %w", account.ID, err)

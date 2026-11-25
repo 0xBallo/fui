@@ -19,6 +19,8 @@ type ReportRequest struct {
 	Account string // balance-over-time: account name (archived accounts included)
 	Loan    string // remaining-debt: loan name; interest-paid: optional filter
 	Limit   int    // top-payees: number of rows, default 10
+	// Granularity is the bucket of the net-worth series; zero means month.
+	Granularity domain.Granularity
 }
 
 func (a *Analytics) period(p domain.Period) (domain.Period, error) {
@@ -82,30 +84,6 @@ func (a *Analytics) series(p domain.Period, at func(domain.Date) (domain.Money, 
 		out.Points = append(out.Points, Point{Date: end.String(), Amount: amountOf(m)})
 	}
 	return out, nil
-}
-
-// NetWorth reports the month-end sum of every account, archived ones and liabilities included,
-// converted to the base currency at the rate of each month end.
-func (a *Analytics) NetWorth(ctx context.Context, req ReportRequest) (SeriesResult, error) {
-	if err := a.gate(); err != nil {
-		return SeriesResult{}, err
-	}
-	p, err := a.period(req.Period)
-	if err != nil {
-		return SeriesResult{}, err
-	}
-	var out SeriesResult
-	err = a.store.Read(ctx, func(r app.Repos) error {
-		accts, err := r.Accounts().List(ctx)
-		if err != nil {
-			return fmt.Errorf("list accounts: %w", err)
-		}
-		out, err = a.series(p, func(at domain.Date) (domain.Money, error) {
-			return a.sumBase(ctx, r, accts, at)
-		})
-		return err
-	})
-	return out, err
 }
 
 // sumBase is the sum of the balances of accts at date, in the base currency.
