@@ -156,7 +156,10 @@ func (r *Root) rebuild() {
 		r.tabs[screens.TabReports] = r.newReport()
 	}
 	if cfg.Importer != nil {
-		r.tabs[screens.TabImport] = importer.New(cfg.Importer, r.loc, r.th)
+		imp := importer.New(cfg.Importer, r.loc, r.th)
+		imp.SetModules(cfg.Modules, cfg.ModuleConfig)
+		imp.SetProfiles(cfg.Lists.Profiles)
+		r.tabs[screens.TabImport] = imp
 	}
 	if cfg.Settings != nil && cfg.ModuleConfig != nil && cfg.ThemeConfig != nil {
 		scr := settings.New(cfg.Settings, cfg.ModuleConfig, cfg.ThemeConfig, r.th)
