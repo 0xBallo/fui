@@ -74,6 +74,7 @@ func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h
 	m.table.SetHeight(max(3, h-10))
 	m.table.SetWidth(w)
+	m.refreshTable()
 	m.help.SetSize(w, h)
 }
 
@@ -199,7 +200,7 @@ func (m *Model) submitCopy() tea.Cmd {
 	month := m.monthIn
 	return func() tea.Msg {
 		ctx := context.Background()
-		plan, err := m.uc.PlanCopyPrevious(ctx, month)
+		plan, err := m.uc.PlanCopy(ctx, budgeting.CopyRequest{Month: month})
 		if err != nil {
 			return screens.ErrorMsg{Err: err}
 		}

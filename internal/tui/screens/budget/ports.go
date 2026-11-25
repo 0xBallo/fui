@@ -19,6 +19,8 @@ type UseCases interface {
 	ApplySet(ctx context.Context, p budgeting.SetPlan) (domain.Budget, error)
 	PlanMove(ctx context.Context, req budgeting.MoveRequest) (budgeting.MovePlan, error)
 	ApplyMove(ctx context.Context, p budgeting.MovePlan) error
-	PlanCopyPrevious(ctx context.Context, month string) (budgeting.CopyPlan, error)
+	PlanCopy(ctx context.Context, req budgeting.CopyRequest) (budgeting.CopyPlan, error)
 	ApplyCopyPrevious(ctx context.Context, p budgeting.CopyPlan) error
+	// Today dates assignments and moves made while the month on screen contains it.
+	Today() (domain.Date, error)
 }

@@ -16,7 +16,10 @@ import (
 // the Settings screen changes while the TUI is running.
 
 // budgetUseCases adapts budgeting.Service to budget.UseCases.
-type budgetUseCases struct{ build func() *budgeting.Service }
+type budgetUseCases struct {
+	build func() *budgeting.Service
+	today func() (domain.Date, error)
+}
 
 func (u budgetUseCases) Status(ctx context.Context, month string) (budgeting.Status, error) {
 	return u.build().Status(ctx, month)
@@ -38,9 +41,11 @@ func (u budgetUseCases) ApplyMove(ctx context.Context, p budgeting.MovePlan) err
 	return u.build().ApplyMove(ctx, p)
 }
 
-func (u budgetUseCases) PlanCopyPrevious(ctx context.Context, month string) (budgeting.CopyPlan, error) {
-	return u.build().PlanCopyPrevious(ctx, month)
+func (u budgetUseCases) PlanCopy(ctx context.Context, req budgeting.CopyRequest) (budgeting.CopyPlan, error) {
+	return u.build().PlanCopy(ctx, req)
 }
+
+func (u budgetUseCases) Today() (domain.Date, error) { return u.today() }
 
 func (u budgetUseCases) ApplyCopyPrevious(ctx context.Context, p budgeting.CopyPlan) error {
 	return u.build().ApplyCopyPrevious(ctx, p)

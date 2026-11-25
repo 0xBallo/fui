@@ -34,6 +34,18 @@ decide where it goes before you spend it.
 Each budget has a warning threshold (default 80%) and an over threshold
 (default 100%). They drive the Dashboard alerts.
 
+A yearly budget is tagged `[year]` in its row; the detail line under the table
+shows its period and thresholds (for example `thresholds 80/100`), and for a
+yearly envelope the suggested monthly quota (its balance spread over the
+months left in the year).
+
+## Dating of moves
+
+`a` and `m` date the movement in the month on screen: today when today falls
+inside that month (or budget period, if your month starts on a day other than
+the 1st), otherwise the first day of the month shown. Browse to a past or
+future month first to plan or correct it.
+
 ## Progress colors and icons
 
 The bar color is a fixed visual tier. The icon and the OVER label keep the
@@ -52,7 +64,7 @@ state readable without color.
 - `s`: set the amount of the selected budget
 - `a`: assign from the pool to an envelope (envelope mode)
 - `m`: move money to another envelope (envelope mode)
-- `c`: copy the previous month's budgets into this month
+- `c`: copy the budgets of the month before the one shown into it (yearly budgets are skipped)
 - `i`: open or close this explanation
 
 ## Same from the CLI
