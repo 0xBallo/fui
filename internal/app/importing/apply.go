@@ -101,7 +101,7 @@ func (w *writer) run(ctx context.Context, res *ImportResult) error {
 	if err := w.securities(ctx, res); err != nil {
 		return err
 	}
-	return w.securityOps(ctx, res)
+	return w.securityOps(ctx, batch.ID, res)
 }
 
 func (w *writer) importTransactions(ctx context.Context, res *ImportResult) error {
@@ -151,12 +151,13 @@ func (w *writer) securities(ctx context.Context, res *ImportResult) error {
 	return nil
 }
 
-func (w *writer) securityOps(ctx context.Context, res *ImportResult) error {
+func (w *writer) securityOps(ctx context.Context, batch domain.ImportBatchID, res *ImportResult) error {
 	for _, row := range w.p.SecurityOps {
 		if !row.Include {
 			continue
 		}
 		op := row.Op
+		op.ImportBatchID = batch
 		if op.Account < 0 {
 			op.Account = w.ids[row.AccountRef]
 		}

@@ -34,7 +34,7 @@ func (b *builder) applyRules(ctx context.Context) error {
 		if row.Class == domain.DedupDuplicate {
 			continue
 		}
-		res, err := domain.Apply(rules, row.Tx, domain.NormalizeDescription(row.Tx.Description))
+		res, err := domain.ApplyWithHint(rules, row.Tx, domain.NormalizeDescription(row.Tx.Description), row.Hint)
 		if err != nil {
 			return fmt.Errorf("rules on line %d: %w", row.Line, err)
 		}

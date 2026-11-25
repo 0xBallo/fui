@@ -157,6 +157,14 @@ func (b *builder) build(ctx context.Context, plan *ImportPlan) error {
 		return err
 	}
 	b.checkBalances()
+	return b.finishChecks(ctx, balances)
+}
+
+// finishChecks runs the checks that need the final rows: statement balances, then the source digest.
+func (b *builder) finishChecks(ctx context.Context, balances []fuiproto.BalanceRecord) error {
+	if err := b.checkStatementBalances(ctx, balances); err != nil {
+		return err
+	}
 	return b.checkAlreadyImported(ctx)
 }
 
