@@ -25,6 +25,23 @@ func ParseBudgetMode(s string) (BudgetMode, error) {
 	return parseEnum("budget mode", s, BudgetMode.Valid)
 }
 
+// BudgetPeriod is the length of a budget period: a (budget) month or a (budget) year.
+type BudgetPeriod string
+
+// Budget periods. The zero value is read as BudgetMonthly by NewBudget.
+const (
+	BudgetMonthly BudgetPeriod = "month"
+	BudgetYearly  BudgetPeriod = "year"
+)
+
+// Valid reports whether p is a known period.
+func (p BudgetPeriod) Valid() bool { return p == BudgetMonthly || p == BudgetYearly }
+
+// ParseBudgetPeriod parses a budget period name.
+func ParseBudgetPeriod(s string) (BudgetPeriod, error) {
+	return parseEnum("budget period", s, BudgetPeriod.Valid)
+}
+
 // BudgetTarget is what a budget covers: exactly one of a category or a tag.
 type BudgetTarget struct {
 	CategoryID CategoryID
@@ -55,6 +72,7 @@ type Budget struct {
 	ID         BudgetID
 	Name       string
 	Mode       BudgetMode
+	Period     BudgetPeriod
 	Targets    []BudgetTarget
 	Amount     Money // default monthly amount, base currency
 	Overrides  map[MonthKey]Money
@@ -69,6 +87,12 @@ func NewBudget(b Budget) (Budget, error) {
 		return Budget{}, err
 	}
 	b.Name = name
+	if b.Period == "" {
+		b.Period = BudgetMonthly
+	}
+	if !b.Period.Valid() {
+		return Budget{}, enumError("period", string(b.Period))
+	}
 	if !b.Mode.Valid() {
 		return Budget{}, enumError("mode", string(b.Mode))
 	}
