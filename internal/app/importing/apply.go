@@ -21,6 +21,8 @@ type ImportResult struct {
 	Accounts     int
 	Securities   int
 	SecurityOps  int
+	Loans        int // loans created
+	LoanVersions int // loan schedule versions stored
 	Categories   int
 	Payees       int
 	Tags         int
@@ -78,8 +80,8 @@ func (s *Service) ApplyImportWith(ctx context.Context, p ImportPlan, opts ApplyO
 	if err != nil {
 		return ImportResult{}, err
 	}
-	if p.Counts().Included == 0 {
-		return ImportResult{}, nil
+	if p.Counts().Included == 0 && !p.hasLoanWrites(opts.EnableModules) {
+		return ImportResult{Warnings: loanWarnings(p.ModuleRecords, opts.EnableModules)}, nil
 	}
 	path, err := s.backup.Backup(ctx, app.BackupReasonImport)
 	if err != nil {
@@ -110,16 +112,16 @@ func (s *Service) ApplyImportWith(ctx context.Context, p ImportPlan, opts ApplyO
 		}
 		return ImportResult{}, err
 	}
-	res.Warnings = append(res.Warnings, loanWarnings(p.ModuleRecords)...)
+	res.Warnings = append(res.Warnings, loanWarnings(p.ModuleRecords, opts.EnableModules)...)
 	return res, nil
 }
 
-// loanWarnings reports the loan records the import detected and does not write; security
+// loanWarnings reports the loan records skipped because the loans module stays off; security
 // operations warn row by row.
-func loanWarnings(records []ModuleRecords) []RowWarning {
+func loanWarnings(records []ModuleRecords, enabled []module.ID) []RowWarning {
 	var out []RowWarning
 	for _, m := range records {
-		if m.Module != module.Loans {
+		if m.Module != module.Loans || slices.Contains(enabled, m.Module) {
 			continue
 		}
 		for _, line := range m.Lines {
@@ -179,6 +181,9 @@ func (w *writer) run(ctx context.Context, res *ImportResult) error {
 		return err
 	}
 	if err := w.link(ctx, res); err != nil {
+		return err
+	}
+	if err := w.loans(ctx, res); err != nil {
 		return err
 	}
 	if err := w.importTransactions(ctx, res); err != nil {
