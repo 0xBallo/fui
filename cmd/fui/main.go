@@ -237,7 +237,7 @@ func tuiConfig(cfg *config.Config, deps *cli.Deps, store *sqlite.Store, clk app.
 	analytics := func() *reporting.Analytics {
 		return reporting.NewAnalytics(store, clk, store, reporting.Config{
 			Locale: loc, BaseCurrency: base, MonthStartDay: cfg.MonthStartDay,
-			HorizonDays: cfg.Forecast.Horizon, Modules: modules(),
+			Horizon: string(cfg.Forecast.Horizon), MinBalance: cfg.Forecast.MinBalance, Modules: modules(),
 		})
 	}
 	return tui.Config{
@@ -331,7 +331,8 @@ func newReporting(
 		Locale:        domain.Locale(cfg.Locale),
 		BaseCurrency:  baseCurrency,
 		MonthStartDay: cfg.MonthStartDay,
-		HorizonDays:   cfg.Forecast.Horizon,
+		Horizon:       string(cfg.Forecast.Horizon),
+		MinBalance:    cfg.Forecast.MinBalance,
 		Modules:       modules,
 	})
 	return cli.Reporting{Spending: spending, CashFlow: cashFlow, Runway: runway, Analytics: analytics}, nil
