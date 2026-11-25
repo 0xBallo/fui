@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/investing"
@@ -122,8 +123,7 @@ type pendingRecurring interface {
 }
 
 type pendingLoans interface {
-	PlanConfirm(ctx context.Context, enabled module.Set, id domain.TransactionID) (lending.ConfirmPlan, error)
-	ApplyConfirm(ctx context.Context, p lending.ConfirmPlan) error
+	ConfirmPending(ctx context.Context, enabled module.Set, id domain.TransactionID) (lending.PendingConfirmed, error)
 }
 
 type pendingTxLookup interface {
@@ -167,15 +167,15 @@ func (a pendingActions) Confirm(ctx context.Context, id domain.TransactionID) (s
 		}
 		return noticeRecurBooked, nil
 	}
-	plan, err := a.loans.PlanConfirm(ctx, enabled, id)
+	done, err := a.loans.ConfirmPending(ctx, enabled, id)
 	if err != nil {
 		if notLoanInstallment(err) {
 			return noticeNotPending, nil
 		}
 		return "", fmt.Errorf("confirm loan installment: %w", err)
 	}
-	if err := a.loans.ApplyConfirm(ctx, plan); err != nil {
-		return "", fmt.Errorf("confirm loan installment: %w", err)
+	if len(done.Warnings) > 0 {
+		return noticeLoanBooked + " (" + strings.Join(done.Warnings, "; ") + ")", nil
 	}
 	return noticeLoanBooked, nil
 }

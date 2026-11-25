@@ -1,0 +1,79 @@
+# G03: loans in fui/1 streams: import creates the loan, versions renegotiations, matches booked
+# debits against generated installments, and survives an export/import round trip.
+exec fui init --preset custom --modules core,loans,recurring --currency EUR
+
+# (a) the loan is created from the schedule metadata; re-importing is a no-op.
+exec fui import loan1.fui.jsonl --create-accounts --yes
+exec fui loan show Mutuo --json
+stdout 'Mutuo'
+exec fui loan schedule Mutuo --at 2026-01-15 --json
+stdout '"interest":3500'
+exec fui import loan1.fui.jsonl --yes
+! stdout '"loans":[1-9]'
+exec fui loan schedule Mutuo --at 2026-01-15 --json
+cp stdout v1-before.json
+
+# (b) a later valid_from adds a version; the earlier installments do not change.
+exec fui import loan2.fui.jsonl --yes
+exec fui loan schedule Mutuo --at 2026-03-15 --json
+stdout '"interest":2500'
+exec fui loan schedule Mutuo --at 2026-01-15 --json
+cmp stdout v1-before.json
+
+# (c) a generated pending installment is confirmed by the booked debit, without duplicates.
+exec fui loan run --until 2026-02-15
+exec fui import debit.fui.jsonl --yes --json
+exec fui tx list --json --account Checking
+stdout '"amount":-103500'
+! stdout '"status":"pending"'
+exec fui tx list --json
+stdout '"kind":"interest"'
+stdout '"kind":"transfer"'
+cp stdout txs-c.json
+exec fui loan run --until 2026-02-15
+exec fui tx list --json
+cmp stdout txs-c.json
+
+# (d) export and import into an empty archive reproduces the loan.
+exec fui export --format fui --output out.fui.jsonl
+exec fui loan show Mutuo --json
+cp stdout show-a.json
+exec fui loan schedule Mutuo --at 2026-01-15 --json
+cp stdout sched1-a.json
+exec fui loan schedule Mutuo --at 2026-03-15 --json
+cp stdout sched2-a.json
+
+env XDG_DATA_HOME=$WORK/xdg/data-b
+env XDG_STATE_HOME=$WORK/xdg/state-b
+env XDG_CONFIG_HOME=$WORK/xdg/config-b
+exec fui init --preset custom --modules core,loans,recurring --currency EUR
+exec fui import out.fui.jsonl --create-accounts --yes
+exec fui loan show Mutuo --json
+cmp stdout show-a.json
+exec fui loan schedule Mutuo --at 2026-01-15 --json
+cmp stdout sched1-a.json
+exec fui loan schedule Mutuo --at 2026-03-15 --json
+cmp stdout sched2-a.json
+
+-- loan1.fui.jsonl --
+{"type":"meta","protocol":"fui/1","connector":"bank","version":"1","source":{"file":"loan1.fui.jsonl"}}
+{"type":"account","ref":"chk","name":"Checking","currency":"EUR","kind":"checking"}
+{"type":"account","ref":"ln","name":"Mutuo","currency":"EUR","kind":"loan"}
+{"type":"schedule","account":"ln","valid_from":"2026-01-01","rate":350,"rate_type":"fixed","debit_account":"chk","kind":"mortgage","principal":400000,"disbursed_on":"2026-01-01","term_months":4}
+{"type":"installment","account":"ln","due_date":"2026-02-01","principal":100000,"interest":3500,"fees":0,"remaining":300000}
+{"type":"installment","account":"ln","due_date":"2026-03-01","principal":100000,"interest":2600,"fees":0,"remaining":200000}
+{"type":"installment","account":"ln","due_date":"2026-04-01","principal":100000,"interest":1700,"fees":0,"remaining":100000}
+{"type":"installment","account":"ln","due_date":"2026-05-01","principal":100000,"interest":900,"fees":0,"remaining":0}
+{"type":"end","transactions":0,"errors":0}
+-- loan2.fui.jsonl --
+{"type":"meta","protocol":"fui/1","connector":"bank","version":"1","source":{"file":"loan2.fui.jsonl"}}
+{"type":"account","ref":"ln","name":"Mutuo","currency":"EUR","kind":"loan"}
+{"type":"schedule","account":"ln","valid_from":"2026-03-15","rate":300,"rate_type":"fixed"}
+{"type":"installment","account":"ln","due_date":"2026-04-01","principal":100000,"interest":2500,"fees":0,"remaining":100000}
+{"type":"installment","account":"ln","due_date":"2026-05-01","principal":100000,"interest":1200,"fees":0,"remaining":0}
+{"type":"end","transactions":0,"errors":0}
+-- debit.fui.jsonl --
+{"type":"meta","protocol":"fui/1","connector":"bank","version":"1","source":{"file":"debit.fui.jsonl"}}
+{"type":"account","ref":"chk","name":"Checking","currency":"EUR","kind":"checking"}
+{"type":"transaction","account":"chk","id":"d1","date":"2026-02-02","amount":-103500,"currency":"EUR","description":"Mortgage installment","status":"booked"}
+{"type":"end","transactions":1,"errors":0}
