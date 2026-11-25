@@ -63,13 +63,32 @@ func (h harness) budget(t *testing.T, name, category, amount string) {
 type useCases struct {
 	*budgeting.Service
 	today domain.Date
+	lists *app.Service
+}
+
+func (u useCases) Categories(ctx context.Context) ([]string, error) {
+	cats, err := u.lists.ListCategories(ctx)
+	out := make([]string, len(cats))
+	for i, c := range cats {
+		out[i] = c.Name
+	}
+	return out, err
+}
+
+func (u useCases) Tags(ctx context.Context) ([]string, error) {
+	tags, err := u.lists.ListTags(ctx)
+	out := make([]string, len(tags))
+	for i, c := range tags {
+		out[i] = c.Name
+	}
+	return out, err
 }
 
 func (u useCases) Today() (domain.Date, error) { return u.today, nil }
 
 func (h harness) uc() useCases {
 	d, _ := domain.FromTime(h.now)
-	return useCases{Service: h.svc, today: d}
+	return useCases{Service: h.svc, today: d, lists: h.fx.Service}
 }
 
 func newFixture(t *testing.T, h harness) scr.Screen {
@@ -294,7 +313,7 @@ func TestBudgetCapWarningAndOverStates(t *testing.T) {
 	s = run(t, s, s.Init())
 
 	view := s.View()
-	if !strings.Contains(view, "‼") {
+	if !strings.Contains(view, "90% !") {
 		t.Fatalf("expected a warning tier, got:\n%s", view)
 	}
 	if !strings.Contains(view, "OVER") {

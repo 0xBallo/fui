@@ -64,6 +64,11 @@ func (m *Model) otherEnvelopeNames(exclude string) []string {
 }
 
 func (m *Model) handleFormKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+	if m.mode == modeNewForm || m.mode == modeEditForm {
+		if handled, cmd := m.handlePickerKey(msg); handled {
+			return m, cmd
+		}
+	}
 	switch msg.String() {
 	case "esc":
 		m.mode = modeList
@@ -92,6 +97,8 @@ func (m *Model) submitForm() tea.Cmd {
 		return m.submitMove("", m.target)
 	case modeMoveForm:
 		return m.submitMove(m.target, m.toField.Value())
+	case modeNewForm, modeEditForm:
+		return m.submitBudget()
 	case modeSetForm, modeList, modeConfirm:
 		return m.submitSet()
 	}

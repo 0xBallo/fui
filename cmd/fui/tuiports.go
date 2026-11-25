@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/0xballo/fui/internal/app"
@@ -19,6 +20,7 @@ import (
 type budgetUseCases struct {
 	build func() *budgeting.Service
 	today func() (domain.Date, error)
+	lists lookups // category and tag names for the new/edit form
 }
 
 func (u budgetUseCases) Status(ctx context.Context, month string) (budgeting.Status, error) {
@@ -43,6 +45,30 @@ func (u budgetUseCases) ApplyMove(ctx context.Context, p budgeting.MovePlan) err
 
 func (u budgetUseCases) PlanCopy(ctx context.Context, req budgeting.CopyRequest) (budgeting.CopyPlan, error) {
 	return u.build().PlanCopy(ctx, req)
+}
+
+func (u budgetUseCases) Categories(ctx context.Context) ([]string, error) {
+	cats, err := u.lists.ListCategories(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list categories: %w", err)
+	}
+	out := make([]string, len(cats))
+	for i, c := range cats {
+		out[i] = c.Name
+	}
+	return out, nil
+}
+
+func (u budgetUseCases) Tags(ctx context.Context) ([]string, error) {
+	tags, err := u.lists.ListTags(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list tags: %w", err)
+	}
+	out := make([]string, len(tags))
+	for i, t := range tags {
+		out[i] = t.Name
+	}
+	return out, nil
 }
 
 func (u budgetUseCases) Today() (domain.Date, error) { return u.today() }

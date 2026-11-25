@@ -21,6 +21,9 @@ type UseCases interface {
 	ApplyMove(ctx context.Context, p budgeting.MovePlan) error
 	PlanCopy(ctx context.Context, req budgeting.CopyRequest) (budgeting.CopyPlan, error)
 	ApplyCopyPrevious(ctx context.Context, p budgeting.CopyPlan) error
+	// Categories and Tags list the existing names the new/edit form suggests for targets.
+	Categories(ctx context.Context) ([]string, error)
+	Tags(ctx context.Context) ([]string, error)
 	// Today dates assignments and moves made while the month on screen contains it.
 	Today() (domain.Date, error)
 }

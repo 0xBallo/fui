@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
@@ -18,12 +19,18 @@ import (
 	"github.com/0xballo/fui/internal/tui/theme"
 )
 
-// render builds the screen with th at 80x24 and returns its list view after loading.
-func render(t *testing.T, h harness, th theme.Theme) string {
+// renderAfter builds the screen with th at 80x24, loads it, types keys as runes (e.g. "n" opens
+// the new form) and returns the view.
+func renderAfter(t *testing.T, h harness, th theme.Theme, keys string) string {
 	t.Helper()
 	s := scr.Screen(budget.New(h.uc(), domain.LocaleENUS, th))
 	s.SetSize(80, 24)
 	s = run(t, s, s.Init())
+	if keys != "" {
+		var cmd tea.Cmd
+		s, cmd = sendRunes(s, keys)
+		s = run(t, s, cmd)
+	}
 	return s.View()
 }
 
@@ -62,6 +69,13 @@ func yearlyEnvelopeHarness(t *testing.T) harness {
 	return h
 }
 
+func emptyHarness(t *testing.T) harness {
+	t.Helper()
+	h := newHarness(t, domain.BudgetCap)
+	h.fx.Category(t, app.AddCategoryRequest{Name: "Groceries", Kind: "expense"})
+	return h
+}
+
 func capHarness(t *testing.T) harness {
 	t.Helper()
 	h := newHarness(t, domain.BudgetCap)
@@ -83,9 +97,12 @@ func TestBudgetGoldenViews(t *testing.T) {
 	cases := []struct {
 		name string
 		h    func(*testing.T) harness
+		keys string
 	}{
-		{"Envelope", yearlyEnvelopeHarness},
-		{"Cap", capHarness},
+		{"Envelope", yearlyEnvelopeHarness, ""},
+		{"Cap", capHarness, ""},
+		{"Empty", emptyHarness, ""},
+		{"NewForm", emptyHarness, "n"},
 	}
 	themes := []string{"latte", "frappe", "macchiato", "mocha", "terminal", "high-contrast"}
 	for _, c := range cases {
@@ -95,7 +112,7 @@ func TestBudgetGoldenViews(t *testing.T) {
 			var first string
 			for _, name := range themes {
 				th := theme.Resolve(theme.Config{Theme: name}, nil)
-				plain := ansi.Strip(render(t, h, th))
+				plain := ansi.Strip(renderAfter(t, h, th, c.keys))
 				if first == "" {
 					first = plain
 				} else if plain != first {
@@ -105,7 +122,7 @@ func TestBudgetGoldenViews(t *testing.T) {
 			golden.RequireEqual(t, []byte(first))
 
 			lipgloss.SetColorProfile(termenv.Ascii)
-			v := render(t, h, theme.Default())
+			v := renderAfter(t, h, theme.Default(), c.keys)
 			if strings.Contains(v, "\x1b") {
 				t.Errorf("NO_COLOR view contains escape codes: %q", v)
 			}

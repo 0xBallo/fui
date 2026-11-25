@@ -79,7 +79,7 @@ func (m *Model) capRows() []components.Row {
 			domain.FormatAmount(l.Spent, m.loc),
 			domain.FormatAmount(l.Planned, m.loc),
 			domain.FormatAmount(l.Remaining, m.loc),
-			progressBar(m.th, l.Percent),
+			progressBar(m.th, l.Percent, l.Budget.Thresholds),
 		}}
 	}
 	return rows
@@ -104,7 +104,7 @@ func (m *Model) envelopeRows() []components.Row {
 			}
 			cells = append(cells, q)
 		}
-		rows[i] = components.Row{ID: l.Budget.Name, Cells: append(cells, progressBar(m.th, envelopePercent(l.EnvelopeMonth)))}
+		rows[i] = components.Row{ID: l.Budget.Name, Cells: append(cells, progressBar(m.th, envelopePercent(l.EnvelopeMonth), l.Budget.Thresholds))}
 	}
 	return rows
 }
@@ -115,7 +115,7 @@ func (m *Model) View() string {
 		return m.help.View()
 	}
 	switch m.mode {
-	case modeSetForm, modeAssignForm, modeMoveForm:
+	case modeSetForm, modeAssignForm, modeMoveForm, modeNewForm, modeEditForm:
 		return components.Modal(m.th, m.width, m.height, m.viewForm())
 	case modeConfirm:
 		return components.Modal(m.th, m.width, m.height, m.confirm.View())
@@ -127,7 +127,11 @@ func (m *Model) View() string {
 
 func (m *Model) viewList() string {
 	title := m.th.Title.Render(fmt.Sprintf("%s (%s)", m.monthIn, m.status.Mode))
-	lines := []string{title, "", m.table.View(), "", m.viewDetail(), m.viewFooter()}
+	body := m.table.View()
+	if m.table.SelectedRow() == nil {
+		body = m.th.Muted.Render("No budgets yet: press n to create a budget")
+	}
+	lines := []string{title, "", body, "", m.viewDetail(), m.viewFooter()}
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
 
@@ -170,6 +174,9 @@ func (m *Model) viewFooter() string {
 }
 
 func (m *Model) viewForm() string {
+	if m.mode == modeNewForm || m.mode == modeEditForm {
+		return m.viewBudgetForm()
+	}
 	return m.th.Title.Render(formTitle(m.mode)) + "\n\n" + m.form.View()
 }
 
@@ -179,6 +186,10 @@ func formTitle(md mode) string {
 		return "Assign from unassigned pool"
 	case modeMoveForm:
 		return "Move between envelopes"
+	case modeNewForm:
+		return "New budget"
+	case modeEditForm:
+		return "Edit budget"
 	case modeSetForm, modeList, modeConfirm:
 		return "Set amount"
 	}
