@@ -62,7 +62,7 @@ func richFlowModel(t *testing.T, mods *recordingModules) *importer.Model {
 	t.Helper()
 	fx := newFixture()
 	addAccount(t, fx, "Account A")
-	addAccount(t, fx, "Account B")
+	addAccountKind(t, fx, "Account B", "investment") // security operations need an investment account
 	fx.connectors.fixtures["fui"] = richStream()
 	m := importer.New(fx, domain.LocaleENUS, theme.Default())
 	m.SetModules(module.Default(), mods)

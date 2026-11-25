@@ -3,6 +3,7 @@ package importing_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -41,13 +42,13 @@ func loanRecs() []fuiproto.Record {
 }
 
 func brokerStream() importing.Source {
-	return stream("fui", "", account("r1", "Broker", "EUR"),
+	return stream("fui", "", broker("r1", "Broker", "EUR"),
 		txRec("r1", "cash-1", "2026-10-01", -100, "buy cash leg"), secOpRec("cash-1"))
 }
 
 func TestModuleRecordsListed(t *testing.T) {
 	e := newEnv(nil)
-	recs := append([]fuiproto.Record{account("r1", "Broker", "EUR"), secOpRec("")}, loanRecs()...)
+	recs := append([]fuiproto.Record{broker("r1", "Broker", "EUR"), secOpRec("")}, loanRecs()...)
 	plan := e.plan(t, stream("fui", "", recs...), createAccounts)
 	want := []importing.ModuleRecords{
 		{Module: module.Investments, Count: 1, Kinds: []string{"security_op"}, Lines: []int{3}},
@@ -65,7 +66,7 @@ func TestModuleRecordsListed(t *testing.T) {
 func TestApplyModules(t *testing.T) {
 	t.Run("skipped without enabling", func(t *testing.T) {
 		e := newEnv(nil)
-		recs := append([]fuiproto.Record{account("r1", "Broker", "EUR"), txRec("r1", "c", "2026-10-01", -100, "x"), secOpRec("c")}, loanRecs()...)
+		recs := append([]fuiproto.Record{broker("r1", "Broker", "EUR"), txRec("r1", "c", "2026-10-01", -100, "x"), secOpRec("c")}, loanRecs()...)
 		res := must(e.svc.ApplyImport(context.Background(), e.plan(t, stream("fui", "", recs...), createAccounts)))
 		if res.SecurityOps != 0 || res.Securities != 0 || res.Transactions != 1 {
 			t.Fatalf("result = %+v", res)
@@ -142,8 +143,18 @@ func cryptoOpRec() fuiproto.Record {
 	return rec
 }
 
+func TestSecurityOpNeedsInvestmentAccount(t *testing.T) {
+	inv := must(module.Validate([]module.ID{module.Core, module.Investments}))
+	e := newEnv(nil)
+	src := stream("fui", "", account("r1", "Checking", "EUR"), txRec("r1", "c", "2026-10-01", -100, "buy"), secOpRec("c"))
+	plan := e.plan(t, src, createAccounts, withModules(inv))
+	if len(plan.SecurityOps) != 0 || len(plan.Errors) != 1 || !strings.Contains(plan.Errors[0].Message, "cannot be held in a checking account") {
+		t.Fatalf("ops=%d errors=%+v, want no op and one account-kind error", len(plan.SecurityOps), plan.Errors)
+	}
+}
+
 func TestCryptoOpNeedsCryptoModule(t *testing.T) {
-	src := stream("fui", "", account("r1", "Broker", "EUR"), txRec("r1", "c", "2026-10-01", -100, "buy"), cryptoOpRec())
+	src := stream("fui", "", broker("r1", "Broker", "EUR"), txRec("r1", "c", "2026-10-01", -100, "buy"), cryptoOpRec())
 	inv := must(module.Validate([]module.ID{module.Core, module.Investments}))
 	both := must(module.Validate([]module.ID{module.Core, module.Investments, module.Crypto}))
 

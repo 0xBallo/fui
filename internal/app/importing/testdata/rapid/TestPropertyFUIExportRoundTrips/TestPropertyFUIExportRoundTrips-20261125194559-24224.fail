@@ -1,0 +1,52 @@
+# 2026/11/25 19:45:59.710457 [TestPropertyFUIExportRoundTrips] [rapid] draw accounts: 1
+# 2026/11/25 19:45:59.710461 [TestPropertyFUIExportRoundTrips] [rapid] draw account kind: "checking"
+# 2026/11/25 19:45:59.710463 [TestPropertyFUIExportRoundTrips] [rapid] draw transactions: 0
+# 2026/11/25 19:45:59.710464 [TestPropertyFUIExportRoundTrips] [rapid] draw words: []string{"coffee"}
+# 2026/11/25 19:45:59.710465 [TestPropertyFUIExportRoundTrips] [rapid] draw category: ""
+# 2026/11/25 19:45:59.710465 [TestPropertyFUIExportRoundTrips] [rapid] draw payee: ""
+# 2026/11/25 19:45:59.710466 [TestPropertyFUIExportRoundTrips] [rapid] draw tags: []string{}
+# 2026/11/25 19:45:59.710466 [TestPropertyFUIExportRoundTrips] [rapid] draw amount: 0
+# 2026/11/25 19:45:59.710467 [TestPropertyFUIExportRoundTrips] [rapid] draw kind: "payment"
+# 2026/11/25 19:45:59.710468 [TestPropertyFUIExportRoundTrips] [rapid] draw split: false
+# 2026/11/25 19:45:59.710468 [TestPropertyFUIExportRoundTrips] [rapid] draw account: 0
+# 2026/11/25 19:45:59.710469 [TestPropertyFUIExportRoundTrips] [rapid] draw day: 1
+# 2026/11/25 19:45:59.710469 [TestPropertyFUIExportRoundTrips] [rapid] draw notes: ""
+# 2026/11/25 19:45:59.710470 [TestPropertyFUIExportRoundTrips] [rapid] draw status: "booked"
+# 2026/11/25 19:45:59.710545 [TestPropertyFUIExportRoundTrips] round trip differs
+#  got: ["account Acct0 checking EUR balance=0" "security \"World ETF\" \"VWCE\" \"\" etf EUR scale=6" "tx Acct0 2026-09-01 0 \"coffee\" \"\" \"\" booked payment x1 payee=\"Market Co\" tags=\"vacation\" splits=\"\\\"Food\\\":1:\\\"a\\\",\\\"Fun\\\":-1:\\\"b\\\"\""]
+# want: ["account Acct0 checking EUR balance=0" "security \"World ETF\" \"VWCE\" \"\" etf EUR scale=6" "security_op Acct0 \"VWCE\" 2026-11-01 buy qty=1000000@100 fees=1 cash=" "tx Acct0 2026-09-01 0 \"coffee\" \"\" \"\" booked payment x1 payee=\"Market Co\" tags=\"vacation\" splits=\"\\\"Food\\\":1:\\\"a\\\",\\\"Fun\\\":-1:\\\"b\\\"\""]
+# 
+v0.4.8#18404395999044225706
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0

@@ -65,8 +65,9 @@ type acctInfo struct {
 	rec    fuiproto.AccountRecord
 	id     domain.AccountID
 	cur    domain.Currency
-	mapped bool // bound to an existing account
-	create bool // the import creates it
+	kind   domain.AccountKind // kind of the bound or to-be-created account
+	mapped bool               // bound to an existing account
+	create bool               // the import creates it
 }
 
 // resolved reports whether the account is known, or will be once the import is applied.
@@ -320,7 +321,7 @@ func (b *builder) resolve(ctx context.Context, rec fuiproto.AccountRecord, activ
 	}
 	info := &acctInfo{rec: rec, cur: cur}
 	bind := func(a domain.Account, save bool) *acctInfo {
-		info.id, info.cur, info.mapped = a.ID, a.Currency, true
+		info.id, info.cur, info.kind, info.mapped = a.ID, a.Currency, a.Kind, true
 		if save {
 			b.plan.Bindings = append(b.plan.Bindings, Binding{Ref: rec.Ref, AccountID: a.ID})
 		}
@@ -366,7 +367,7 @@ func (b *builder) unresolved(info *acctInfo, active []domain.Account) error {
 			return fmt.Errorf("account %q: %w", rec.Ref, err)
 		}
 		b.plan.NewAccounts = append(b.plan.NewAccounts, NewAccount{Ref: rec.Ref, Account: a})
-		info.create = true
+		info.create, info.kind = true, a.Kind
 		return nil
 	}
 	b.plan.Unmapped = append(b.plan.Unmapped, UnmappedRef{

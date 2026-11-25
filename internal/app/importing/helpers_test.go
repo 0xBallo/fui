@@ -84,6 +84,11 @@ func account(ref, name, currency string, mods ...func(*fuiproto.AccountRecord)) 
 	return fuiproto.Record{Type: fuiproto.RecordTypeAccount, Account: a}
 }
 
+// broker is an investment account record, the kind security operations require.
+func broker(ref, name, currency string) fuiproto.Record {
+	return account(ref, name, currency, func(a *fuiproto.AccountRecord) { a.Kind = fuiproto.AccountKindInvestment })
+}
+
 func withIBAN(iban string) func(*fuiproto.AccountRecord) {
 	return func(a *fuiproto.AccountRecord) { a.IBAN = iban }
 }

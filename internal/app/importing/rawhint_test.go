@@ -254,7 +254,7 @@ func secOpRecAt(kind fuiproto.SecurityOpKind, date, cash string) fuiproto.Record
 func TestUndoRemovesSecurityOps(t *testing.T) {
 	e := newEnv(nil)
 	inv := must(module.Validate([]module.ID{module.Core, module.Investments}))
-	src := stream("fui", "", account("r1", "Broker", "EUR"),
+	src := stream("fui", "", broker("r1", "Broker", "EUR"),
 		txRec("r1", "buy", "2026-10-01", -100, "buy", kind(fuiproto.TransactionKindInvestment)),
 		txRec("r1", "div", "2026-10-02", 5, "dividend", kind(fuiproto.TransactionKindInvestment)),
 		secOpRecAt(fuiproto.SecurityOpKindBuy, "2026-10-01", "buy"),
@@ -289,7 +289,7 @@ func TestUndoRemovesSecurityOps(t *testing.T) {
 func TestUndoRefusesReconciledKeepsSecurityOps(t *testing.T) {
 	e := newEnv(nil)
 	inv := must(module.Validate([]module.ID{module.Core, module.Investments}))
-	src := stream("fui", "", account("r1", "Broker", "EUR"),
+	src := stream("fui", "", broker("r1", "Broker", "EUR"),
 		txRec("r1", "buy", "2026-10-01", -100, "buy", kind(fuiproto.TransactionKindInvestment)),
 		secOpRecAt(fuiproto.SecurityOpKindBuy, "2026-10-01", "buy"),
 	)

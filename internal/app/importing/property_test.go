@@ -179,8 +179,15 @@ func TestPropertyFUIExportRoundTrips(t *testing.T) {
 			if err != nil {
 				return err
 			}
+			// Operations are only valid on investment accounts: hold the position in a dedicated one.
+			broker, err := r.Accounts().Insert(context.Background(), domain.Account{
+				Name: "Broker", Kind: domain.AccountInvestment, Currency: eur(), OpeningBalance: money(0), OpenedOn: date("2026-01-01"),
+			})
+			if err != nil {
+				return err
+			}
 			_, err = r.Securities().InsertOp(context.Background(), domain.SecurityOp{
-				Account: accts[0].ID, Security: sec.ID, Date: date("2026-11-01"),
+				Account: broker.ID, Security: sec.ID, Date: date("2026-11-01"),
 				Kind: domain.OpBuy, Quantity: must(domain.NewQuantity(1000000, 6)), UnitPrice: price(100), Fees: money(1),
 			})
 			return err

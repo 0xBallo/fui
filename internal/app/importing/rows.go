@@ -87,6 +87,10 @@ func (b *builder) addSecurityOp(_ context.Context, rec *fuiproto.SecurityOpRecor
 		return nil
 	}
 	sec = b.resolveSecurity(sec)
+	if err := domain.CheckOpAccount(info.kind, sec.Kind); err != nil {
+		b.err(line, "security_op on account %q: %v", rec.Account, err)
+		return nil
+	}
 
 	op, err := parseSecurityOp(rec, info.id, sec)
 	if err != nil {
