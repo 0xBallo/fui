@@ -11,6 +11,7 @@ type KeyMap struct {
 	Reports      key.Binding
 	Import       key.Binding
 	Settings     key.Binding
+	Undo         key.Binding
 	Help         key.Binding
 	Quit         key.Binding
 }
@@ -25,6 +26,7 @@ func DefaultKeyMap() KeyMap {
 		Reports:      key.NewBinding(key.WithKeys("5"), key.WithHelp("5", "reports")),
 		Import:       key.NewBinding(key.WithKeys("6"), key.WithHelp("6", "import")),
 		Settings:     key.NewBinding(key.WithKeys("7"), key.WithHelp("7", "settings")),
+		Undo:         key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "undo")),
 		Help:         key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		Quit:         key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 	}
@@ -32,5 +34,5 @@ func DefaultKeyMap() KeyMap {
 
 // Bindings returns all keys as a slice for help generation and collision checks.
 func (k KeyMap) Bindings() []key.Binding {
-	return []key.Binding{k.Dashboard, k.Transactions, k.Accounts, k.Budget, k.Reports, k.Import, k.Settings, k.Help, k.Quit}
+	return []key.Binding{k.Dashboard, k.Transactions, k.Accounts, k.Budget, k.Reports, k.Import, k.Settings, k.Undo, k.Help, k.Quit}
 }

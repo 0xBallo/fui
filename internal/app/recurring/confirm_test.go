@@ -3,6 +3,7 @@ package recurring_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/0xballo/fui/internal/app"
@@ -69,4 +70,65 @@ func TestPlanConfirmModuleDisabled(t *testing.T) {
 	if !errors.Is(err, app.ErrModuleDisabled) {
 		t.Fatalf("err = %v, want app.ErrModuleDisabled", err)
 	}
+}
+
+func TestConfirmUndo(t *testing.T) {
+	ctx := context.Background()
+	setup := func(t *testing.T) (env, *app.Service, domain.Transaction) {
+		e := newEnv(t)
+		e.addRecurrence(t, nil)
+		p, err := e.svc.PlanRun(ctx, e.all, recurring.RunRequest{Until: "2026-01-01"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := e.svc.ApplyRun(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+		return e, app.New(e.store, e.clock, e.backup, app.Config{}), e.listTx(t)[0]
+	}
+	confirm := func(t *testing.T, e env, id domain.TransactionID) {
+		t.Helper()
+		p, err := e.svc.PlanConfirm(ctx, e.all, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := e.svc.ApplyConfirm(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	undo := func(t *testing.T, a *app.Service) error {
+		t.Helper()
+		p, err := a.PlanUndo(ctx)
+		if err != nil {
+			return err
+		}
+		return a.ApplyUndo(ctx, p)
+	}
+
+	t.Run("restores pending and confirms again", func(t *testing.T) {
+		e, a, tx := setup(t)
+		confirm(t, e, tx.ID)
+		if err := undo(t, a); err != nil {
+			t.Fatalf("undo: %v", err)
+		}
+		if got := e.listTx(t); !reflect.DeepEqual([]domain.Transaction{tx}, got) {
+			t.Fatalf("after undo:\n got %+v\nwant %+v", got, tx)
+		}
+		confirm(t, e, tx.ID)
+		if got := e.listTx(t); got[0].Status != domain.StatusBooked {
+			t.Fatalf("status = %s, want booked", got[0].Status)
+		}
+	})
+	t.Run("reconciled refuses", func(t *testing.T) {
+		e, a, tx := setup(t)
+		confirm(t, e, tx.ID)
+		rec := e.listTx(t)[0]
+		rec.Status = domain.StatusReconciled
+		if err := e.store.WithTx(ctx, func(r app.Repos) error { return r.Transactions().Update(ctx, rec) }); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := a.PlanUndo(ctx); !errors.Is(err, domain.ErrReconciled) {
+			t.Fatalf("err = %v, want reconciled", err)
+		}
+	})
 }

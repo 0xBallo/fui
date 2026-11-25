@@ -56,6 +56,8 @@ type UseCases interface {
 	accounts.UseCases
 	transactions.UseCases
 	dashboard.UseCases
+	PlanUndo(ctx context.Context) (app.UndoPlan, error)
+	ApplyUndo(ctx context.Context, plan app.UndoPlan) error
 }
 
 // Config holds the user-facing settings Root applies: the locale used to format amounts and
@@ -123,6 +125,76 @@ type Root struct {
 	status        string
 	err           error
 	help          components.HelpBar
+
+	// undo confirms the journal entry in undoPlan before reverting it.
+	undo     components.ConfirmDialog
+	undoPlan app.UndoPlan
+}
+
+// undoPlannedMsg carries the result of PlanUndo back into Update.
+type undoPlannedMsg struct {
+	plan app.UndoPlan
+	err  error
+}
+
+// undoneMsg carries the result of ApplyUndo back into Update.
+type undoneMsg struct {
+	kind string
+	err  error
+}
+
+func (r *Root) planUndo() tea.Cmd {
+	return func() tea.Msg {
+		plan, err := r.uc.PlanUndo(context.Background())
+		return undoPlannedMsg{plan: plan, err: err}
+	}
+}
+
+func (r *Root) applyUndo(plan app.UndoPlan) tea.Cmd {
+	return func() tea.Msg {
+		return undoneMsg{kind: plan.Entry.Kind, err: r.uc.ApplyUndo(context.Background(), plan)}
+	}
+}
+
+// undoDetails lists each change of the plan and its warnings for the confirmation dialog.
+func undoDetails(plan app.UndoPlan) []string {
+	var out []string
+	for _, c := range plan.Changes {
+		out = append(out, "• "+c.Summary)
+	}
+	for _, w := range plan.Warnings {
+		out = append(out, "! "+w)
+	}
+	return out
+}
+
+func (r *Root) undoPlanned(msg undoPlannedMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		r.err, r.status = msg.err, ""
+		return r, nil
+	}
+	r.undoPlan, r.err, r.status = msg.plan, nil, ""
+	r.undo.Show("Undo "+msg.plan.Entry.Kind, "Revert the last operation?", undoDetails(msg.plan)...)
+	return r, nil
+}
+
+// undone reloads the active screen, which holds no optimistic state, after a successful undo.
+func (r *Root) undone(msg undoneMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		r.err, r.status = msg.err, ""
+		return r, nil
+	}
+	r.status, r.err = "Undone "+msg.kind, nil
+	return r, r.tabs[r.active].Init()
+}
+
+// handleUndoKey resolves the open undo confirmation; every other key is swallowed.
+func (r *Root) handleUndoKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	yes, _ := r.undo.HandleKey(msg)
+	if yes {
+		return r, r.applyUndo(r.undoPlan)
+	}
+	return r, nil
 }
 
 var _ tea.Model = (*Root)(nil)
@@ -136,6 +208,7 @@ func New(uc UseCases, cfg Config) *Root {
 	}
 	r := &Root{uc: uc, cfg: cfg, km: DefaultKeyMap()}
 	r.rebuild()
+	r.undo = components.NewConfirmDialog(r.th)
 	return r
 }
 
@@ -172,6 +245,7 @@ func (r *Root) rebuild() {
 	if r.tabs[r.active] == nil {
 		r.active = screens.TabDashboard
 	}
+	r.undo = components.NewConfirmDialog(r.th)
 	r.help = components.NewHelpBar(r.th)
 	r.help.SetWidth(r.width)
 	if r.height > 0 {
@@ -316,6 +390,10 @@ func (r *Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return r.switchToFiltered(msg.Target, *msg.Filter)
 		}
 		return r.switchTo(msg.Target)
+	case undoPlannedMsg:
+		return r.undoPlanned(msg)
+	case undoneMsg:
+		return r.undone(msg)
 	case tea.KeyMsg:
 		return r.handleKey(msg)
 	case tea.MouseMsg:
@@ -325,6 +403,9 @@ func (r *Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (r *Root) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if r.undo.Visible() {
+		return r.handleUndoKey(msg)
+	}
 	if r.help.Expanded() {
 		r.help.Toggle()
 		r.resize()
@@ -340,6 +421,8 @@ func (r *Root) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			r.help.Toggle()
 			r.resize()
 			return r, nil
+		case key.Matches(msg, r.km.Undo):
+			return r, r.planUndo()
 		case key.Matches(msg, r.km.Dashboard):
 			return r.switchTo(screens.TabDashboard)
 		case key.Matches(msg, r.km.Transactions):
@@ -414,6 +497,9 @@ func (r *Root) View() string {
 	helpBar := r.helpView()
 	h := max(1, r.height-reservedRows-r.bannerHeight()-lipgloss.Height(helpBar))
 	body := r.tabs[r.active].View()
+	if r.undo.Visible() {
+		body = components.Modal(r.th, r.width, h, r.undo.View())
+	}
 	if r.height > 0 {
 		body = lipgloss.NewStyle().Height(h).MaxHeight(h).Render(body)
 	}
@@ -502,7 +588,7 @@ func (r *Root) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			r.help.Toggle()
 			r.resize()
 		}
-	case r.tabs[r.active].InputActive():
+	case r.undo.Visible(), r.tabs[r.active].InputActive():
 	case msg.Button == tea.MouseButtonLeft && msg.Y >= r.bannerHeight() && msg.Y < r.bannerHeight()+tabBarRows:
 		if id, ok := r.tabAt(msg.X); ok {
 			return r.switchTo(id)

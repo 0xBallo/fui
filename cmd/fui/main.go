@@ -197,7 +197,7 @@ func wireStore(ctx context.Context, cfg *config.Config, appClock app.Clock, deps
 		Profiles: cfg.Import.Profiles,
 		Currency: cfg.Currency,
 	}).WithCSVDetector(connector.CSVFileDetector{})
-	deps.Rules = rules.New(store, store)
+	deps.Rules = rules.New(store, store).WithClock(appClock)
 	modules, err := cfg.ModulesEnabled()
 	if err != nil {
 		_ = store.Close()
