@@ -591,25 +591,37 @@ func (b *builder) checkStatementBalance(ctx context.Context, bal fuiproto.Balanc
 	if err != nil {
 		return fmt.Errorf("balance of %q: %w", bal.Account, err)
 	}
-	computed := acct.OpeningBalance.Minor() + sum
-	for _, row := range b.plan.Rows {
-		if row.AccountRef == bal.Account && row.Include && row.Class != domain.DedupDuplicate &&
-			row.ConfirmsPending == 0 && !row.Tx.Date.After(date) {
-			computed += row.Tx.Amount.Minor()
-		}
-	}
-	if computed == bal.Amount {
-		return nil
-	}
-	want, err := domain.NewMoney(bal.Amount, info.cur)
-	if err != nil {
-		return fmt.Errorf("balance of %q: %w", bal.Account, err)
-	}
-	b.plan.BalanceMismatches = append(b.plan.BalanceMismatches, BalanceMismatch{
-		AccountRef: bal.Account, AccountID: info.id, Date: date, Expected: bal.Amount, Computed: computed,
-		Suggest: fmt.Sprintf("fui reconcile %s --date %s --balance %s", shellQuote(acct.Name), date, domain.FormatMachine(want)),
+	b.plan.BalanceChecks = append(b.plan.BalanceChecks, BalanceCheck{
+		AccountRef: bal.Account, AccountID: info.id, AccountName: acct.Name, Currency: info.cur,
+		Date: date, Expected: bal.Amount, Base: acct.OpeningBalance.Minor() + sum,
 	})
 	return nil
+}
+
+// refreshBalanceMismatches recomputes BalanceMismatches from BalanceChecks and the rows that are
+// currently included, so toggling a row keeps the preview coherent.
+func (p *ImportPlan) refreshBalanceMismatches() {
+	p.BalanceMismatches = nil
+	for _, c := range p.BalanceChecks {
+		computed := c.Base
+		for _, row := range p.Rows {
+			if row.AccountRef == c.AccountRef && row.Include && row.Class != domain.DedupDuplicate &&
+				row.ConfirmsPending == 0 && !row.Tx.Date.After(c.Date) {
+				computed += row.Tx.Amount.Minor()
+			}
+		}
+		if computed == c.Expected {
+			continue
+		}
+		want, err := domain.NewMoney(c.Expected, c.Currency)
+		if err != nil {
+			continue // the currency was validated when the account was resolved
+		}
+		p.BalanceMismatches = append(p.BalanceMismatches, BalanceMismatch{
+			AccountRef: c.AccountRef, AccountID: c.AccountID, Date: c.Date, Expected: c.Expected, Computed: computed,
+			Suggest: fmt.Sprintf("fui reconcile %s --date %s --balance %s", shellQuote(c.AccountName), c.Date, domain.FormatMachine(want)),
+		})
+	}
 }
 
 // shellQuote quotes s for a POSIX shell only when it needs it.

@@ -137,6 +137,32 @@ func TestBalanceMismatches(t *testing.T) {
 	}
 }
 
+func TestBalanceMismatchesFollowInclude(t *testing.T) {
+	e := newEnv(nil)
+	a := e.seedAccount(t, "Main account", "bank", "a")
+	e.seedTx(t, domain.Transaction{
+		AccountID: a.ID, Date: date("2026-09-01"), Amount: money(1000), Description: "salary",
+		Status: domain.StatusBooked, Kind: domain.KindOther, ExternalID: "old",
+	})
+	bal := fuiproto.Record{Type: fuiproto.RecordTypeBalance, Balance: &fuiproto.BalanceRecord{Account: "a", Date: "2026-10-31", Amount: 600}}
+	plan := e.plan(t, stream("bank", "", account("a", "Main account", "EUR"), txRec("a", "n", "2026-10-03", -400, "coffee"), bal), createAccounts)
+	if len(plan.BalanceMismatches) != 0 {
+		t.Fatalf("included row: mismatches = %+v", plan.BalanceMismatches)
+	}
+	if err := plan.SetInclude(0, false); err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.BalanceMismatches) != 1 || plan.BalanceMismatches[0].Computed != 1000 {
+		t.Fatalf("excluded row: mismatches = %+v", plan.BalanceMismatches)
+	}
+	if err := plan.SetInclude(0, true); err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.BalanceMismatches) != 0 {
+		t.Fatalf("re-included row: mismatches = %+v", plan.BalanceMismatches)
+	}
+}
+
 func TestHintOnlyFeedsRules(t *testing.T) {
 	ctx := context.Background()
 	tests := []struct {

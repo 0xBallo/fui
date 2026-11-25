@@ -128,6 +128,18 @@ type BalanceMismatch struct {
 	Suggest    string // the reconcile command that records the stated balance
 }
 
+// BalanceCheck is a statement balance record of an existing account, with the balance the
+// archive alone has at that date: the plan rows included at any time are added on top of Base.
+type BalanceCheck struct {
+	AccountRef  string
+	AccountID   domain.AccountID
+	AccountName string
+	Currency    domain.Currency
+	Date        domain.Date
+	Expected    int64
+	Base        int64
+}
+
 // ImportPlan is the plain-data result of PlanImport: what ApplyImport will do.
 type ImportPlan struct {
 	app.Plan
@@ -150,8 +162,11 @@ type ImportPlan struct {
 	Transfers       []TransferProposal
 	ModuleRecords   []ModuleRecords
 	Discrepancies   []BalanceDiscrepancy
-	// BalanceMismatches lists balance records of existing accounts the computed balance contradicts.
+	// BalanceMismatches lists balance records of existing accounts the computed balance contradicts;
+	// refresh recomputes it from BalanceChecks whenever the included rows change.
 	BalanceMismatches []BalanceMismatch
+	// BalanceChecks holds the statement balances of existing accounts with what the archive alone sums to.
+	BalanceChecks []BalanceCheck
 	// Stderr is what the connector wrote on stderr, for --verbose.
 	Stderr string
 }
@@ -202,6 +217,7 @@ func (p *ImportPlan) SetAcceptTransfer(i int, accept bool) error {
 // refresh recomputes Changes from the other fields. Importing always asks for confirmation:
 // Bulk is set, and ApplyImport takes the backup itself.
 func (p *ImportPlan) refresh() {
+	p.refreshBalanceMismatches()
 	changes := make([]app.Change, 0, len(p.NewAccounts)+len(p.NewCategories)+len(p.NewPayees)+len(p.NewTags)+len(p.NewSecurities)+3)
 	changes = p.appendEntityCreates(changes)
 	secOps := p.includedSecurityOps()
