@@ -38,6 +38,7 @@ INSERT INTO security_ops (id, date, account_id, security_id, kind, quantity_unit
         unit_price_minor, unit_price_currency, fees_minor, fees_currency, cash_tx_id, import_batch_id)
     VALUES (1, '2026-01-02', 1, 1, 'buy', 100, 2, 1000, 'EUR', 0, 'EUR', 1, 1);
 INSERT INTO connector_account_refs (id, connector, ref, account_id) VALUES (1, 'csv', 'ref-1', 1);
+INSERT INTO connector_ref_pending (id, connector, ref, account_name) VALUES (1, 'csv', 'ref-2', 'Gone');
 INSERT INTO loans (id, kind, principal_minor, currency, disbursed_on, term_months, rate_type, debit_account_id,
         name, liability_account_id)
     VALUES (1, 'mortgage', 10000000, 'EUR', '2026-01-01', 240, 'fixed', 1, 'Fixture mortgage', 2);

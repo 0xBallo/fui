@@ -28,7 +28,15 @@ func (s *Store) Reset(ctx context.Context, opts app.ResetOptions) error {
 	}
 	defer func() { _ = os.Remove(tempPath) }() // no-op once renamed
 
-	return s.swapLocked(ctx, tempPath, backup.ReasonReset, "reset")
+	if err := s.swapLocked(ctx, tempPath, backup.ReasonReset, "reset"); err != nil {
+		return err
+	}
+	if opts.OnWarning != nil {
+		for _, w := range warnings {
+			opts.OnWarning(w)
+		}
+	}
+	return nil
 }
 
 // swapLocked backs up the current archive with the given reason, then atomically renames the
@@ -52,11 +60,6 @@ func (s *Store) swapLocked(ctx context.Context, tempPath string, reason backup.R
 	}
 	if err := s.reopenLocked(); err != nil {
 		return fmt.Errorf("%s: reopen database: %w", op, err)
-	}
-	if opts.OnWarning != nil {
-		for _, w := range warnings {
-			opts.OnWarning(w)
-		}
 	}
 	return nil
 }
