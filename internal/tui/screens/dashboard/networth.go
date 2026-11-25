@@ -46,6 +46,21 @@ func grossNet(nw app.NetWorth) (gross, net domain.Money, err error) {
 	return gross, net, nil
 }
 
+// withLiquidity replaces the non-loan part of gross and net with liquidity, keeping the loan
+// lines that net adds on top of gross.
+func withLiquidity(gross, net domain.Money, liquidity reporting.Amount, base domain.Currency) (domain.Money, domain.Money, error) {
+	loans, err := net.Sub(gross)
+	if err != nil {
+		return gross, net, err
+	}
+	liq, err := domain.NewMoney(liquidity.Minor, base)
+	if err != nil {
+		return gross, net, err
+	}
+	net, err = liq.Add(loans)
+	return liq, net, err
+}
+
 // netWorthSection shows the net worth as of the end of the selected period.
 type netWorthSection struct {
 	uc         UseCases
@@ -106,6 +121,13 @@ func (s *netWorthSection) view(width int) string {
 	gross, net, err := grossNet(s.nw)
 	if err != nil {
 		return out + s.th.Muted.Render("n/a ("+err.Error()+")")
+	}
+	if s.pt != nil {
+		// The reporting liquidity leaves out the accounts of disabled modules, which the raw
+		// account lines would still count.
+		if gross, net, err = withLiquidity(gross, net, s.pt.Liquidity, s.nw.Base); err != nil {
+			return out + s.th.Muted.Render("n/a ("+err.Error()+")")
+		}
 	}
 	amount := domain.FormatAmount(gross, s.loc)
 	code := s.nw.Base.Code()

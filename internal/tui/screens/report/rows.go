@@ -36,6 +36,8 @@ func (m *Model) refreshResultView() {
 	switch data := m.result.data.(type) {
 	case reporting.SeriesResult:
 		m.viewSeries(data)
+	case reporting.NetWorthResult:
+		m.viewSeries(data.Series())
 	case reporting.DebtResult:
 		m.note = "Loan: " + data.Loan
 		m.viewSeries(data.SeriesResult)

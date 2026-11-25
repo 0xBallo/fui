@@ -330,6 +330,8 @@ func WriteSavedReportResult(
 	switch data := out.Data.(type) {
 	case reporting.SeriesResult:
 		return WriteSeriesReport(w, Table, loc, color, data, chart)
+	case reporting.NetWorthResult:
+		return WriteSeriesReport(w, Table, loc, color, data.Series(), chart)
 	case reporting.DebtResult:
 		return WriteDebtReport(w, Table, loc, color, data, chart)
 	case reporting.InterestResult:

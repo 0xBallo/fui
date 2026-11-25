@@ -146,7 +146,7 @@ func TestReportsGolden(t *testing.T) {
 	seedHistory(t, f)
 	ctx := context.Background()
 	year := must(domain.NewPeriod(date("2026-01-01"), date("2026-03-31")))
-	nw, err := f.svc.NetWorth(ctx, reporting.ReportRequest{Period: year})
+	nw, err := f.svc.NetWorthReport(ctx, reporting.ReportRequest{Period: year})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,11 +165,11 @@ func TestReportsGolden(t *testing.T) {
 
 func TestNetWorthIncludesArchived(t *testing.T) {
 	f := newFx(t)
-	nw, err := f.svc.NetWorth(context.Background(), reporting.ReportRequest{})
+	nw, err := f.svc.NetWorthReport(context.Background(), reporting.ReportRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := nw.Points[0].Amount.Minor; got != 160_000 {
+	if got := nw.Points[0].Total.Minor; got != 160_000 {
 		t.Fatalf("net worth = %d, want 160000 (archived account included)", got)
 	}
 }
@@ -181,13 +181,13 @@ func TestNetWorthUnchangedByFeelessTransfer(t *testing.T) {
 		d := rapid.IntRange(1, 28).Draw(rt, "day")
 		at := time.Date(2026, 3, d, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
 		req := reporting.ReportRequest{Period: must(domain.NewPeriod(date("2026-03-01"), date("2026-03-31")))}
-		before, err := f.svc.NetWorth(context.Background(), req)
+		before, err := f.svc.NetWorthReport(context.Background(), req)
 		if err != nil {
 			rt.Fatal(err)
 		}
 		f.tx(t, f.main, at, -amount, func(x *domain.Transaction) { x.Kind = domain.KindTransfer })
 		f.tx(t, f.sav, at, amount, func(x *domain.Transaction) { x.Kind = domain.KindTransfer })
-		after, err := f.svc.NetWorth(context.Background(), req)
+		after, err := f.svc.NetWorthReport(context.Background(), req)
 		if err != nil {
 			rt.Fatal(err)
 		}
@@ -413,7 +413,7 @@ func TestSavedReports(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := len(nw.Data.(reporting.SeriesResult).Points); got != 3 {
+	if got := len(nw.Data.(reporting.NetWorthResult).Points); got != 3 {
 		t.Fatalf("net worth points = %d, want 3", got)
 	}
 	rm, err := f.svc.PlanRemove(ctx, "NW")
@@ -441,7 +441,7 @@ func TestNetWorthConvertsForeignAccounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = f.svc.NetWorth(ctx, reporting.ReportRequest{})
+	_, err = f.svc.NetWorthReport(ctx, reporting.ReportRequest{})
 	if !errors.Is(err, app.ErrRateMissing) {
 		t.Fatalf("err = %v, want rate_missing", err)
 	}
@@ -451,11 +451,11 @@ func TestNetWorthConvertsForeignAccounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nw, err := f.svc.NetWorth(ctx, reporting.ReportRequest{})
+	nw, err := f.svc.NetWorthReport(ctx, reporting.ReportRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := nw.Points[0].Amount.Minor; got != 165_000 {
+	if got := nw.Points[0].Total.Minor; got != 165_000 {
 		t.Fatalf("net worth = %d, want 165000", got)
 	}
 }

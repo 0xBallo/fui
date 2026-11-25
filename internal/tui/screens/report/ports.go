@@ -22,7 +22,7 @@ type UseCases interface {
 	// BalanceOverTime, NetWorth, RemainingDebt, InterestPaid, TopPayees, BudgetVsActual and
 	// Forecast run the predefined reports (internal/app/reporting.Analytics).
 	BalanceOverTime(ctx context.Context, req reporting.ReportRequest) (reporting.SeriesResult, error)
-	NetWorth(ctx context.Context, req reporting.ReportRequest) (reporting.SeriesResult, error)
+	NetWorth(ctx context.Context, req reporting.ReportRequest) (reporting.NetWorthResult, error)
 	RemainingDebt(ctx context.Context, req reporting.ReportRequest) (reporting.DebtResult, error)
 	InterestPaid(ctx context.Context, req reporting.ReportRequest) (reporting.InterestResult, error)
 	TopPayees(ctx context.Context, req reporting.ReportRequest) (reporting.PayeesResult, error)
