@@ -3,21 +3,21 @@
 ╱│     Reports                                                                │╱
 ╱│                                                                            │╱
 ╱│    Pick a report with  h / l  (or ←/→), run it again with  r , and         │╱
-╱│    change its period or parameters with  p . On reports with rows,         │╱
-╱│    enter  opens the Transactions tab filtered on the selected row (its     │╱
-╱│    period, category, payee, account or tag). All amounts are shown in      │╱
-╱│    the base currency.                                                      │╱
+╱│    change its period or parameters with  p . With  f  you narrow the       │╱
+╱│    transactions a report counts (accounts, categories, tags, payees,       │╱
+╱│    amount range, status, text, uncategorized, income/expense) and pick     │╱
+╱│    how it groups (spending and cash flow: category, tag, payee,            │╱
+╱│    account, week, month, year) or buckets (balance, net worth,             │╱
+╱│    forecast: day, week, month, year); the active choice shows under the    │╱
+╱│    title. On reports with rows,  enter  opens the Transactions tab         │╱
+╱│    filtered on the selected row (its period, category, payee, account      │╱
+╱│    or tag) together with the active filter; the row wins on a conflict.    │╱
+╱│    All amounts are shown in the base currency.                             │╱
 ╱│                                                                            │╱
 ╱│    ## Predefined reports                                                   │╱
 ╱│                                                                            │╱
 ╱│    Net worth answers "how much am I worth?": assets minus debts at the     │╱
 ╱│    end of the period. Parameters: period.                                  │╱
-╱│                                                                            │╱
-╱│    Budget vs actual compares what you planned to spend with what you       │╱
-╱│    spent in each budget. Parameters: period.                               │╱
-╱│                                                                            │╱
-╱│    Top payees lists who you paid the most in the period. Parameters:       │╱
-╱│    period and how many payees to list.                                     │╱
 ╱│                                                                            │╱
 ╱│  ↑/↓ PgUp/PgDn scroll · esc close                                          │╱
 ╱╰────────────────────────────────────────────────────────────────────────────╯╱

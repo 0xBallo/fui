@@ -58,15 +58,33 @@ func (m *Model) runCurrent() tea.Cmd {
 		return errCmd(err)
 	}
 	req := reporting.ReportRequest{Period: period, Account: m.accountText, Loan: m.loanText, Limit: m.limitInt()}
+	res := reportResult{kind: k.Kind, label: k.Label}
+	if k.Filter {
+		req.Filter, res.filter = m.filter, m.filter
+	}
+	if k.GroupBy {
+		if req.GroupBy, err = parseGroupBy(m.groupByText); err != nil {
+			return errCmd(err)
+		}
+		res.groupBy = m.groupByText
+	}
 	fReq := reporting.ForecastRequest{HorizonDays: m.horizonInt(), MinBalance: m.minBalText}
-	kind, label := k.Kind, k.Label
+	if k.Granularity {
+		g, err := parseGranularity(m.granText, k)
+		if err != nil {
+			return errCmd(err)
+		}
+		req.Granularity, fReq.Granularity, res.granularity = g, m.granText, m.granText
+	}
+	kind := k.Kind
 	return func() tea.Msg {
 		ctx := context.Background()
 		data, err := m.runKind(ctx, kind, req, fReq)
 		if err != nil {
 			return screens.ErrorMsg{Err: err}
 		}
-		return reportLoadedMsg{result: reportResult{kind: kind, label: label, data: data}}
+		res.data = data
+		return reportLoadedMsg{result: res}
 	}
 }
 

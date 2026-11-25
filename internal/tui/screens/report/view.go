@@ -2,6 +2,7 @@ package report
 
 import (
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/0xballo/fui/internal/tui/components"
 )
@@ -12,7 +13,7 @@ func (m *Model) View() string {
 		return m.help.View()
 	}
 	switch m.mode {
-	case modeParamsForm, modeSaveForm, modeExportForm:
+	case modeParamsForm, modeSaveForm, modeExportForm, modeFilterForm:
 		return components.Modal(m.th, m.width, m.height, m.viewForm())
 	case modeConfirmRemove:
 		return components.Modal(m.th, m.width, m.height, m.confirm.View())
@@ -30,7 +31,11 @@ func (m *Model) View() string {
 
 func (m *Model) viewReport() string {
 	title := m.th.Title.Render(m.reportTitle())
-	lines := []string{title, "", m.table.View()}
+	sub := ""
+	if s := filterSummary(m.result.filter, m.result.groupBy, m.result.granularity); s != "" {
+		sub = m.th.Muted.Render(ansi.Truncate(s, max(1, m.width), "…"))
+	}
+	lines := []string{title, sub, m.table.View()}
 	if chart := m.chartView(m.width, m.height); chart != "" {
 		lines = append(lines, "", chart)
 	}
@@ -71,6 +76,8 @@ func (m *Model) formTitle() string {
 		return "Save report"
 	case modeExportForm:
 		return "Export report"
+	case modeFilterForm:
+		return "Filter and group by"
 	case modeParamsForm, modeReport, modeSaved, modeConfirmRemove, modeCompare, modeSim:
 		return "Report params"
 	}

@@ -190,6 +190,10 @@ func (u reportUseCases) ListAccounts(ctx context.Context, req app.ListAccountsRe
 	return u.svc.ListAccounts(ctx, req)
 }
 
+func (u reportUseCases) ResolveTxFilter(ctx context.Context, req app.ListTxRequest) (domain.TxFilter, error) {
+	return u.svc.ResolveTxFilter(ctx, req)
+}
+
 func (u reportUseCases) Export(ctx context.Context, req importing.ExportRequest, w io.Writer) (int, error) {
 	return u.importing.Export(ctx, req, w)
 }

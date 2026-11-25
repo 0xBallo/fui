@@ -134,13 +134,21 @@ type testUseCases struct {
 	importer  *importing.Service
 	core      *app.Service
 	exporter  *screentest.FakeExporter
+	rec       *requests
+}
+
+// requests records the last ReportRequest each grouped or series report received.
+type requests struct {
+	spending, cashFlow, balance, netWorth reporting.ReportRequest
 }
 
 func (u testUseCases) Spending(ctx context.Context, req reporting.ReportRequest) (reporting.GroupedResult, error) {
+	u.rec.spending = req
 	return u.analytics.Spending(ctx, req)
 }
 
 func (u testUseCases) CashFlow(ctx context.Context, req reporting.ReportRequest) (reporting.GroupedResult, error) {
+	u.rec.cashFlow = req
 	return u.analytics.CashFlow(ctx, req)
 }
 
@@ -149,10 +157,12 @@ func (u testUseCases) ExportResult(w io.Writer, format string, data any) error {
 }
 
 func (u testUseCases) BalanceOverTime(ctx context.Context, req reporting.ReportRequest) (reporting.SeriesResult, error) {
+	u.rec.balance = req
 	return u.analytics.BalanceOverTime(ctx, req)
 }
 
 func (u testUseCases) NetWorth(ctx context.Context, req reporting.ReportRequest) (reporting.NetWorthResult, error) {
+	u.rec.netWorth = req
 	return u.analytics.NetWorthReport(ctx, req)
 }
 
@@ -206,6 +216,10 @@ func (u testUseCases) ListAccounts(ctx context.Context, req app.ListAccountsRequ
 	return u.core.ListAccounts(ctx, req)
 }
 
+func (u testUseCases) ResolveTxFilter(ctx context.Context, req app.ListTxRequest) (domain.TxFilter, error) {
+	return u.core.ResolveTxFilter(ctx, req)
+}
+
 func (u testUseCases) Export(ctx context.Context, req importing.ExportRequest, w io.Writer) (int, error) {
 	return u.importer.Export(ctx, req, w)
 }
@@ -239,7 +253,7 @@ func newHarness(t *testing.T) harness {
 		Locale: domain.LocaleENUS, BaseCurrency: eur, MonthStartDay: 1, Location: time.UTC, Modules: module.Default(),
 	})
 	importer := importing.New(fx.Store, clock, stubBackup{}, nil)
-	uc := testUseCases{analytics: analytics, importer: importer, core: fx.Service, exporter: &screentest.FakeExporter{}}
+	uc := testUseCases{analytics: analytics, importer: importer, core: fx.Service, exporter: &screentest.FakeExporter{}, rec: &requests{}}
 	return harness{fx: fx, uc: uc, now: now, eur: eur}
 }
 
@@ -455,6 +469,10 @@ func TestReportExportMissingPathError(t *testing.T) {
 	s = run(t, s, s.Init())
 
 	s, cmd := sendRunes(s, "e")
+	s = run(t, s, cmd)
+	s, cmd = sendKey(s, tea.KeyEnter) // accept the default suggestion
+	s = run(t, s, cmd)
+	s, cmd = sendKey(s, tea.KeyEnter) // leave the what field
 	s = run(t, s, cmd)
 	s, cmd = sendKey(s, tea.KeyEnter) // move to the format field, path still empty
 	s = run(t, s, cmd)
