@@ -65,6 +65,8 @@ func txAndAccountCompletions(
 		{path: []string{"add"}, flags: map[string]cobra.CompletionFunc{
 			"account":  completeAccount,
 			"category": completeCategory,
+			"payee":    completePayee,
+			"tag":      completeTag,
 		}},
 		{path: []string{"transfer"}, flags: map[string]cobra.CompletionFunc{
 			"from": completeAccount,
@@ -80,6 +82,8 @@ func txAndAccountCompletions(
 		}},
 		{path: []string{"tx", "edit"}, flags: map[string]cobra.CompletionFunc{
 			"category": completeCategory,
+			"payee":    completePayee,
+			"tag":      completeTag,
 		}},
 		{path: []string{"tx", "list"}, flags: map[string]cobra.CompletionFunc{
 			"account":  completeAccount,

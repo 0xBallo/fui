@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 
 	"github.com/0xballo/fui/internal/app/lending"
@@ -14,14 +16,16 @@ func newLoanEventCmd(deps *Deps) *cobra.Command {
 		Use:   "event NAME",
 		Short: "Record a loan rate change, renegotiation or prepayment",
 		Args:  exactArgs(1),
-		Example: "  fui loan event Mutuo --kind rate_change --date 2026-01-01 --rate 2,80\n" +
+		Example: "  fui loan event Mutuo --rate 2,80 --from 2026-01-01\n" +
+			"  fui loan event Mutuo --kind rate_change --date 2026-01-01 --rate 2,80\n" +
 			"  fui loan event Mutuo --kind prepayment --date 2026-01-01 --prepaid 5000 --mode reduce_term",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runLoanEvent(cmd, deps, args[0])
 		},
 	}
-	cmd.Flags().String("kind", "", "rate_change, renegotiation or prepayment (required)")
+	cmd.Flags().String("kind", "", "rate_change, renegotiation or prepayment (default: rate_change when --rate is given)")
 	cmd.Flags().String("date", "", "the date the event takes effect (required)")
+	cmd.Flags().String("from", "", "alias of --date")
 	cmd.Flags().String("rate", "", "new annual nominal rate as a percentage (rate_change, renegotiation)")
 	cmd.Flags().Int("term-months", 0, "new remaining term in months (renegotiation, optional)")
 	cmd.Flags().String("prepaid", "", "amount prepaid (prepayment)")
@@ -46,6 +50,16 @@ func runLoanEvent(cmd *cobra.Command, deps *Deps, ref string) error {
 	rate, _ := cmd.Flags().GetString("rate")
 	prepaid, _ := cmd.Flags().GetString("prepaid")
 	mode, _ := cmd.Flags().GetString("mode")
+	from, _ := cmd.Flags().GetString("from")
+	if from != "" {
+		if date != "" && date != from {
+			return newUsageError(fmt.Errorf("--date %q and --from %q differ", date, from))
+		}
+		date = from
+	}
+	if kind == "" && rate != "" {
+		kind = "rate_change"
+	}
 	req := lending.EventRequest{Loan: ref, Kind: kind, Date: date, Rate: rate, Prepaid: prepaid, Mode: mode}
 	if cmd.Flags().Changed("term-months") {
 		termMonths, _ := cmd.Flags().GetInt("term-months")
