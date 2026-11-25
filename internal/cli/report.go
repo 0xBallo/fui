@@ -16,6 +16,8 @@ var analyticsReportKinds = []string{
 	"interest-paid",
 	"networth",
 	"top-payees",
+	"spending",
+	"cash-flow",
 }
 
 // newReportCmd runs analytics reports by kind, and manages saved reports.
@@ -23,6 +25,10 @@ func newReportCmd(deps *Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "report KIND",
 		Short: "Run an analytics report or manage saved reports",
+		Example: `  fui report spending --period 2026-Q3 --category Food --group-by payee
+  fui report cash-flow --period 2026 --granularity week --json
+  fui report balance --account Checking --granularity week
+  fui report networth --period 2026 --granularity year`,
 		Args: func(_ *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return newUsageError(fmt.Errorf("accepts 1 arg(s), received %d", len(args)))
@@ -37,7 +43,8 @@ func newReportCmd(deps *Deps) *cobra.Command {
 		},
 	}
 	reportKindPeriodFlag(cmd)
-	reportAccountFlag(cmd)
+	reportFilterFlags(cmd)
+	reportGroupFlags(cmd)
 	reportChartFlag(cmd)
 	cmd.Flags().String("loan", "", "filter by loan (required by remaining-debt)")
 	cmd.Flags().Int("limit", reporting.DefaultTopPayees, "maximum rows for top-payees")
