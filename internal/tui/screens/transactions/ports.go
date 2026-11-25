@@ -26,6 +26,7 @@ type UseCases interface {
 	TxTotals(ctx context.Context, req app.ListTxRequest) (app.TxTotals, error)
 	ListAccounts(ctx context.Context, req app.ListAccountsRequest) ([]app.AccountBalance, error)
 	ListCategories(ctx context.Context) ([]domain.Category, error)
+	ListPayees(ctx context.Context) ([]domain.Payee, error)
 	ListTags(ctx context.Context) ([]domain.Tag, error)
 	ListSplits(ctx context.Context, id domain.TransactionID) ([]domain.Split, error)
 	PlanAddTx(ctx context.Context, req app.AddTxRequest) (app.AddTxPlan, error)

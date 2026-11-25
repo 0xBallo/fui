@@ -67,6 +67,7 @@ type Model struct {
 	accounts   []string
 	categories []string
 	tags       []string
+	payees     []domain.Payee
 
 	form               components.Form
 	accountF           components.Autocomplete
@@ -77,6 +78,10 @@ type Model struct {
 	notesF             components.Autocomplete
 	statusF            components.Autocomplete
 	kindF              components.Autocomplete
+	payeeF             components.Autocomplete
+	tagsF              components.Autocomplete
+	editPayee          string
+	editTags           []string
 	editing            *domain.TransactionID
 	editingTransferLeg bool
 
@@ -169,6 +174,8 @@ type loadedMsg struct {
 	accounts       []string
 	categories     []string
 	tags           []string
+	payees         []domain.Payee
+	notice         string
 	clearSelection bool
 	totals         totalsState
 }
@@ -204,12 +211,22 @@ func (m *Model) loadMore() tea.Cmd {
 	}
 }
 
+// loaded applies a reloaded list and surfaces the notice of the write that triggered it, if any.
+func (m *Model) loaded(msg loadedMsg) tea.Cmd {
+	m.applyLoaded(msg)
+	if msg.notice == "" {
+		return nil
+	}
+	return func() tea.Msg { return screens.StatusMsg{Text: msg.notice} }
+}
+
 func (m *Model) applyLoaded(msg loadedMsg) {
 	m.items = msg.page.Items
 	m.next = msg.page.Next
 	m.accounts = msg.accounts
 	m.categories = msg.categories
 	m.tags = msg.tags
+	m.payees = msg.payees
 	m.totals = msg.totals
 	m.table.SetHeight(max(3, m.height-8-m.totalsHeight()))
 	m.table.SetRows(m.txRows())
@@ -224,8 +241,7 @@ func (m *Model) applyLoaded(msg loadedMsg) {
 func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case loadedMsg:
-		m.applyLoaded(msg)
-		return m, nil
+		return m, m.loaded(msg)
 	case pendingDoneMsg:
 		m.applyLoaded(msg.loaded)
 		notice := msg.notice
@@ -238,7 +254,7 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		m.table.SetRows(m.txRows())
 		return m, nil
 	case editTargetMsg:
-		m.startEditForm(msg.tx)
+		m.startEditForm(msg.tx, msg.tags)
 		return m, nil
 	case debounceMsg:
 		if msg.seq != m.searchSeq {
@@ -474,6 +490,10 @@ func reload(ctx context.Context, uc UseCases, req app.ListTxRequest, clearSelect
 	if err != nil {
 		return screens.ErrorMsg{Err: err}
 	}
+	payees, err := uc.ListPayees(ctx)
+	if err != nil {
+		return screens.ErrorMsg{Err: err}
+	}
 	names := make([]string, len(accts))
 	for i, a := range accts {
 		names[i] = a.Account.Name
@@ -487,7 +507,7 @@ func reload(ctx context.Context, uc UseCases, req app.ListTxRequest, clearSelect
 		tagNames[i] = t.Name
 	}
 	totals := fetchTotals(ctx, uc, req)
-	return loadedMsg{page: page, accounts: names, categories: catNames, tags: tagNames, clearSelection: clearSelection, totals: totals}
+	return loadedMsg{page: page, accounts: names, categories: catNames, tags: tagNames, payees: payees, clearSelection: clearSelection, totals: totals}
 }
 
 // minTagsWidth is the narrowest terminal that still shows the Tags column.
