@@ -16,6 +16,7 @@ import (
 	"github.com/0xballo/fui/internal/app/lending"
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/module"
+	"github.com/0xballo/fui/internal/tui"
 	"github.com/0xballo/fui/internal/tui/screens"
 	"github.com/0xballo/fui/internal/tui/screens/screentest"
 	"github.com/0xballo/fui/internal/tui/screens/settings/lists"
@@ -295,7 +296,12 @@ func TestAssetsLinkUnlink(t *testing.T) {
 	wantView(t, scr, "Mortgage")
 	dontWantView(t, scr, "Error:")
 
-	scr = press(t, scr, "u")
+	scr = press(t, scr, "L")
+	wantView(t, scr, "Unlink loan")
+	scr = press(t, scr, "n")
+	wantView(t, scr, "Mortgage")
+	scr = press(t, scr, "L")
+	scr = press(t, scr, "y")
 	dontWantView(t, scr, "Mortgage")
 }
 
@@ -303,7 +309,7 @@ func TestAssetsErrorsShownInline(t *testing.T) {
 	e := newAssetsEnv(t)
 	e.addAsset(t, assetting.AddRequest{Name: "Flat", Kind: "property", Value: "1000"})
 	scr := e.screen(t, theme.Default())
-	scr = press(t, scr, "u") // not linked
+	scr = press(t, scr, "L") // not linked
 	wantView(t, scr, "Error:")
 	scr = press(t, scr, "l") // no loans to pick: the form still opens, linking fails
 	scr = enter(t, typeText(scr, "Nope"))
@@ -322,7 +328,7 @@ func TestAssetsErrorsShownInline(t *testing.T) {
 func TestAssetsEmptyListKeys(t *testing.T) {
 	e := newAssetsEnv(t)
 	scr := e.screen(t, theme.Default())
-	for _, k := range []string{"e", "d", "v", "l", "u"} {
+	for _, k := range []string{"e", "d", "v", "l", "L"} {
 		scr = press(t, scr, k)
 	}
 	scr = enter(t, scr)
@@ -374,4 +380,20 @@ func enterUntilClosed(t *testing.T, scr screens.Screen, title string) screens.Sc
 	}
 	t.Fatalf("form %q did not close:\n%s", title, scr.View())
 	return scr
+}
+
+func TestAssetsKeysDoNotCollideWithGlobalKeys(t *testing.T) {
+	global := map[string]string{}
+	for _, b := range tui.DefaultKeyMap().Bindings() {
+		for _, k := range b.Keys() {
+			global[k] = b.Help().Desc
+		}
+	}
+	for _, b := range lists.DefaultKeyMap().BindingsWithAssets() {
+		for _, k := range b.Keys() {
+			if desc, ok := global[k]; ok {
+				t.Errorf("asset key %q (%s) collides with global %q", k, b.Help().Desc, desc)
+			}
+		}
+	}
 }

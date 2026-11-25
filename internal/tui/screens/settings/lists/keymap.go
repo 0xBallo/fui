@@ -35,7 +35,7 @@ func DefaultKeyMap() KeyMap {
 		Open:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "history")),
 		Value:  key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "add value")),
 		Link:   key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "link loan")),
-		Unlink: key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "unlink loan")),
+		Unlink: key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "unlink loan")),
 	}
 }
 

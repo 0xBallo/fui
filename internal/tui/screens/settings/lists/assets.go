@@ -383,17 +383,15 @@ func (m *Assets) planRemoveValuation(name, date string) tea.Cmd {
 }
 
 func (m *Assets) unlink(name string) tea.Cmd {
-	detail := m.detailName()
 	return func() tea.Msg {
-		ctx := context.Background()
-		plan, err := m.uc.PlanUnlink(ctx, m.enabled, name)
+		plan, err := m.uc.PlanUnlink(context.Background(), m.enabled, name)
 		if err != nil {
 			return screens.ErrorMsg{Err: err}
 		}
-		if err := m.uc.ApplyUnlink(ctx, plan); err != nil {
-			return screens.ErrorMsg{Err: err}
+		return assetsConfirmMsg{
+			title: "Unlink loan", prompt: "Unlink the loan from " + plan.Asset.Name + "?",
+			apply: func(ctx context.Context) error { return m.uc.ApplyUnlink(ctx, plan) },
 		}
-		return m.reload(ctx, detail)
 	}
 }
 
