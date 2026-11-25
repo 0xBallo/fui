@@ -224,7 +224,7 @@ func (q *Queries) ListRecurrences(ctx context.Context) ([]Recurrence, error) {
 
 const pendingTransactionsOfRecurrence = `-- name: PendingTransactionsOfRecurrence :many
 SELECT
-    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date
+    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date, original_amount_minor, original_currency, raw
 FROM transactions
 WHERE recurrence_id = ?1
     AND status = 'pending'
@@ -263,6 +263,9 @@ func (q *Queries) PendingTransactionsOfRecurrence(ctx context.Context, recurrenc
 			&i.SearchText,
 			&i.RecurrenceID,
 			&i.DueDate,
+			&i.OriginalAmountMinor,
+			&i.OriginalCurrency,
+			&i.Raw,
 		); err != nil {
 			return nil, err
 		}

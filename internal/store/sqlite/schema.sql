@@ -118,7 +118,7 @@ CREATE TABLE security_ops (
     fees_currency TEXT NOT NULL CHECK (length(fees_currency) = 3),
     cash_tx_id INTEGER REFERENCES transactions (id) ON DELETE SET NULL,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), import_batch_id INTEGER REFERENCES import_batches (id) ON DELETE SET NULL,
     CHECK (fees_currency = unit_price_currency)
 ) STRICT;
 
@@ -130,6 +130,9 @@ CREATE INDEX idx_security_ops_account_date_id
 
 CREATE INDEX idx_security_ops_cash_tx
     ON security_ops (cash_tx_id) WHERE cash_tx_id IS NOT NULL;
+
+CREATE INDEX idx_security_ops_import_batch
+    ON security_ops (import_batch_id) WHERE import_batch_id IS NOT NULL;
 
 CREATE TABLE connector_account_refs (
     id INTEGER PRIMARY KEY,
@@ -312,7 +315,7 @@ CREATE TABLE transactions (
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     search_text TEXT NOT NULL DEFAULT '', -- appended last by 0003; later migrations append new columns
     recurrence_id INTEGER REFERENCES recurrences (id) ON DELETE SET NULL,
-    due_date TEXT CHECK (due_date IS NULL OR length(due_date) = 10),
+    due_date TEXT CHECK (due_date IS NULL OR length(due_date) = 10), original_amount_minor INTEGER, original_currency TEXT CHECK ((original_currency IS NULL) = (original_amount_minor IS NULL) AND (original_currency IS NULL OR length(original_currency) = 3)), raw TEXT CHECK (raw IS NULL OR json_valid(raw)),
     UNIQUE (account_id, external_id)
 ) STRICT;
 

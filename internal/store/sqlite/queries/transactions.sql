@@ -18,7 +18,10 @@ INSERT INTO transactions (
     transfer_group_id,
     search_text,
     recurrence_id,
-    due_date
+    due_date,
+    original_amount_minor,
+    original_currency,
+    raw
 )
 VALUES (
     @account_id,
@@ -39,7 +42,10 @@ VALUES (
     @transfer_group_id,
     @search_text,
     @recurrence_id,
-    @due_date
+    @due_date,
+    @original_amount_minor,
+    @original_currency,
+    @raw
 )
 RETURNING
     *;
@@ -66,6 +72,9 @@ SET
     search_text = @search_text,
     recurrence_id = @recurrence_id,
     due_date = @due_date,
+    original_amount_minor = @original_amount_minor,
+    original_currency = @original_currency,
+    raw = @raw,
     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = @id;
 

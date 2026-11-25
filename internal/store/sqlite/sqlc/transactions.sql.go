@@ -25,7 +25,7 @@ func (q *Queries) DeleteTransaction(ctx context.Context, id int64) (int64, error
 
 const getTransaction = `-- name: GetTransaction :one
 SELECT
-    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date
+    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date, original_amount_minor, original_currency, raw
 FROM transactions
 WHERE id = ?1
 `
@@ -56,6 +56,9 @@ func (q *Queries) GetTransaction(ctx context.Context, id int64) (Transaction, er
 		&i.SearchText,
 		&i.RecurrenceID,
 		&i.DueDate,
+		&i.OriginalAmountMinor,
+		&i.OriginalCurrency,
+		&i.Raw,
 	)
 	return i, err
 }
@@ -80,7 +83,10 @@ INSERT INTO transactions (
     transfer_group_id,
     search_text,
     recurrence_id,
-    due_date
+    due_date,
+    original_amount_minor,
+    original_currency,
+    raw
 )
 VALUES (
     ?1,
@@ -101,32 +107,38 @@ VALUES (
     ?16,
     ?17,
     ?18,
-    ?19
+    ?19,
+    ?20,
+    ?21,
+    ?22
 )
 RETURNING
-    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date
+    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date, original_amount_minor, original_currency, raw
 `
 
 type InsertTransactionParams struct {
-	AccountID       int64
-	Date            string
-	OperationDate   sql.NullString
-	ValueDate       sql.NullString
-	AmountMinor     int64
-	Currency        string
-	PayeeID         sql.NullInt64
-	Description     string
-	CategoryID      sql.NullInt64
-	Notes           string
-	Status          string
-	Kind            string
-	ExternalID      sql.NullString
-	Fingerprint     string
-	ImportBatchID   sql.NullInt64
-	TransferGroupID sql.NullInt64
-	SearchText      string
-	RecurrenceID    sql.NullInt64
-	DueDate         sql.NullString
+	AccountID           int64
+	Date                string
+	OperationDate       sql.NullString
+	ValueDate           sql.NullString
+	AmountMinor         int64
+	Currency            string
+	PayeeID             sql.NullInt64
+	Description         string
+	CategoryID          sql.NullInt64
+	Notes               string
+	Status              string
+	Kind                string
+	ExternalID          sql.NullString
+	Fingerprint         string
+	ImportBatchID       sql.NullInt64
+	TransferGroupID     sql.NullInt64
+	SearchText          string
+	RecurrenceID        sql.NullInt64
+	DueDate             sql.NullString
+	OriginalAmountMinor sql.NullInt64
+	OriginalCurrency    sql.NullString
+	Raw                 sql.NullString
 }
 
 func (q *Queries) InsertTransaction(ctx context.Context, arg InsertTransactionParams) (Transaction, error) {
@@ -150,6 +162,9 @@ func (q *Queries) InsertTransaction(ctx context.Context, arg InsertTransactionPa
 		arg.SearchText,
 		arg.RecurrenceID,
 		arg.DueDate,
+		arg.OriginalAmountMinor,
+		arg.OriginalCurrency,
+		arg.Raw,
 	)
 	var i Transaction
 	err := row.Scan(
@@ -175,13 +190,16 @@ func (q *Queries) InsertTransaction(ctx context.Context, arg InsertTransactionPa
 		&i.SearchText,
 		&i.RecurrenceID,
 		&i.DueDate,
+		&i.OriginalAmountMinor,
+		&i.OriginalCurrency,
+		&i.Raw,
 	)
 	return i, err
 }
 
 const listTransactions = `-- name: ListTransactions :many
 SELECT
-    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date
+    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date, original_amount_minor, original_currency, raw
 FROM transactions
 WHERE (?1 = '' OR date >= ?1)
     AND (?2 = '' OR date <= ?2)
@@ -318,6 +336,9 @@ func (q *Queries) ListTransactions(ctx context.Context, arg ListTransactionsPara
 			&i.SearchText,
 			&i.RecurrenceID,
 			&i.DueDate,
+			&i.OriginalAmountMinor,
+			&i.OriginalCurrency,
+			&i.Raw,
 		); err != nil {
 			return nil, err
 		}
@@ -334,7 +355,7 @@ func (q *Queries) ListTransactions(ctx context.Context, arg ListTransactionsPara
 
 const listTransactionsForReport = `-- name: ListTransactionsForReport :many
 SELECT
-    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date
+    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date, original_amount_minor, original_currency, raw
 FROM transactions
 WHERE date >= ?1
     AND date <= ?2
@@ -380,6 +401,9 @@ func (q *Queries) ListTransactionsForReport(ctx context.Context, arg ListTransac
 			&i.SearchText,
 			&i.RecurrenceID,
 			&i.DueDate,
+			&i.OriginalAmountMinor,
+			&i.OriginalCurrency,
+			&i.Raw,
 		); err != nil {
 			return nil, err
 		}
@@ -415,7 +439,7 @@ func (q *Queries) SumTransactionsUpTo(ctx context.Context, arg SumTransactionsUp
 
 const transactionsByExternalID = `-- name: TransactionsByExternalID :many
 SELECT
-    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date
+    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date, original_amount_minor, original_currency, raw
 FROM transactions
 WHERE account_id = ?1
     AND external_id = ?2
@@ -459,6 +483,9 @@ func (q *Queries) TransactionsByExternalID(ctx context.Context, arg Transactions
 			&i.SearchText,
 			&i.RecurrenceID,
 			&i.DueDate,
+			&i.OriginalAmountMinor,
+			&i.OriginalCurrency,
+			&i.Raw,
 		); err != nil {
 			return nil, err
 		}
@@ -475,7 +502,7 @@ func (q *Queries) TransactionsByExternalID(ctx context.Context, arg Transactions
 
 const transactionsByFingerprint = `-- name: TransactionsByFingerprint :many
 SELECT
-    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date
+    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date, original_amount_minor, original_currency, raw
 FROM transactions
 WHERE fingerprint = ?1
 ORDER BY id
@@ -513,6 +540,9 @@ func (q *Queries) TransactionsByFingerprint(ctx context.Context, fingerprint str
 			&i.SearchText,
 			&i.RecurrenceID,
 			&i.DueDate,
+			&i.OriginalAmountMinor,
+			&i.OriginalCurrency,
+			&i.Raw,
 		); err != nil {
 			return nil, err
 		}
@@ -529,7 +559,7 @@ func (q *Queries) TransactionsByFingerprint(ctx context.Context, fingerprint str
 
 const transactionsByTransferGroup = `-- name: TransactionsByTransferGroup :many
 SELECT
-    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date
+    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date, original_amount_minor, original_currency, raw
 FROM transactions
 WHERE transfer_group_id = ?1
 ORDER BY id
@@ -567,6 +597,9 @@ func (q *Queries) TransactionsByTransferGroup(ctx context.Context, transferGroup
 			&i.SearchText,
 			&i.RecurrenceID,
 			&i.DueDate,
+			&i.OriginalAmountMinor,
+			&i.OriginalCurrency,
+			&i.Raw,
 		); err != nil {
 			return nil, err
 		}
@@ -583,7 +616,7 @@ func (q *Queries) TransactionsByTransferGroup(ctx context.Context, transferGroup
 
 const transactionsNearAmount = `-- name: TransactionsNearAmount :many
 SELECT
-    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date
+    id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date, original_amount_minor, original_currency, raw
 FROM transactions
 WHERE account_id = ?1
     AND amount_minor = ?2
@@ -636,6 +669,9 @@ func (q *Queries) TransactionsNearAmount(ctx context.Context, arg TransactionsNe
 			&i.SearchText,
 			&i.RecurrenceID,
 			&i.DueDate,
+			&i.OriginalAmountMinor,
+			&i.OriginalCurrency,
+			&i.Raw,
 		); err != nil {
 			return nil, err
 		}
@@ -672,31 +708,37 @@ SET
     search_text = ?17,
     recurrence_id = ?18,
     due_date = ?19,
+    original_amount_minor = ?20,
+    original_currency = ?21,
+    raw = ?22,
     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-WHERE id = ?20
+WHERE id = ?23
 `
 
 type UpdateTransactionParams struct {
-	AccountID       int64
-	Date            string
-	OperationDate   sql.NullString
-	ValueDate       sql.NullString
-	AmountMinor     int64
-	Currency        string
-	PayeeID         sql.NullInt64
-	Description     string
-	CategoryID      sql.NullInt64
-	Notes           string
-	Status          string
-	Kind            string
-	ExternalID      sql.NullString
-	Fingerprint     string
-	ImportBatchID   sql.NullInt64
-	TransferGroupID sql.NullInt64
-	SearchText      string
-	RecurrenceID    sql.NullInt64
-	DueDate         sql.NullString
-	ID              int64
+	AccountID           int64
+	Date                string
+	OperationDate       sql.NullString
+	ValueDate           sql.NullString
+	AmountMinor         int64
+	Currency            string
+	PayeeID             sql.NullInt64
+	Description         string
+	CategoryID          sql.NullInt64
+	Notes               string
+	Status              string
+	Kind                string
+	ExternalID          sql.NullString
+	Fingerprint         string
+	ImportBatchID       sql.NullInt64
+	TransferGroupID     sql.NullInt64
+	SearchText          string
+	RecurrenceID        sql.NullInt64
+	DueDate             sql.NullString
+	OriginalAmountMinor sql.NullInt64
+	OriginalCurrency    sql.NullString
+	Raw                 sql.NullString
+	ID                  int64
 }
 
 func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionParams) (int64, error) {
@@ -720,6 +762,9 @@ func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionPa
 		arg.SearchText,
 		arg.RecurrenceID,
 		arg.DueDate,
+		arg.OriginalAmountMinor,
+		arg.OriginalCurrency,
+		arg.Raw,
 		arg.ID,
 	)
 	if err != nil {

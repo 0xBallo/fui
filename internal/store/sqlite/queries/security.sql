@@ -82,7 +82,8 @@ INSERT INTO security_ops (
     unit_price_currency,
     fees_minor,
     fees_currency,
-    cash_tx_id
+    cash_tx_id,
+    import_batch_id
 )
 VALUES (
     @date,
@@ -95,7 +96,8 @@ VALUES (
     @unit_price_currency,
     @fees_minor,
     @fees_currency,
-    @cash_tx_id
+    @cash_tx_id,
+    @import_batch_id
 )
 RETURNING *;
 
@@ -113,6 +115,7 @@ SET
     fees_minor = @fees_minor,
     fees_currency = @fees_currency,
     cash_tx_id = @cash_tx_id,
+    import_batch_id = @import_batch_id,
     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = @id;
 
@@ -131,4 +134,10 @@ FROM security_ops
 WHERE security_id = @security_id
   AND (@from_date = '' OR date >= @from_date)
   AND (@to_date = '' OR date <= @to_date)
+ORDER BY date, id;
+
+-- name: ListSecurityOpsByBatch :many
+SELECT *
+FROM security_ops
+WHERE import_batch_id = @import_batch_id
 ORDER BY date, id;
