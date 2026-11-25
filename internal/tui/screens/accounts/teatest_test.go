@@ -77,3 +77,24 @@ func TestAccountsReconcileSnapshot(t *testing.T) {
 		tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
 	})
 }
+
+func TestAccountsReconcileTickSnapshot(t *testing.T) {
+	fx := screentest.New(t)
+	fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "100", OpenedOn: "2026-01-01"})
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-10", Description: "Store", Date: "2026-06-01", Status: "booked"})
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-5", Description: "Cafe", Date: "2026-06-02", Status: "booked"})
+
+	scr := screens.Screen(accounts.New(fx.Service, domain.LocaleENUS, theme.Default()))
+	model := &screenModel{scr: scr, width: 100, height: 30}
+	snapshot(t, model, "Checking", "Difference: -5.00", func(tm *teatest.TestModel) {
+		tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+		tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("8")})
+		tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("5")})
+		tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
+		tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
+		teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+			return bytes.Contains(b, []byte("Reconcile preview"))
+		}, teatest.WithDuration(3*time.Second))
+		tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" ")})
+	})
+}
