@@ -119,6 +119,34 @@ type camtEntry struct {
 	SvcrRef   string   `xml:"AcctSvcrRef"`
 	AddtlInfo string   `xml:"AddtlNtryInf"`
 	Details   []camtTx `xml:"NtryDtls>TxDtls"`
+
+	off  int64 // decoder offset right after the opening tag
+	line int   // 1-based source line of the opening tag
+}
+
+// UnmarshalXML decodes the entry and remembers where it starts, so errors can cite the source line.
+func (e *camtEntry) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	off := d.InputOffset()
+	type plain camtEntry
+	var p plain
+	if err := d.DecodeElement(&p, &start); err != nil {
+		return fmt.Errorf("decode %s: %w", start.Name.Local, err)
+	}
+	*e = camtEntry(p)
+	e.off = off
+	return nil
+}
+
+// sourceLine returns the 1-based line of the tag that ends at offset off in src.
+func sourceLine(src []byte, off int64) int {
+	if off < 0 || off > int64(len(src)) {
+		return 1
+	}
+	head := src[:off]
+	if lt := bytes.LastIndexByte(head, '<'); lt >= 0 {
+		head = head[:lt]
+	}
+	return 1 + bytes.Count(head, []byte{'\n'})
 }
 
 type camtTx struct {
@@ -152,6 +180,7 @@ func clean(s string) string { return strings.Join(strings.Fields(s), " ") }
 // parseCAMT decodes and sanity-checks the document.
 func parseCAMT(data []byte) (camtDoc, error) {
 	dec := xml.NewDecoder(bytes.NewReader(data))
+	src := data
 	dec.CharsetReader = func(label string, in io.Reader) (io.Reader, error) {
 		raw, err := io.ReadAll(in)
 		if err != nil {
@@ -161,6 +190,7 @@ func parseCAMT(data []byte) (camtDoc, error) {
 		if err != nil {
 			return nil, fmt.Errorf("decode charset %s: %w", label, err)
 		}
+		src = []byte(text) // the decoder offsets refer to the converted text
 		return strings.NewReader(text), nil
 	}
 	var doc camtDoc
@@ -172,6 +202,12 @@ func parseCAMT(data []byte) (camtDoc, error) {
 	}
 	if len(doc.Stmts) == 0 {
 		return camtDoc{}, errors.New("camt.053 has no statement")
+	}
+	for i := range doc.Stmts {
+		for j := range doc.Stmts[i].Entries {
+			e := &doc.Stmts[i].Entries[j]
+			e.line = sourceLine(src, e.off)
+		}
 	}
 	return doc, nil
 }
@@ -327,7 +363,7 @@ func (c *camtConv) entry(ref string, cur domain.Currency, stmt, n int, e *camtEn
 	fail := func(format string, args ...any) []fuiproto.Record {
 		c.errs++
 		return []fuiproto.Record{{Type: fuiproto.RecordTypeError, Error: &fuiproto.ErrorRecord{
-			Line: n, Message: fmt.Sprintf(format, args...),
+			Line: e.line, Message: fmt.Sprintf(format, args...),
 			Raw: map[string]any{"statement": stmt, "entry": n, "amount": strings.TrimSpace(e.Amt.Value), "ref": orDefault(e.SvcrRef, e.NtryRef)},
 		}}}
 	}
@@ -348,7 +384,8 @@ func (c *camtConv) entry(ref string, cur domain.Currency, stmt, n int, e *camtEn
 		return fail("%v", err)
 	}
 	var out []fuiproto.Record
-	for _, l := range c.legs(e, cur, total) {
+	legs, mismatch := c.legs(e, cur, total)
+	for _, l := range legs {
 		amount := total
 		if l.tx != nil && l.part > 0 {
 			amount, _ = camtMoney(l.amt, e.Ind, cur) // validated by legs
@@ -360,12 +397,23 @@ func (c *camtConv) entry(ref string, cur domain.Currency, stmt, n int, e *camtEn
 		out = append(out, rec)
 	}
 	c.txs += len(out)
+	if mismatch {
+		c.errs++
+		out = append(out, fuiproto.Record{Type: fuiproto.RecordTypeError, Error: &fuiproto.ErrorRecord{
+			Line: e.line, Message: "batch entry: transaction details do not sum to the entry amount; imported as a single transaction",
+			Raw: map[string]any{
+				"severity": "warning", "statement": stmt, "entry": n, "amount": strings.TrimSpace(e.Amt.Value),
+				"ref": orDefault(e.SvcrRef, e.NtryRef),
+			},
+		}})
+	}
 	return out
 }
 
 // legs splits a batch entry into its transaction details when their amounts add up to the entry
-// amount; otherwise the entry is a single transaction described by all its details.
-func (c *camtConv) legs(e *camtEntry, cur domain.Currency, total int64) []leg {
+// amount; otherwise the entry is a single transaction described by all its details and mismatch
+// reports that the batch could not be split.
+func (c *camtConv) legs(e *camtEntry, cur domain.Currency, total int64) (legs []leg, mismatch bool) {
 	if len(e.Details) > 1 {
 		var sum int64
 		split := true
@@ -382,13 +430,14 @@ func (c *camtConv) legs(e *camtEntry, cur domain.Currency, total int64) []leg {
 			for i := range e.Details {
 				out[i] = leg{amt: e.Details[i].Amt, tx: &e.Details[i], part: i + 1}
 			}
-			return out
+			return out, false
 		}
+		mismatch = true
 	}
 	if len(e.Details) > 0 {
-		return []leg{{amt: e.Amt, tx: &e.Details[0]}}
+		return []leg{{amt: e.Amt, tx: &e.Details[0]}}, mismatch
 	}
-	return []leg{{amt: e.Amt}}
+	return []leg{{amt: e.Amt}}, mismatch
 }
 
 func (c *camtConv) transaction(ref string, cur domain.Currency, date domain.Date, e *camtEntry, l leg, amount int64) (fuiproto.Record, bool) {

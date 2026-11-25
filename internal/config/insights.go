@@ -13,16 +13,22 @@ const (
 	DefaultInsightSubscriptionCount = 3
 	DefaultInsightTrendPermille     = 250
 	DefaultInsightTrendMinMinor     = 5000
+	DefaultInsightAnomalyWindow     = 6
+	DefaultInsightAnomalyMinHistory = 3
+	DefaultInsightTrendPeriods      = 3
 )
 
 // InsightsConfig holds the insights.* thresholds. Ratios are permille (2500 = 2.5×) and
-// TrendMinMinor is in minor units of the base currency.
+// TrendMinMinor is in minor units of the base currency (insights run on amounts converted to it).
 type InsightsConfig struct {
 	AnomalyFactorPermille int   `toml:"anomaly_factor_permille"`
 	SubscriptionTolPermil int   `toml:"subscription_tolerance_permille"`
 	SubscriptionMinCount  int   `toml:"subscription_min_occurrences"`
 	TrendPermille         int   `toml:"trend_permille"`
 	TrendMinMinor         int64 `toml:"trend_min_amount"`
+	AnomalyWindowMonths   int   `toml:"anomaly_window_months"`
+	AnomalyMinHistory     int   `toml:"anomaly_min_history"`
+	TrendPeriods          int   `toml:"trend_periods"`
 }
 
 func defaultInsights() InsightsConfig {
@@ -32,6 +38,9 @@ func defaultInsights() InsightsConfig {
 		SubscriptionMinCount:  DefaultInsightSubscriptionCount,
 		TrendPermille:         DefaultInsightTrendPermille,
 		TrendMinMinor:         DefaultInsightTrendMinMinor,
+		AnomalyWindowMonths:   DefaultInsightAnomalyWindow,
+		AnomalyMinHistory:     DefaultInsightAnomalyMinHistory,
+		TrendPeriods:          DefaultInsightTrendPeriods,
 	}
 }
 
@@ -47,6 +56,12 @@ func (c *Config) insightField(key string) (p *int64, minimum int64, ok bool) {
 		n, minimum = &c.Insights.SubscriptionMinCount, 2
 	case "insights.trend_permille":
 		n, minimum = &c.Insights.TrendPermille, 1
+	case "insights.anomaly_window_months":
+		n, minimum = &c.Insights.AnomalyWindowMonths, 1
+	case "insights.anomaly_min_history":
+		n, minimum = &c.Insights.AnomalyMinHistory, 1
+	case "insights.trend_periods":
+		n, minimum = &c.Insights.TrendPeriods, 1
 	case "insights.trend_min_amount":
 		return &c.Insights.TrendMinMinor, 0, true
 	default:
@@ -88,6 +103,12 @@ func (c *Config) setInsight(key, value string) (bool, error) {
 		c.Insights.SubscriptionMinCount = int(v)
 	case "insights.trend_permille":
 		c.Insights.TrendPermille = int(v)
+	case "insights.anomaly_window_months":
+		c.Insights.AnomalyWindowMonths = int(v)
+	case "insights.anomaly_min_history":
+		c.Insights.AnomalyMinHistory = int(v)
+	case "insights.trend_periods":
+		c.Insights.TrendPeriods = int(v)
 	default:
 		c.Insights.TrendMinMinor = v
 	}
@@ -100,6 +121,9 @@ var insightKeys = []string{
 	"insights.subscription_min_occurrences",
 	"insights.trend_permille",
 	"insights.trend_min_amount",
+	"insights.anomaly_window_months",
+	"insights.anomaly_min_history",
+	"insights.trend_periods",
 }
 
 func validateInsights(c *Config) error {

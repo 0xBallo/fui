@@ -232,11 +232,29 @@ func withinTol(v, ref int64, permille int) bool {
 	return d*1000 <= int64(permille)*ref
 }
 
+// KnownRecurrence describes an existing recurrence, so that a detected
+// subscription matching it is not suggested again. Amount is in absolute minor
+// units, already converted to the currency of the transactions it is compared
+// with; Interval is weekly, monthly or yearly; Subjects use the same strings as
+// the insight subjects (e.g. "payee:3", "description:netflix").
+type KnownRecurrence struct {
+	Subjects []string
+	Amount   int64
+	Currency Currency
+	Interval string
+}
+
+func (kr KnownRecurrence) covers(subject string, cur Currency, unit string, amt int64, tolPermil int) bool {
+	return kr.Currency == cur && kr.Interval == unit && slices.Contains(kr.Subjects, subject) &&
+		withinTol(amt, kr.Amount, tolPermil)
+}
+
 // DetectSubscriptions finds expenses repeating at a regular weekly, monthly
 // or yearly interval with a stable amount. Groups already tied to a
 // recurrence (RecurrenceID set) are not reported as new subscriptions; for
-// them a price change of the latest occurrence is reported instead.
-func DetectSubscriptions(cfg InsightConfig, txs []Transaction) ([]Insight, error) {
+// them a price change of the latest occurrence is reported instead. Candidate
+// subscriptions matching an entry of known are skipped.
+func DetectSubscriptions(cfg InsightConfig, txs []Transaction, known []KnownRecurrence) ([]Insight, error) {
 	groups := map[subKey][]Transaction{}
 	for _, tx := range sortedTxs(txs) {
 		if !isExpense(tx) {
@@ -249,7 +267,7 @@ func DetectSubscriptions(cfg InsightConfig, txs []Transaction) ([]Insight, error
 	}
 	var out []Insight
 	for k, g := range groups {
-		ins, ok, err := analyseGroup(cfg, k, g)
+		ins, ok, err := analyseGroup(cfg, k, g, known)
 		if err != nil {
 			return nil, err
 		}
@@ -283,11 +301,11 @@ func groupInterval(g []Transaction) (string, bool, error) {
 	return unit, known, nil
 }
 
-func analyseGroup(cfg InsightConfig, k subKey, g []Transaction) (Insight, bool, error) {
+func analyseGroup(cfg InsightConfig, k subKey, g []Transaction, recs []KnownRecurrence) (Insight, bool, error) {
 	if len(g) < max(cfg.SubscriptionMinCount, 2) {
 		return Insight{}, false, nil
 	}
-	unit, known, err := groupInterval(g)
+	unit, tied, err := groupInterval(g)
 	if err != nil || unit == "" {
 		return Insight{}, false, err
 	}
@@ -306,7 +324,7 @@ func analyseGroup(cfg InsightConfig, k subKey, g []Transaction) (Insight, bool, 
 		return true
 	}
 	lastAmt := absMinor(last.Amount)
-	if known {
+	if tied {
 		if !stable(prev, prevMed) || withinTol(lastAmt, prevMed, cfg.SubscriptionTolPermil) {
 			return Insight{}, false, nil
 		}
@@ -325,6 +343,11 @@ func analyseGroup(cfg InsightConfig, k subKey, g []Transaction) (Insight, bool, 
 	all := append(prev, lastAmt)
 	allMed := median(all)
 	if !stable(all, allMed) {
+		return Insight{}, false, nil
+	}
+	if slices.ContainsFunc(recs, func(kr KnownRecurrence) bool {
+		return kr.covers(k.subject, k.cur, unit, allMed, cfg.SubscriptionTolPermil)
+	}) {
 		return Insight{}, false, nil
 	}
 	m, err := absMoney(allMed, k.cur)

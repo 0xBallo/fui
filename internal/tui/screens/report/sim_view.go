@@ -31,6 +31,34 @@ func simCashFlowColumns() []components.Column {
 	}
 }
 
+// simAccountColumns shows the scenario balance of the total and of each selected account.
+func simAccountColumns(accounts []simulating.CashFlowAccount) []components.Column {
+	cols := []components.Column{
+		{Title: "Month end", Width: 12, Align: lipgloss.Left},
+		{Title: "Total", Width: 14, Align: lipgloss.Right},
+	}
+	for _, a := range accounts {
+		cols = append(cols, components.Column{Title: a.Account, Width: 14, Align: lipgloss.Right})
+	}
+	return cols
+}
+
+func (m *Model) simAccountRows(r *simulating.CashFlowResult) []components.Row {
+	rows := make([]components.Row, len(r.Months))
+	for i, mo := range r.Months {
+		cells := []string{mo.End, m.simMoney(mo.ScenarioMinor)}
+		for _, a := range r.Accounts {
+			cell := ""
+			if i < len(a.Months) {
+				cell = m.simMoney(a.Months[i].ScenarioMinor)
+			}
+			cells = append(cells, cell)
+		}
+		rows[i] = components.Row{ID: mo.End, Cells: cells}
+	}
+	return rows
+}
+
 func simCompareColumns() []components.Column {
 	return []components.Column{
 		{Title: "Simulation", Width: 20, Align: lipgloss.Left},
@@ -122,6 +150,10 @@ func (m *Model) applySimCashFlow(r *simulating.CashFlowResult) {
 		}}
 	}
 	m.sim.table.SetColumns(simCashFlowColumns())
+	if len(r.Accounts) > 0 {
+		m.sim.table.SetColumns(simAccountColumns(r.Accounts))
+		rows = m.simAccountRows(r)
+	}
 	m.sim.table.SetRows(rows)
 	note := "Opening balance " + m.simMoney(r.OpeningMinor) + "; end delta " + m.simSigned(r.EndDeltaMinor)
 	if r.FirstBelowZero != "" {
@@ -210,10 +242,12 @@ func (m *Model) viewSim() string {
 			m.th.Title.Render("Simulation params — "+simKinds[m.sim.kindIdx])+"\n\n"+m.sim.form.View())
 	case simPanelSave:
 		return components.Modal(m.th, m.width, m.height, m.th.Title.Render("Save simulation")+"\n\n"+m.sim.form.View())
+	case simPanelConfirm:
+		return components.Modal(m.th, m.width, m.height, m.confirm.View())
 	case simPanelSaved:
 		return lipgloss.JoinVertical(lipgloss.Left,
 			m.th.Title.Render("Saved simulations"), "", m.sim.savedTable.View(), "",
-			m.th.Base.Render("space select (max 3)   c compare   enter show   esc back"))
+			m.th.Base.Render("space select (max 3)   c compare   enter show   d delete   esc back"))
 	case simPanelCompare:
 		return lipgloss.JoinVertical(lipgloss.Left,
 			m.th.Title.Render("Compare simulations — final nominal value"), "", m.sim.cmpTable.View(), "",

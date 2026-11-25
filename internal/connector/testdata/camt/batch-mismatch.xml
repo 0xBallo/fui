@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
+  <BkToCstmrStmt>
+    <Stmt>
+      <Acct><Id><IBAN>DE89370400440532013000</IBAN></Id><Ccy>EUR</Ccy></Acct>
+      <Ntry>
+        <NtryRef>MATCH</NtryRef>
+        <Amt Ccy="EUR">30.00</Amt><CdtDbtInd>DBIT</CdtDbtInd>
+        <BookgDt><Dt>2026-01-10</Dt></BookgDt>
+        <NtryDtls>
+          <TxDtls><Amt Ccy="EUR">10.00</Amt><RmtInf><Ustrd>Part one</Ustrd></RmtInf></TxDtls>
+          <TxDtls><Amt Ccy="EUR">20.00</Amt><RmtInf><Ustrd>Part two</Ustrd></RmtInf></TxDtls>
+        </NtryDtls>
+      </Ntry>
+      <Ntry>
+        <NtryRef>MISMATCH</NtryRef>
+        <Amt Ccy="EUR">50.00</Amt><CdtDbtInd>DBIT</CdtDbtInd>
+        <BookgDt><Dt>2026-01-11</Dt></BookgDt>
+        <NtryDtls>
+          <TxDtls><Amt Ccy="EUR">10.00</Amt><RmtInf><Ustrd>Part one</Ustrd></RmtInf></TxDtls>
+          <TxDtls><Amt Ccy="EUR">20.00</Amt><RmtInf><Ustrd>Part two</Ustrd></RmtInf></TxDtls>
+        </NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">abc</Amt><CdtDbtInd>CRDT</CdtDbtInd>
+        <BookgDt><Dt>2026-01-12</Dt></BookgDt>
+        <AddtlNtryInf>Broken amount</AddtlNtryInf>
+      </Ntry>
+    </Stmt>
+  </BkToCstmrStmt>
+</Document>

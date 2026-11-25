@@ -1,0 +1,8 @@
+{"type":"meta","protocol":"fui/1","connector":"camt","version":"0.1.0","source":{"file":"batch-mismatch.xml","sha256":"7e4cb38fee04c09c0bd9446de6f6932037c115435663957c0f900272e702196a"}}
+{"type":"account","ref":"DE89370400440532013000","name":"DE89370400440532013000","currency":"EUR","kind":"checking","iban":"DE89370400440532013000"}
+{"type":"transaction","account":"DE89370400440532013000","id":"MATCH#1","date":"2026-01-10","amount":-1000,"currency":"EUR","description":"Part one","status":"booked"}
+{"type":"transaction","account":"DE89370400440532013000","id":"MATCH#2","date":"2026-01-10","amount":-2000,"currency":"EUR","description":"Part two","status":"booked"}
+{"type":"transaction","account":"DE89370400440532013000","id":"MISMATCH","date":"2026-01-11","amount":-5000,"currency":"EUR","description":"Part one Part two","status":"booked"}
+{"type":"error","line":15,"message":"batch entry: transaction details do not sum to the entry amount; imported as a single transaction","raw":{"amount":"50.00","entry":2,"ref":"MISMATCH","severity":"warning","statement":1}}
+{"type":"error","line":24,"message":"invalid amount \"abc\"","raw":{"amount":"abc","entry":3,"ref":"","statement":1}}
+{"type":"end","transactions":3,"errors":2}

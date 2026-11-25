@@ -187,10 +187,11 @@ func TestInsightConfigFrom(t *testing.T) {
 	if got := InsightConfigFrom(&cfg); got != domain.DefaultInsightConfig() {
 		t.Fatalf("defaults = %+v", got)
 	}
-	cfg.Insights = config.InsightsConfig{AnomalyFactorPermille: 4000, SubscriptionTolPermil: 10, SubscriptionMinCount: 5, TrendPermille: 500, TrendMinMinor: 9000}
+	cfg.Insights = config.InsightsConfig{AnomalyFactorPermille: 4000, SubscriptionTolPermil: 10, SubscriptionMinCount: 5, TrendPermille: 500, TrendMinMinor: 9000, AnomalyWindowMonths: 12, AnomalyMinHistory: 5, TrendPeriods: 4}
 	got := InsightConfigFrom(&cfg)
 	want := domain.DefaultInsightConfig()
 	want.AnomalyFactorPermille, want.SubscriptionTolPermil, want.SubscriptionMinCount, want.TrendPermille, want.TrendMinMinor = 4000, 10, 5, 500, 9000
+	want.AnomalyWindowMonths, want.AnomalyMinHistory, want.TrendPeriods = 12, 5, 4
 	if got != want {
 		t.Fatalf("custom = %+v, want %+v", got, want)
 	}

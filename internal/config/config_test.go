@@ -907,12 +907,22 @@ func TestInsightsKeys(t *testing.T) {
 	if v, err := cfg.Get("insights.anomaly_factor_permille"); err != nil || v != "2500" {
 		t.Fatalf("default anomaly = %q, %v", v, err)
 	}
+	for key, want := range map[string]string{
+		"insights.anomaly_window_months": "6", "insights.anomaly_min_history": "3", "insights.trend_periods": "3",
+	} {
+		if v, err := cfg.Get(key); err != nil || v != want {
+			t.Fatalf("default %s = %q, %v; want %s", key, v, err, want)
+		}
+	}
 	for key, val := range map[string]string{
 		"insights.anomaly_factor_permille":         "4000",
 		"insights.subscription_tolerance_permille": "0",
 		"insights.subscription_min_occurrences":    "4",
 		"insights.trend_permille":                  "300",
 		"insights.trend_min_amount":                "7000",
+		"insights.anomaly_window_months":           "12",
+		"insights.anomaly_min_history":             "5",
+		"insights.trend_periods":                   "4",
 	} {
 		if err := cfg.Set(key, val); err != nil {
 			t.Fatalf("Set(%s) = %v", key, err)
@@ -927,6 +937,9 @@ func TestInsightsKeys(t *testing.T) {
 		"insights.trend_min_amount":             "-1",
 		"insights.trend_permille":               "x",
 		"insights.nope":                         "1",
+		"insights.anomaly_window_months":        "0",
+		"insights.anomaly_min_history":          "0",
+		"insights.trend_periods":                "0",
 	} {
 		if err := cfg.Set(key, val); err == nil {
 			t.Errorf("Set(%s,%s) must fail", key, val)

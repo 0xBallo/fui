@@ -133,6 +133,40 @@ func TestSimulateCashFlowEvents(t *testing.T) {
 	}
 }
 
+func TestSimulateCashFlowAccounts(t *testing.T) {
+	deps, svc, _ := newSimulateTest(t)
+	seedAccount(t, deps, "Main")
+	seedAccount(t, deps, "Spare")
+
+	buf := outBuf(deps)
+	mustRunCmd(t, deps, NewSimulateCmd(deps, svc), []string{"cashflow", "--months", "2", "--account", "Main", "--account", "spare"})
+	out := buf.String()
+	for _, want := range []string{"MONTH END", "Main", "Spare"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("table missing %q:\n%s", want, out)
+		}
+	}
+
+	buf = outBuf(deps)
+	mustRunCmd(t, deps, NewSimulateCmd(deps, svc), []string{"cashflow", "--months", "2", "--account", "Main", "--json"})
+	for _, want := range []string{`"accounts":["Main"]`, `"account":"Main"`} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("json missing %q:\n%s", want, buf.String())
+		}
+	}
+
+	buf = outBuf(deps)
+	mustRunCmd(t, deps, NewSimulateCmd(deps, svc), []string{"cashflow", "--months", "2", "--account", "Main", "--csv"})
+	if out := buf.String(); !strings.HasPrefix(out, "ACCOUNT,MONTH END,BASE,SCENARIO,DELTA") || !strings.Contains(out, "total,") || !strings.Contains(out, "Main,") {
+		t.Errorf("csv = %q", out)
+	}
+
+	mustRunCmd(t, deps, NewSimulateCmd(deps, svc), []string{"save", "main-only", "cashflow", "--months", "2", "--account", "Main"})
+	if err := runCmd(deps, NewSimulateCmd(deps, svc), []string{"cashflow", "--account", "Nope"}); err == nil {
+		t.Error("unknown account should fail")
+	}
+}
+
 func TestSimulateErrors(t *testing.T) {
 	deps, svc, _ := newSimulateTest(t)
 	tests := []struct {

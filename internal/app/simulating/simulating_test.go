@@ -677,3 +677,68 @@ func price(t *testing.T, minor int64, code string) domain.Price {
 	}
 	return p
 }
+
+func TestRunCashFlowByAccount(t *testing.T) {
+	e := newEnv(t)
+	main := mustAccount(t, e.store, domain.Account{
+		Name: "Main", Kind: domain.AccountChecking, Currency: eur(t), OpeningBalance: money(t, 100_00),
+		OpenedOn: date(t, 2025, 1, 1),
+	})
+	mustAccount(t, e.store, domain.Account{
+		Name: "Spare", Kind: domain.AccountChecking, Currency: eur(t), OpeningBalance: money(t, 50_00),
+		OpenedOn: date(t, 2025, 1, 1),
+	})
+	mustTx(t, e.store, domain.Transaction{
+		AccountID: main.ID, Date: date(t, 2026, 1, 20), Amount: money(t, -10_00),
+		Status: domain.StatusBooked, Kind: domain.KindPayment,
+	})
+	run := func(accounts ...string) (*CashFlowResult, error) {
+		got, err := e.svc.Run(context.Background(), e.enabled, RunRequest{Kind: KindCashFlow, CashFlow: &CashFlowParams{
+			Months: 1, Accounts: accounts,
+			Events: []CashFlowEvent{{Kind: "one_off", Date: "2026-01-25", AmountMinor: -5_00}},
+		}})
+		return got.CashFlow, err
+	}
+
+	all, err := run()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if all.Accounts != nil {
+		t.Fatalf("accounts = %+v, want none without a filter", all.Accounts)
+	}
+	one, err := run("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if one.OpeningMinor != 100_00 || one.Months[0].BaseMinor != 90_00 || one.Months[0].ScenarioMinor != 85_00 {
+		t.Fatalf("filtered = %+v", one)
+	}
+	if len(one.Accounts) != 2 || one.Accounts[0].Account != "Main" || one.Accounts[1].Account != "events" || one.Accounts[1].ID != 0 {
+		t.Fatalf("series = %+v", one.Accounts)
+	}
+	both, err := run("Main", "Spare")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if both.OpeningMinor != 150_00 || both.Months[0].ScenarioMinor != 135_00 || len(both.Accounts) != 3 {
+		t.Fatalf("both = %+v", both)
+	}
+	if _, err := run("Nope"); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("unknown account err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestCashFlowParamsRoundTripAccounts(t *testing.T) {
+	kind, raw, err := encodeParams(RunRequest{Kind: KindCashFlow, CashFlow: &CashFlowParams{Months: 3, Accounts: []string{"Main", "2"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := decodeRunRequest(app.SavedSimulation{Name: "x", Kind: kind, ParamsJSON: raw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := req.CashFlow.Accounts; len(got) != 2 || got[0] != "Main" || got[1] != "2" {
+		t.Fatalf("accounts = %v", got)
+	}
+}

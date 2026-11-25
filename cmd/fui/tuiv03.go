@@ -134,6 +134,14 @@ func (u simUseCases) List(ctx context.Context) ([]app.SavedSimulation, error) {
 	return u.svc.List(ctx, u.modules())
 }
 
+func (u simUseCases) PlanRemove(ctx context.Context, ref string) (simulating.RemovePlan, error) {
+	return u.svc.PlanRemove(ctx, u.modules(), ref)
+}
+
+func (u simUseCases) ApplyRemove(ctx context.Context, p simulating.RemovePlan) error {
+	return u.svc.ApplyRemove(ctx, p)
+}
+
 func (u simUseCases) Rerun(ctx context.Context, ref string) (simulating.RerunResult, error) {
 	return u.svc.Rerun(ctx, u.modules(), ref)
 }
