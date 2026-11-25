@@ -1,0 +1,93 @@
+# undo covers tag/untag, rules apply, recurring confirm, loan confirm and refuses reconciled rows.
+exec fui init --preset expense --currency EUR
+exec fui account add Checking --kind checking --currency EUR --opening-balance 1000
+exec fui add -- -12,50 'Amazon order' -a Checking --date 2026-01-10
+exec fui add -- -3 Coffee -a Checking --date 2026-01-11
+exec fui tag add outing
+
+# tag then untag, each undone in turn
+exec fui tx tag 1 outing
+exec fui tx show 1
+stdout 'tags: outing'
+exec fui undo --dry-run
+stdout 'undo'
+exec fui tx show 1
+stdout 'tags: outing'
+exec fui undo --yes
+stdout 'Undone tx.tag'
+exec fui tx show 1
+! stdout 'tags:'
+
+exec fui tx tag 1 outing
+exec fui tx untag 1 outing
+exec fui tx show 1
+! stdout 'tags:'
+exec fui undo --yes
+stdout 'Undone tx.untag'
+exec fui tx show 1
+stdout 'tags: outing'
+
+# a description edit after the tag does not block undoing the tag (stale mask)
+exec fui tx edit 1 --description 'Amazon renamed'
+exec fui undo --yes
+stdout 'Undone tx.edit'
+exec fui undo --yes --json
+stdout '"kind":"tx.tag"'
+stdout '"reverted":1'
+exec fui tx show 1
+! stdout 'tags:'
+stdout 'Amazon order'
+
+# rules apply categorizes; undo clears it
+exec fui rule add amazon --contains AMAZON --category Groceries
+exec fui rule apply --yes
+exec fui tx show 1
+stdout 'Groceries'
+exec fui undo --dry-run --json
+stdout '"changes"'
+stdout '"bulk":true'
+exec fui undo --yes
+stdout 'Undone rules.apply'
+exec fui tx show 1
+! stdout 'Groceries'
+
+# undo without --yes needs confirmation outside a terminal
+! exec fui undo
+stderr 'yes'
+
+# recurring confirm: undo makes the transaction pending again
+exec fui module enable recurring
+exec fui recurring add --account Checking --amount -9,99 --description Netflix --every 1 --unit months --start 2026-01-05
+exec fui recurring run --until 2026-01-15 --yes
+exec fui tx list --status pending
+stdout 'Netflix'
+exec fui recurring confirm 3
+exec fui tx list --status booked
+stdout 'Netflix'
+exec fui undo --yes
+stdout 'Undone recurring.confirm'
+exec fui tx list --status pending
+stdout 'Netflix'
+
+# loan confirm: principal transfer and interest rows disappear on undo
+exec fui module enable loans
+exec fui loan add Mutuo --kind mortgage --principal 12000 --disbursed 2025-12-01 --term-months 120 --rate-type fixed --rate 3,00 --debit Checking --computed
+exec fui loan run --loan Mutuo --until 2026-01-15 --yes
+exec fui tx list --json
+stdout 'Mutuo'
+! stdout '"kind":"transfer"'
+exec fui loan confirm 4
+exec fui tx list --json
+stdout '"kind":"transfer"'
+exec fui undo --yes
+stdout 'Undone loan.confirm'
+exec fui tx list --json
+! stdout '"kind":"transfer"'
+exec fui tx list --status pending --account Checking
+stdout 'Mutuo'
+
+# a reconciled row refuses the undo with a user error
+exec fui tx edit 1 --category Groceries
+exec fui reconcile Checking --balance 987,50 --date 2026-01-12 --tick 1 --yes
+! exec fui undo --yes
+stderr 'reconciled'
