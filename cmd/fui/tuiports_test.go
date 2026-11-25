@@ -21,7 +21,7 @@ func TestReportExportResult(t *testing.T) {
 	if err := u.ExportResult(&csv, "csv", grouped); err != nil {
 		t.Fatalf("csv: %v", err)
 	}
-	if !strings.Contains(csv.String(), "2026-06-01,110.00,300.00,190.00") || !strings.Contains(csv.String(), "TOTAL,110.00") {
+	if !strings.Contains(csv.String(), "2026-06-01,300.00,190.00,110.00") || !strings.Contains(csv.String(), "TOTAL,,,110.00") {
 		t.Fatalf("csv = %q", csv.String())
 	}
 
