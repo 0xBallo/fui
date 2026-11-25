@@ -89,7 +89,7 @@ type SecurityOpPlanRow struct {
 }
 
 // ModuleRecords lists the records of one module that is not enabled, so that the user can
-// enable the module or skip them. Schedules and installments are only detected, never imported.
+// enable the module or skip them. The loan rows (Loans) carry the same Module tag.
 type ModuleRecords struct {
 	Module module.ID
 	Count  int
@@ -157,6 +157,7 @@ type ImportPlan struct {
 	NewSecurities   []domain.Security
 	Rows            []Row
 	SecurityOps     []SecurityOpPlanRow
+	Loans           []LoanPlanRow
 	Errors          []RowError
 	Warnings        []RowWarning
 	Transfers       []TransferProposal
@@ -244,6 +245,9 @@ func (p *ImportPlan) refresh() {
 			},
 			Summary: fmt.Sprintf("create %d security operations", secOps),
 		})
+	}
+	if c, ok := p.loansChange(); ok {
+		changes = append(changes, c)
 	}
 	p.Changes, p.Bulk = changes, true
 }

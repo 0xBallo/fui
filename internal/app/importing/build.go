@@ -145,6 +145,10 @@ func (b *builder) build(ctx context.Context, plan *ImportPlan) error {
 	if err := b.finishAccounts(balances); err != nil {
 		return err
 	}
+	// After finishAccounts, which would reset the opening balance a new loan account gets.
+	if err := b.addLoans(ctx); err != nil {
+		return err
+	}
 	b.checkTransferLabels()
 	if err := b.proposeTransfers(ctx); err != nil {
 		return err
@@ -161,7 +165,8 @@ func (b *builder) finishChecks(ctx context.Context, balances []fuiproto.BalanceR
 	return b.checkAlreadyImported(ctx)
 }
 
-// addRecord plans one transaction, security operation, loan or source error record.
+// addRecord plans one transaction, security operation or source error record. Loan records
+// are planned together afterwards (addLoans).
 func (b *builder) addRecord(ctx context.Context, rec fuiproto.Record) error {
 	switch {
 	case rec.Transaction != nil:
@@ -170,10 +175,6 @@ func (b *builder) addRecord(ctx context.Context, rec fuiproto.Record) error {
 		b.plan.Errors = append(b.plan.Errors, RowError{Line: rec.Error.Line, Message: "source: " + rec.Error.Message})
 	case rec.SecurityOp != nil:
 		return b.securityOp(ctx, rec.SecurityOp)
-	case rec.Schedule != nil:
-		b.loanRecord("schedule", b.st.sched[rec.Schedule])
-	case rec.Installment != nil:
-		b.loanRecord("installment", b.st.inst[rec.Installment])
 	}
 	return nil
 }
@@ -202,17 +203,6 @@ func (b *builder) securityOp(ctx context.Context, rec *fuiproto.SecurityOpRecord
 	b.noteModuleRecord(module.Investments, "security_op", line)
 	b.warn(line, "security_op needs module %s: enable it or the record is skipped", module.Investments)
 	return nil
-}
-
-// loanRecord notes a loan schedule or installment: they are detected here and imported by the
-// loans module, so enabled or not they are never written by the import.
-func (b *builder) loanRecord(kind string, line int) {
-	if b.req.Modules.Has(module.Loans) {
-		b.warn(line, "%s not imported: loan records are not supported yet", kind)
-		return
-	}
-	b.noteModuleRecord(module.Loans, kind, line)
-	b.warn(line, "%s needs module %s: enable it or the record is skipped", kind, module.Loans)
 }
 
 func (b *builder) noteModuleRecord(id module.ID, kind string, line int) {

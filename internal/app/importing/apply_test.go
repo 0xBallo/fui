@@ -32,7 +32,10 @@ func secOpRec(cashTx string) fuiproto.Record {
 func loanRecs() []fuiproto.Record {
 	return []fuiproto.Record{
 		account("l1", "Mortgage", "EUR", func(a *fuiproto.AccountRecord) { a.Kind = fuiproto.AccountKindLoan }),
-		{Type: fuiproto.RecordTypeSchedule, Schedule: &fuiproto.ScheduleRecord{Account: "l1", ValidFrom: "2026-01-01", Rate: 300, RateType: fuiproto.RateTypeFixed}},
+		{Type: fuiproto.RecordTypeSchedule, Schedule: &fuiproto.ScheduleRecord{
+			Account: "l1", ValidFrom: "2026-01-01", Rate: 300, RateType: fuiproto.RateTypeFixed,
+			DebitAccount: "r1", Kind: fuiproto.LoanKindMortgage, Principal: 100, DisbursedOn: "2026-01-01", TermMonths: 12,
+		}},
 		{Type: fuiproto.RecordTypeInstallment, Installment: &fuiproto.InstallmentRecord{Account: "l1", DueDate: "2026-11-01", Principal: 100}},
 	}
 }
