@@ -10,16 +10,19 @@ import (
 	"github.com/0xballo/fui/internal/domain"
 )
 
-// CapLine is one cap evaluated for the requested month.
+// CapLine is one cap evaluated for the requested month; for a yearly cap the embedded Period
+// is the budget year holding the month, evaluated up to the month's end.
 type CapLine struct {
 	Budget domain.Budget
 	domain.CapStatus
 }
 
-// EnvelopeLine is one envelope's ledger for the requested month.
+// EnvelopeLine is one envelope's ledger for the requested month. For a yearly budget the
+// embedded Period is the budget year holding the month and Balance is as of the month's end.
 type EnvelopeLine struct {
 	Budget domain.Budget
 	domain.EnvelopeMonth
+	SuggestedMonthly domain.Money // yearly envelopes only: Balance spread over the months left; zero otherwise
 }
 
 // Status is the state of the budgets in one month. Caps or Envelopes is filled according to
@@ -77,8 +80,9 @@ func (s *Service) Status(ctx context.Context, monthIn string) (Status, error) {
 	return st, err
 }
 
-// periodsTo returns the consecutive budget months from the earliest row (or p) up to p.
-func (s *Service) periodsTo(p domain.Period, rows []domain.BudgetRow, moves []domain.BudgetMove) ([]domain.Period, error) {
+// periodsTo returns the consecutive periods of b (months, or years for a yearly budget) from
+// the one holding the earliest row or move (or p) up to the one holding the shown month p.
+func (s *Service) periodsTo(b domain.Budget, p domain.Period, rows []domain.BudgetRow, moves []domain.BudgetMove) ([]domain.Period, error) {
 	first := p.From()
 	for _, r := range rows {
 		if r.Date.Before(first) {
@@ -92,31 +96,27 @@ func (s *Service) periodsTo(p domain.Period, rows []domain.BudgetRow, moves []do
 	}
 	n, d := 0, first
 	for {
-		fp, err := domain.MonthPeriod(d, s.cfg.MonthStartDay)
+		fp, err := b.PeriodFor(d, s.cfg.MonthStartDay)
 		if err != nil {
 			return nil, err
 		}
-		if fp.From().Cmp(p.From()) >= 0 {
+		n++
+		if !fp.To().Before(p.From()) {
 			break
 		}
-		n++
 		if d, err = fp.To().AddDays(1); err != nil {
 			return nil, err
 		}
 	}
-	ps, err := domain.BudgetPeriods(first, n+1, s.cfg.MonthStartDay)
-	if err != nil {
-		return nil, err
-	}
-	return ps, nil
+	return domain.BudgetPeriodsFor(b, first, n, s.cfg.MonthStartDay)
 }
 
 func (s *Service) caps(st *Status, budgets []domain.Budget, rows []domain.BudgetRow) error {
-	ps, err := s.periodsTo(st.Period, rows, nil)
-	if err != nil {
-		return err
-	}
 	for _, b := range budgets {
+		ps, err := s.periodsTo(b, st.Period, rows, nil)
+		if err != nil {
+			return err
+		}
 		sts, err := domain.CapStatuses(b, ps, rows, domain.Money{})
 		if err != nil {
 			return err
@@ -127,16 +127,22 @@ func (s *Service) caps(st *Status, budgets []domain.Budget, rows []domain.Budget
 }
 
 func (s *Service) envelopes(st *Status, budgets []domain.Budget, rows []domain.BudgetRow, moves []domain.BudgetMove) error {
-	ps, err := s.periodsTo(st.Period, rows, moves)
-	if err != nil {
-		return err
-	}
 	for _, b := range budgets {
+		ps, err := s.periodsTo(b, st.Period, rows, moves)
+		if err != nil {
+			return err
+		}
 		ms, err := domain.EnvelopeLedger(b, ps, rows, moves, domain.Money{})
 		if err != nil {
 			return err
 		}
-		st.Envelopes = append(st.Envelopes, EnvelopeLine{Budget: b, EnvelopeMonth: ms[len(ms)-1]})
+		line := EnvelopeLine{Budget: b, EnvelopeMonth: ms[len(ms)-1]}
+		if b.Period == domain.BudgetYearly {
+			if line.SuggestedMonthly, err = domain.SuggestedMonthly(line.Balance, line.Period, st.Period.From(), s.cfg.MonthStartDay); err != nil {
+				return err
+			}
+		}
+		st.Envelopes = append(st.Envelopes, line)
 	}
 	return nil
 }
@@ -198,7 +204,7 @@ func (s *Service) toBase(ctx context.Context, r app.Repos, m domain.Money, date 
 
 // rows feeds the engine with base-currency rows (one per split when split). The period itself
 // is read whole (uncovered spending needs it); earlier history is read only when something
-// carries over (envelopes, or a cap with Carry), and then only the budgeted categories and tags.
+// carries over (envelopes, a cap with Carry, or a yearly budget), and then only the budgeted categories and tags.
 func (s *Service) rows(ctx context.Context, r app.Repos, p domain.Period, budgets []domain.Budget) ([]domain.BudgetRow, error) {
 	cur, err := domain.NewTxFilter(domain.TxFilterSpec{From: p.From(), To: p.To()})
 	if err != nil {
@@ -208,7 +214,7 @@ func (s *Service) rows(ctx context.Context, r app.Repos, p domain.Period, budget
 	if err != nil {
 		return nil, fmt.Errorf("list transactions: %w", err)
 	}
-	if s.cfg.Mode == domain.BudgetEnvelope || slices.ContainsFunc(budgets, func(b domain.Budget) bool { return b.Carry }) {
+	if s.cfg.Mode == domain.BudgetEnvelope || slices.ContainsFunc(budgets, func(b domain.Budget) bool { return b.Carry || b.Period == domain.BudgetYearly }) {
 		hist, err := history(ctx, r, p, budgets)
 		if err != nil {
 			return nil, err
