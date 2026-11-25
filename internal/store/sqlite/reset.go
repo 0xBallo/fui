@@ -28,23 +28,30 @@ func (s *Store) Reset(ctx context.Context, opts app.ResetOptions) error {
 	}
 	defer func() { _ = os.Remove(tempPath) }() // no-op once renamed
 
-	if _, err := s.backupLocked(ctx, backup.ReasonReset); err != nil {
+	return s.swapLocked(ctx, tempPath, backup.ReasonReset, "reset")
+}
+
+// swapLocked backs up the current archive with the given reason, then atomically renames the
+// prepared file over it and reopens. Every step before the rename leaves the current archive
+// untouched. The caller holds s.mu and removes tempPath on failure.
+func (s *Store) swapLocked(ctx context.Context, tempPath string, reason backup.Reason, op string) error {
+	if _, err := s.backupLocked(ctx, reason); err != nil {
 		return err
 	}
 	if _, err := s.writeDB.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
-		return fmt.Errorf("reset: wal checkpoint: %w", mapSQLError(err))
+		return fmt.Errorf("%s: wal checkpoint: %w", op, mapSQLError(err))
 	}
 	if err := closeDBs(s.readDB, s.writeDB); err != nil {
-		return fmt.Errorf("reset: close active connections: %w", err)
+		return fmt.Errorf("%s: close active connections: %w", op, err)
 	}
 	if err := ensureWALSidecarsGone(s.path); err != nil {
 		return s.reopenAfter(err)
 	}
 	if err := os.Rename(tempPath, s.path); err != nil {
-		return s.reopenAfter(fmt.Errorf("reset: replace db file: %w", err))
+		return s.reopenAfter(fmt.Errorf("%s: replace db file: %w", op, err))
 	}
 	if err := s.reopenLocked(); err != nil {
-		return fmt.Errorf("reset: reopen database: %w", err)
+		return fmt.Errorf("%s: reopen database: %w", op, err)
 	}
 	return nil
 }
