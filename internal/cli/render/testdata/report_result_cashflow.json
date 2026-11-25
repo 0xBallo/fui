@@ -1,0 +1,1 @@
+{"period":"2026-09-01..2026-09-30","group_by":"month","rows":[{"key":"2026-09-01","id":0,"total":{"minor":500,"currency":"EUR"},"inflow":{"minor":1500,"currency":"EUR"},"outflow":{"minor":1000,"currency":"EUR"}}],"total":{"minor":500,"currency":"EUR"}}

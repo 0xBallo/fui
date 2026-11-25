@@ -1,0 +1,1 @@
+{"period":"2026-09-01..2026-09-30","group_by":"payee","rows":[{"key":"Coop","id":0,"total":{"minor":2000,"currency":"EUR"}},{"key":"(no payee)","id":0,"total":{"minor":1000,"currency":"EUR"}}],"total":{"minor":3000,"currency":"EUR"}}
