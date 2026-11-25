@@ -258,7 +258,7 @@ func (m *Model) View() string {
 		return components.Modal(m.th, m.width, m.height, m.viewForm())
 	}
 	m.vp.SetContent(m.content())
-	return m.viewHeader() + "\n\n" + m.vp.View()
+	return lipgloss.PlaceHorizontal(m.width, lipgloss.Center, m.viewHeader()) + "\n\n" + m.vp.View()
 }
 
 var monthNames = [...]string{
@@ -292,20 +292,20 @@ func (m *Model) viewHeader() string {
 	return m.th.Header.Render(prev + " " + label + " · " + string(m.cycle) + " " + next)
 }
 
-// content lays the sections out in one or two columns.
+// content lays the sections out as a 2x2 grid (net worth | cash flow + runway, then alerts |
+// transactions) on wide terminals, and as a single column in reading order otherwise.
 func (m *Model) content() string {
-	var out string
-	if m.width >= twoColumnWidth {
-		colW := m.width/2 - 1
-		left := m.column(colW, m.sections[:3])
-		right := m.column(colW, m.sections[3:])
-		out = lipgloss.JoinHorizontal(lipgloss.Top,
-			lipgloss.NewStyle().Width(colW).Render(left), "  ",
-			lipgloss.NewStyle().Width(colW).Render(right))
-	} else {
-		out = m.column(m.width, m.sections)
+	nw, runway, flow, recent, alerts := m.sections[0], m.sections[1], m.sections[2], m.sections[3], m.sections[4]
+	if m.width < twoColumnWidth {
+		return m.column(m.width, []section{nw, flow, runway, alerts, recent})
 	}
-	return out
+	colW := m.width/2 - 1
+	row := func(l, r []section) string {
+		return lipgloss.JoinHorizontal(lipgloss.Top,
+			lipgloss.NewStyle().Width(colW).Render(m.column(colW, l)), "  ",
+			lipgloss.NewStyle().Width(colW).Render(m.column(colW, r)))
+	}
+	return row([]section{nw}, []section{flow, runway}) + "\n\n" + row([]section{alerts}, []section{recent})
 }
 
 func (m *Model) column(width int, secs []section) string {

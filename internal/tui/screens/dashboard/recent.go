@@ -76,7 +76,7 @@ func (s *recentSection) view(width int) string {
 	if !s.loaded {
 		return ""
 	}
-	out := s.th.Header.Render("Recent transactions") + "\n"
+	out := s.th.Header.Render("Last transactions") + "\n"
 	if s.err != nil {
 		return out + s.th.Muted.Render("n/a ("+s.err.Error()+")")
 	}
@@ -123,6 +123,9 @@ func (s *recentSection) table(width int) string {
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == table.HeaderRow {
 				return s.th.Header.Inherit(cell(cols[col]))
+			}
+			if col != len(cols)-1 { // only the amount carries the flow color
+				return lipgloss.NewStyle().Foreground(s.th.Tokens.Text).Inherit(cell(cols[col]))
 			}
 			return rows[row].Style.Inherit(cell(cols[col]))
 		}).
