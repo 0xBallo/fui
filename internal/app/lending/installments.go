@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/0xballo/fui/internal/app"
@@ -18,8 +17,8 @@ const InterestCategory = "Loan interest"
 // installmentDescription is the description of the pending transaction of a loan installment.
 func installmentDescription(name string) string { return name + " installment" }
 
-// PendingInstallment is one pending transaction to create for an installment.
-type PendingInstallment struct {
+// PlannedInstallment is one pending transaction to create for an installment.
+type PlannedInstallment struct {
 	Tx           domain.Transaction
 	LoanID       domain.LoanID
 	ScheduleFrom domain.Date // ValidFrom of the schedule version the installment belongs to
@@ -29,7 +28,7 @@ type PendingInstallment struct {
 // InstallmentsPlan is the plan to create the pending installment transactions.
 type InstallmentsPlan struct {
 	app.Plan
-	Pending []PendingInstallment
+	Pending []PlannedInstallment
 }
 
 // PlanInstallments plans one pending transaction on the debit account for every installment due
@@ -79,13 +78,13 @@ func (s *Service) PlanInstallments(ctx context.Context, enabled module.Set, ref,
 	return out, err
 }
 
-func (s *Service) pendingFor(ctx context.Context, r app.Repos, info Info, end domain.Date) ([]PendingInstallment, error) {
+func (s *Service) pendingFor(ctx context.Context, r app.Repos, info Info, end domain.Date) ([]PlannedInstallment, error) {
 	starts, err := versionStarts(ctx, r, info.Loan)
 	if err != nil {
 		return nil, err
 	}
 	desc := installmentDescription(info.Loan.Name)
-	var out []PendingInstallment
+	var out []PlannedInstallment
 	for i, from := range starts {
 		sched, err := r.Loans().ScheduleAt(ctx, info.Loan.ID, from)
 		if err != nil {
@@ -109,7 +108,7 @@ func (s *Service) pendingFor(ctx context.Context, r app.Repos, info Info, end do
 				}
 				continue
 			}
-			out = append(out, PendingInstallment{Tx: tx, LoanID: info.Loan.ID, ScheduleFrom: sched.ValidFrom, Due: inst.Due})
+			out = append(out, PlannedInstallment{Tx: tx, LoanID: info.Loan.ID, ScheduleFrom: sched.ValidFrom, Due: inst.Due})
 		}
 	}
 	return out, nil
@@ -217,36 +216,7 @@ func (s *Service) PlanConfirm(ctx context.Context, enabled module.Set, txID doma
 		if tx.Status != domain.StatusPending || tx.Amount.Sign() >= 0 {
 			return invalid("status", "transaction is not a pending payment")
 		}
-		ref, err := r.Loans().InstallmentOfTransaction(ctx, txID)
-		if errors.Is(err, domain.ErrNotFound) {
-			return invalid("transaction", "transaction is not a loan installment")
-		}
-		if err != nil {
-			return fmt.Errorf("installment of transaction %d: %w", txID, err)
-		}
-		infos, err := loanInfos(ctx, r)
-		if err != nil {
-			return err
-		}
-		i := slices.IndexFunc(infos, func(in Info) bool { return in.Loan.ID == ref.LoanID })
-		if i < 0 {
-			return fmt.Errorf("loan %d: %w", ref.LoanID, domain.ErrNotFound)
-		}
-		info := infos[i]
-		sched, err := r.Loans().ScheduleAt(ctx, ref.LoanID, ref.ScheduleFrom)
-		if err != nil {
-			return fmt.Errorf("schedule at %s: %w", ref.ScheduleFrom, err)
-		}
-		j := slices.IndexFunc(sched.Installments, func(in domain.Installment) bool { return in.Due == ref.Due })
-		if j < 0 {
-			return invalid("due_date", fmt.Sprintf("no installment due on %s", ref.Due))
-		}
-		inst := sched.Installments[j]
-		cat, err := interestCategory(ctx, r)
-		if err != nil {
-			return err
-		}
-		out, err = buildConfirm(info, tx, inst, sched.Rate, len(sched.Installments)-j, cat)
+		out, err = planConfirmTx(ctx, r, tx)
 		return err
 	})
 	return out, err
@@ -403,39 +373,7 @@ func proposeRate(loan domain.Loan, inst domain.Installment, current domain.Annua
 // (or the interest expense when the installment has no principal), stores the matching leg on
 // the liability account and the interest and fees expense, creating the category when missing.
 func (s *Service) ApplyConfirm(ctx context.Context, p ConfirmPlan) error {
-	return s.write(ctx, false, func(r app.Repos) error {
-		cat := p.Category
-		if cat.ID == 0 {
-			var err error
-			if cat, err = r.Categories().Insert(ctx, cat); err != nil {
-				return fmt.Errorf("create category: %w", err)
-			}
-		}
-		out, in, exp := p.Principal, p.In, p.Expense
-		if out.CategoryID == 0 && out.Kind == domain.KindInterest {
-			out.CategoryID = cat.ID
-		}
-		if !in.Amount.Currency().IsZero() {
-			g, err := r.Transfers().Insert(ctx, domain.TransferGroup{})
-			if err != nil {
-				return fmt.Errorf("create transfer: %w", err)
-			}
-			out.TransferGroupID, in.TransferGroupID = g.ID, g.ID
-			if _, err := r.Transactions().Insert(ctx, in); err != nil {
-				return fmt.Errorf("create principal leg: %w", err)
-			}
-		}
-		if err := r.Transactions().Update(ctx, out); err != nil {
-			return fmt.Errorf("book installment: %w", err)
-		}
-		if !exp.Amount.Currency().IsZero() {
-			exp.CategoryID = cat.ID
-			if _, err := r.Transactions().Insert(ctx, exp); err != nil {
-				return fmt.Errorf("create interest expense: %w", err)
-			}
-		}
-		return nil
-	})
+	return s.write(ctx, false, func(r app.Repos) error { return applyConfirm(ctx, r, p) })
 }
 
 // CatchUp creates the pending transactions of every installment due through today, so a command
