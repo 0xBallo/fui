@@ -218,7 +218,7 @@ func fuiSourceFrom(t tb, e env) importing.Source {
 	return fuiSource(t, buf.Bytes())
 }
 
-func secOpRec(kind fuiproto.SecurityOpKind, date, cash string) fuiproto.Record {
+func secOpRecAt(kind fuiproto.SecurityOpKind, date, cash string) fuiproto.Record {
 	return fuiproto.Record{Type: fuiproto.RecordTypeSecurityOp, SecurityOp: &fuiproto.SecurityOpRecord{
 		Account: "r1", Date: date, Kind: kind, Quantity: 1000000, UnitPrice: 100, CashTx: cash,
 		Security: fuiproto.SecurityMeta{Name: "World ETF", Ticker: "VWCE", Kind: fuiproto.SecurityKindETF, Currency: "EUR", QuantityScale: 6},
@@ -231,8 +231,8 @@ func TestUndoRemovesSecurityOps(t *testing.T) {
 	src := stream("fui", "", account("r1", "Broker", "EUR"),
 		txRec("r1", "buy", "2026-10-01", -100, "buy", kind(fuiproto.TransactionKindInvestment)),
 		txRec("r1", "div", "2026-10-02", 5, "dividend", kind(fuiproto.TransactionKindInvestment)),
-		secOpRec(fuiproto.SecurityOpKindBuy, "2026-10-01", "buy"),
-		secOpRec(fuiproto.SecurityOpKindDividend, "2026-10-02", "div"),
+		secOpRecAt(fuiproto.SecurityOpKindBuy, "2026-10-01", "buy"),
+		secOpRecAt(fuiproto.SecurityOpKindDividend, "2026-10-02", "div"),
 	)
 	res := must(e.svc.ApplyImport(context.Background(), e.plan(t, src, createAccounts, withModules(inv))))
 	if res.SecurityOps != 2 {
@@ -265,7 +265,7 @@ func TestUndoRefusesReconciledKeepsSecurityOps(t *testing.T) {
 	inv := must(module.Validate([]module.ID{module.Core, module.Investments}))
 	src := stream("fui", "", account("r1", "Broker", "EUR"),
 		txRec("r1", "buy", "2026-10-01", -100, "buy", kind(fuiproto.TransactionKindInvestment)),
-		secOpRec(fuiproto.SecurityOpKindBuy, "2026-10-01", "buy"),
+		secOpRecAt(fuiproto.SecurityOpKindBuy, "2026-10-01", "buy"),
 	)
 	res := must(e.svc.ApplyImport(context.Background(), e.plan(t, src, createAccounts, withModules(inv))))
 	tx := e.txs(t)[0]
