@@ -437,7 +437,8 @@ func TestStatusReadsOnlyWhatItNeeds(t *testing.T) {
 		})
 	}
 	s := mk(domain.BudgetCap)
-	set(t, s, budgeting.SetRequest{Name: "Food", Categories: []string{"Food"}, Amount: "100"})
+	no := false
+	set(t, s, budgeting.SetRequest{Name: "Food", Categories: []string{"Food"}, Amount: "100", Carry: &no})
 	old := e.spend(t, "2026-01-10", 100, e.food, domain.StatusBooked)
 	oldHome := e.spend(t, "2026-01-11", 100, e.home, domain.StatusBooked)
 	future := e.spend(t, "2026-04-10", 100, e.food, domain.StatusBooked)

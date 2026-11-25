@@ -99,15 +99,19 @@ func (s *Service) money(in string) (domain.Money, error) {
 	return m, nil
 }
 
-// SetRequest creates the budget Name or updates it. With Month ("YYYY-MM") only the amount of
-// that month is overridden; the budget must exist. Without it, a non-empty Categories/Tags
-// replaces the targets and a non-empty Amount the default amount. Nil Carry keeps the flag.
+// SetRequest creates the budget Name or updates it. With Month ("YYYY-MM") on an existing budget
+// only the amount of that month is overridden. A budget that does not exist is created; without
+// Categories/Tags its target is the category named Name. On an existing budget a non-empty
+// Categories/Tags replaces the targets and a non-empty Amount the default amount. Empty Period and
+// nil Warn, Over and Carry keep the stored value; new budgets default to monthly, 80/100 and carry on.
 type SetRequest struct {
 	Name       string
 	Categories []string
 	Tags       []string
 	Amount     string
 	Month      string
+	Period     string
+	Warn, Over *int
 	Carry      *bool
 }
 
@@ -133,10 +137,7 @@ func (s *Service) PlanSet(ctx context.Context, req SetRequest) (SetPlan, error) 
 		if i >= 0 {
 			b, op = all[i], app.OpUpdate
 		}
-		if req.Month != "" && i < 0 {
-			return &domain.Error{Code: domain.CodeNotFound, Message: fmt.Sprintf("budget %q does not exist", req.Name)}
-		}
-		if err := s.fill(ctx, r, &b, req); err != nil {
+		if err := s.fill(ctx, r, &b, req, i < 0); err != nil {
 			return err
 		}
 		if b, err = domain.NewBudget(b); err != nil {
@@ -159,8 +160,8 @@ func (s *Service) PlanSet(ctx context.Context, req SetRequest) (SetPlan, error) 
 	return out, err
 }
 
-// fill applies req to b.
-func (s *Service) fill(ctx context.Context, r app.Repos, b *domain.Budget, req SetRequest) error {
+// fill applies req to b; isNew is true when b is being created.
+func (s *Service) fill(ctx context.Context, r app.Repos, b *domain.Budget, req SetRequest, isNew bool) error {
 	var amount domain.Money
 	if req.Amount != "" {
 		var err error
@@ -168,39 +169,106 @@ func (s *Service) fill(ctx context.Context, r app.Repos, b *domain.Budget, req S
 			return err
 		}
 	}
-	if req.Month != "" {
-		p, err := s.month(req.Month)
-		if err != nil {
+	if req.Month != "" && req.Amount == "" {
+		return &domain.Error{
+			Code: domain.CodeMissingField, Message: "amount is required for a month override",
+			Details: map[string]any{"field": "amount"},
+		}
+	}
+	if isNew {
+		b.Carry = true
+	}
+	if req.Month == "" || isNew {
+		if err := s.fillBase(ctx, r, b, req, isNew); err != nil {
 			return err
 		}
-		if req.Amount == "" {
-			return &domain.Error{
-				Code: domain.CodeMissingField, Message: "amount is required for a month override",
-				Details: map[string]any{"field": "amount"},
-			}
+	}
+	if req.Month == "" {
+		if req.Amount != "" {
+			b.Amount = amount
 		}
-		ov := make(map[domain.MonthKey]domain.Money, len(b.Overrides)+1)
-		for k, v := range b.Overrides {
-			ov[k] = v
-		}
-		ov[domain.MonthKeyOf(p)] = amount
-		b.Overrides = ov
 		return nil
 	}
-	if req.Amount != "" {
+	p, err := s.month(req.Month)
+	if err != nil {
+		return err
+	}
+	if isNew {
 		b.Amount = amount
 	}
-	if len(req.Categories)+len(req.Tags) > 0 {
+	key, err := b.PeriodFor(p.From(), s.cfg.MonthStartDay)
+	if err != nil {
+		return err
+	}
+	ov := make(map[domain.MonthKey]domain.Money, len(b.Overrides)+1)
+	for k, v := range b.Overrides {
+		ov[k] = v
+	}
+	ov[domain.MonthKeyOf(key)] = amount
+	b.Overrides = ov
+	return nil
+}
+
+// fillBase applies the targets, period, thresholds and carry of req to b.
+func (s *Service) fillBase(ctx context.Context, r app.Repos, b *domain.Budget, req SetRequest, isNew bool) error {
+	switch {
+	case len(req.Categories)+len(req.Tags) > 0:
 		ts, err := targets(ctx, r, req.Categories, req.Tags)
 		if err != nil {
 			return err
 		}
 		b.Targets = ts
+	case isNew:
+		ts, err := namedTarget(ctx, r, b.Name)
+		if err != nil {
+			return err
+		}
+		b.Targets = ts
+	}
+	if req.Period != "" {
+		per, err := domain.ParseBudgetPeriod(req.Period)
+		if err != nil {
+			return err
+		}
+		b.Period = per
+	} else if isNew {
+		b.Period = domain.BudgetMonthly
+	}
+	if req.Warn != nil || req.Over != nil {
+		th := b.Thresholds
+		if th == (domain.BudgetThresholds{}) {
+			th = domain.DefaultBudgetThresholds
+		}
+		if req.Warn != nil {
+			th.Warn = *req.Warn
+		}
+		if req.Over != nil {
+			th.Over = *req.Over
+		}
+		b.Thresholds = th
 	}
 	if req.Carry != nil {
 		b.Carry = *req.Carry
 	}
 	return nil
+}
+
+// namedTarget targets the category whose name is exactly name (case-insensitive).
+func namedTarget(ctx context.Context, r app.Repos, name string) ([]domain.BudgetTarget, error) {
+	all, err := r.Categories().List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list categories: %w", err)
+	}
+	for _, c := range all {
+		if strings.EqualFold(c.Name, name) {
+			return []domain.BudgetTarget{{CategoryID: c.ID}}, nil
+		}
+	}
+	return nil, &domain.Error{
+		Code: domain.CodeNotFound,
+		Message: fmt.Sprintf("budget %q does not exist and no category has that name; pass --category NAME or --tag NAME",
+			name),
+	}
 }
 
 func targets(ctx context.Context, r app.Repos, cats, tags []string) ([]domain.BudgetTarget, error) {
@@ -353,7 +421,10 @@ func amountFields(f map[string]any, m domain.Money) {
 }
 
 func budgetFields(b domain.Budget) map[string]any {
-	f := map[string]any{"name": b.Name, "mode": string(b.Mode), "carry": b.Carry, "targets": b.Targets}
+	f := map[string]any{
+		"name": b.Name, "mode": string(b.Mode), "carry": b.Carry, "targets": b.Targets,
+		"period": string(b.Period), "warn": b.Thresholds.Warn, "over": b.Thresholds.Over,
+	}
 	amountFields(f, b.Amount)
 	return f
 }
@@ -367,22 +438,43 @@ type CopyPlan struct {
 	Moves   []domain.BudgetMove
 }
 
+// CopyRequest copies month From ("YYYY-MM"; empty = the month before Month) into Month (empty = current).
+type CopyRequest struct {
+	Month, From string
+}
+
 // PlanCopyPrevious plans copying the previous month ("YYYY-MM", empty = current) into it.
 func (s *Service) PlanCopyPrevious(ctx context.Context, monthIn string) (CopyPlan, error) {
+	return s.PlanCopy(ctx, CopyRequest{Month: monthIn})
+}
+
+// PlanCopy plans copying month req.From into req.Month. Yearly budgets are skipped: they have no
+// monthly amounts.
+func (s *Service) PlanCopy(ctx context.Context, req CopyRequest) (CopyPlan, error) {
 	if err := s.gate(); err != nil {
 		return CopyPlan{}, err
 	}
-	p, err := s.month(monthIn)
+	p, err := s.month(req.Month)
 	if err != nil {
 		return CopyPlan{}, err
 	}
-	prevEnd, err := p.From().AddDays(-1)
-	if err != nil {
-		return CopyPlan{}, err
+	var prev domain.Period
+	if req.From == "" {
+		prevEnd, err := p.From().AddDays(-1)
+		if err != nil {
+			return CopyPlan{}, err
+		}
+		if prev, err = domain.MonthPeriod(prevEnd, s.cfg.MonthStartDay); err != nil {
+			return CopyPlan{}, err
+		}
+	} else if prev, err = s.month(req.From); err != nil {
+		return CopyPlan{}, fmt.Errorf("from: %w", err)
 	}
-	prev, err := domain.MonthPeriod(prevEnd, s.cfg.MonthStartDay)
-	if err != nil {
-		return CopyPlan{}, err
+	if domain.MonthKeyOf(prev) == domain.MonthKeyOf(p) {
+		return CopyPlan{}, &domain.Error{
+			Code: domain.CodeInvalidValue, Message: "cannot copy a month onto itself",
+			Details: map[string]any{"field": "from", "value": req.From},
+		}
 	}
 	out := CopyPlan{Period: p}
 	err = s.store.Read(ctx, func(r app.Repos) error {
@@ -397,6 +489,9 @@ func (s *Service) PlanCopyPrevious(ctx context.Context, monthIn string) (CopyPla
 			}
 		}
 		for _, b := range all {
+			if b.Period == domain.BudgetYearly {
+				continue
+			}
 			if err := s.copyOne(&out, b, prev, moves); err != nil {
 				return err
 			}
