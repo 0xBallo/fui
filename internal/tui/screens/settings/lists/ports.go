@@ -63,6 +63,8 @@ type RecurrencesUseCases interface {
 	ApplyEdit(ctx context.Context, p recurring.RecurrencePlan) error
 	PlanRemove(ctx context.Context, enabled module.Set, id app.RecurrenceID) (recurring.RecurrencePlan, error)
 	ApplyRemove(ctx context.Context, p recurring.RecurrencePlan) error
+	PlanRun(ctx context.Context, enabled module.Set, req recurring.RunRequest) (recurring.RunPlan, error)
+	ApplyRun(ctx context.Context, p recurring.RunPlan) (int, error)
 	ListAccounts(ctx context.Context) ([]domain.Account, error)
 	ListCategories(ctx context.Context) ([]domain.Category, error)
 }
