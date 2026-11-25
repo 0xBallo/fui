@@ -112,7 +112,7 @@ Pairs were chosen to keep owned paths disjoint (§5).
 | G04 | TL | `feat/g04-tx-recur` | #70 | merged |
 | G05 | TL | `feat/g05-undo` | #73 | merged |
 | G06 | TL | `feat/g06-reports` | #72 | merged |
-| G07 | TL | `feat/g07-dump` | G07_PR | G07_STATUS |
+| G07 | TL | `feat/g07-dump` | #76 | merged |
 | G08 | TL | `feat/g08-invest` | #74 | merged |
 | G09 | TL | `feat/g09-insight-sim` | #75 | merged |
 | G10 | TL | `feat/g10-integration` | G10_PR | in review |

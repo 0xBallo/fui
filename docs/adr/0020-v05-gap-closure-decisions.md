@@ -22,8 +22,8 @@ A spec-vs-code audit found 51 gaps between the v0.2/v0.3 specifications and the 
 | P9 | Budget thresholds are per budget (`--warn`, `--over`, default 80/100); TUI progress bars keep fixed tiers | Alerts follow the user's thresholds, the bars stay readable and consistent |
 | P10 | Reconciliation keeps the bulk mode and adds per-transaction ticking | Spec: unticked transactions are shown; ticks allow partial statements |
 | P11 | One report filter set (`TxFilter`) plus `--group-by` and `--granularity`; saved reports keep them in `params` JSON | One filter vocabulary, no migration |
-| P12 | `reset --keep-settings` also keeps connector associations, re-linked by account name | Settings survive a reset |
-| P13 | `export --all` writes every entity plus config; `fui restore FILE.json` rebuilds the archive | Backups must be restorable from a portable dump |
+| P12 | `reset --keep-settings` also keeps connector associations, stored by account name (table `connector_ref_pending`) and re-linked at the next import | Settings survive a reset |
+| P13 | `export --all` writes `dump.json` with every table plus config; `fui restore FILE.json` rebuilds the archive (config only with `--with-config`) | Backups must be restorable from a portable dump |
 | P14 | Import preview shows warnings, new entities, transfer proposals, balance mismatches and records of disabled modules (`--accept-transfers`, `--enable-modules`) | Spec: the preview is complete before the write |
 | P15 | CLI accepts the spec examples as written (`loan event --rate --from`, `rule test "TEXT"`, `budget set` creating the budget, `forecast --horizon 12m`) | Documentation and behaviour must agree |
 | P16 | Period comparison accepts `YYYY-MM`, `YYYY-Qn`, `YYYY` and relative periods, the P11 filters, and can be saved; all net-worth reports use `NetWorthReport` | One definition of net worth |

@@ -73,7 +73,7 @@ modules.
 | `fui insights [--dismiss KEY\|--accept KEY]`, `fui report compare --a P --b P` | Automatic analyses and period comparison (module `analytics`) |
 | `fui simulate investment / pac / cashflow / save / list / compare / rm` | What-if scenarios; never write transactions; `cashflow` accepts `--account` (module `simulations`) |
 | `fui undo` | Revert the last undoable write: tx add/edit/rm, transfer, split, categorize, tag/untag, `rule apply`, recurring/loan confirm (also key `u` in the TUI); preview first |
-| `fui backup` / `fui restore FILE --yes` | Back up the archive, or restore from a backup or a `fui export --all` dump (`FILE.json`) |
+| `fui backup` / `fui restore FILE --yes [--with-config]` | Back up the archive, or restore from a backup (`.db`) or a dump (`dump.json` from `fui export --all`); `--with-config` also restores the config |
 | `fui reset [--keep-settings]` | Reset the archive to its initial state (a backup is taken first) |
 | `fui config get/set KEY [VALUE]` | Read or change configuration |
 | `fui skill show` / `fui skill install` | Print or install this skill document |
@@ -142,7 +142,7 @@ be reverted, `fui undo --yes` applies it. `fui import undo BATCH` reverts a whol
 Mortgage` ties it to its loan.
 
 **Restoring from a dump** — only on explicit request: `fui export --all --output ./dump` writes a
-full dump; `fui restore FILE.json --dry-run` previews restoring from a dump or backup, then
+full dump (`./dump/dump.json`); `fui restore ./dump/dump.json --dry-run` previews restoring from a dump or backup, then
 `--yes`. `fui reset --keep-settings` starts over but keeps the configuration.
 
 **Positions and what-ifs** — `fui position list --json` for holdings and unrealized gain,

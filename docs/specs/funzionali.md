@@ -130,7 +130,7 @@ Il binario si chiama `fui`: senza argomenti apre la TUI, con un sottocomando ese
 | `fui rule add / list / edit / rm / test / apply` | Gestisce le regole di categorizzazione; `rule test` accetta solo il testo (conto e importo sono facoltativi e, se mancano, le condizioni relative sono segnalate come non valutate) | `fui rule test "AMAZON"` |
 | `fui connector list / show / test` | Elenca i connettori installati, ne mostra i parametri e ne prova l'output senza importare | `fui connector test fineco-pdf estratto.pdf` |
 | `fui import` / `fui import detect` | Importa movimenti tramite un connettore; `detect` riconosce il formato di un file e, con `--save`, ne salva il profilo; `--accept-transfers` accetta le proposte di trasferimento, `--enable-modules` attiva i moduli richiesti dai record | `fui import ott.csv --connector csv --profile fineco --dry-run` |
-| `fui export` | Esporta transazioni in CSV, JSON o formato FUI, oppure con `--all` ogni entità più la configurazione | `fui export --format json --all` |
+| `fui export` | Esporta transazioni in CSV, JSON o formato FUI, oppure con `--all --output DIR` ogni tabella dell'archivio più la configurazione | `fui export --format json --all` |
 | `fui report run / save / list / rm` | Esegue un report predefinito o salvato, ne salva uno nuovo (filtri, `--group-by` e periodo relativo inclusi) | `fui report run categories --month 2026-10 --group-by tag` |
 | `fui insights` | Mostra le segnalazioni delle analisi automatiche; `--dismiss KEY` le nasconde, `--accept KEY` trasforma un abbonamento in ricorrenza | `fui insights --json` |
 | `fui report compare` | Confronta la spesa di due periodi (`YYYY-MM`, `YYYY-Qn`, `YYYY` o periodi relativi) con gli stessi filtri degli altri report; si salva con `fui report save NAME compare` | `fui report compare --a last-month --b this-month --by category` |
@@ -139,7 +139,7 @@ Il binario si chiama `fui`: senza argomenti apre la TUI, con un sottocomando ese
 | `fui simulate investment / pac / cashflow / save / list / rm / compare` | Calcola, salva, elimina e confronta scenari ipotetici senza toccare i dati; `cashflow --account` limita la simulazione a un conto | `fui simulate pac --monthly 200 --years 20 --rate 4,5` |
 | `fui reconcile` | Riconcilia un conto con un saldo noto, in blocco o spuntando le singole transazioni con `--tick` e `--untick` | `fui reconcile Fineco --balance 2340,18 --date 2026-10-31` |
 | `fui backup` | Copia l'archivio | `fui backup` |
-| `fui restore FILE` | Ripristina l'archivio da un backup o ricostruisce tutto da un dump `fui export --all` in JSON, dopo un backup | `fui restore dump.json` |
+| `fui restore FILE` | Ripristina l'archivio da un backup (`.db`) o ricostruisce tutto da un dump (`dump.json`), dopo un backup; `--with-config` scrive anche la configurazione contenuta nel dump (quella attuale resta come `config.toml.bak`) | `fui restore dump/dump.json --with-config --yes` |
 | `fui reset` | Azzera l'archivio e lo riporta allo stato iniziale, dopo un backup | `fui reset --keep-settings` |
 | `fui skill install / show` | Installa o mostra la skill per gli agenti AI | `fui skill install --target ~/.claude/skills` |
 | `fui help` | Mostra l'aiuto; con `--json` il riferimento completo per gli agenti | `fui help --json` |
@@ -181,7 +181,7 @@ Il binario si chiama `fui`: senza argomenti apre la TUI, con un sottocomando ese
 
 - Prima di azzerare, FUI crea sempre un backup, escluso dalla rotazione automatica finché l'utente non lo cancella.
 - In un terminale FUI chiede di digitare `reset` per confermare; senza terminale serve `--yes`.
-- Senza opzioni cancella tutto e ricrea le categorie predefinite; con `--keep-settings` conserva categorie, tag, regole, profili e associazioni dei connettori (queste ultime si ricollegano per nome del conto al primo import successivo), e cancella conti, transazioni, budget, ricorrenze, finanziamenti, investimenti e simulazioni.
+- Senza opzioni cancella tutto e ricrea le categorie predefinite; con `--keep-settings` conserva categorie, tag, regole, profili e associazioni dei connettori (queste ultime si ricollegano per nome del conto al primo import successivo, grazie a una tabella di associazioni in attesa), e cancella conti, transazioni, budget, ricorrenze, finanziamenti, investimenti e simulazioni.
 - Il file di configurazione non viene toccato.
 - Se l'archivio non esiste, `fui reset` si comporta come `fui init`.
 
@@ -352,7 +352,7 @@ Ogni import passa da un connettore: FUI ne include alcuni e permette di aggiunge
 
 **Annullamento** — `fui import undo <lotto>` rimuove tutte le transazioni di quel lotto, se non ancora riconciliate.
 
-**Export** — transazioni filtrate in CSV, JSON o formato FUI; dump completo con `fui export --all` in JSON o CSV (un file per entità): contiene ogni entità più la configurazione ed è reimportabile con `fui restore FILE.json`, che dopo un backup ricostruisce l'archivio in modo atomico, come il reset.
+**Export** — transazioni filtrate in CSV, JSON o formato FUI; dump completo con `fui export --all --output DIR`: `DIR/dump.json` contiene ogni tabella dell'archivio più la configurazione, accanto a un file per entità; `fui restore DIR/dump.json` lo reimporta, dopo un backup, ricostruendo l'archivio in modo atomico come il reset (la configurazione si ripristina solo con `--with-config`).
 
 **Riconciliazione** — l'utente indica il saldo dell'estratto a una data; FUI mostra la differenza e le transazioni non ancora spuntate. In modalità a blocco, quando la differenza è zero le transazioni fino a quella data passano allo stato riconciliata. In alternativa si spuntano le singole transazioni (`--tick` e `--untick`, `Spazio` nella TUI): se ci sono spunte, la chiusura richiede differenza zero sull'insieme spuntato e riconcilia solo quelle. Modificare in seguito una transazione riconciliata richiede una conferma esplicita.
 
@@ -686,7 +686,7 @@ Lo stack è deciso; le domande rimaste riguardano il perimetro e si possono chiu
 | Requisiti funzionali — TUI | `u` annulla; Report con `Invio`, `r` e modulo dei filtri; Import con `Tab`, `t`, `m`, `Ctrl+P`; Transazioni con `c` e `S` su righe in sospeso; Impostazioni con Ricorrenze `r` e Beni; Conti con `n`, `o`, `l`, `p` e `Spazio` per riconciliare; fasce fisse della barra Budget |
 | Formato FUI | Campi opzionali di `schedule`; `original` e `raw` conservati; record `error` e `balance` da OFX e CAMT.053; condizioni di regola su `category_hint` |
 | Budget | Periodo annuale con quota mensile suggerita, riporto attivo di default, soglie per budget |
-| Import, export e riconciliazione | Anteprima completa, riconciliazione per singola transazione, dump completo e ripristino |
+| Import, export e riconciliazione | Anteprima completa, riconciliazione per singola transazione, dump completo (`dump.json`) e ripristino con `restore FILE.json [--with-config]` |
 | Report e analytics | Filtri e raggruppamenti comuni, confronto periodi salvabile, orizzonte della previsione `Nd`/`Nw`/`Nm` |
 | Import, export e riconciliazione | Il rimborso titoli Widiba resta una transazione di natura investment |
 

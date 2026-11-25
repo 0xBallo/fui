@@ -165,6 +165,7 @@ Lo schema usa tabelle `STRICT`, chiavi esterne attive, importi come `INTEGER` in
 | `fx_rates` | Tassi manuali per valuta e data | `UNIQUE(currency, date)` |
 | `securities`, `security_prices`, `security_ops` | Titoli e cripto con scala della quantità e dei prezzi (`price_scale`, almeno 8 cifre per le cripto, immutabile, migrazione 0019), prezzi manuali, operazioni (v0.3, moduli investments e crypto) | `security_ops.cash_tx_id` collega il movimento di liquidità; `security_ops.import_batch_id` (migrazione 0016) permette di annullare un import |
 | `loans`, `loan_schedules`, `loan_installments`, `loan_events` | Finanziamenti con piani versionati (v0.2) | `UNIQUE(loan_id, valid_from)` sui piani |
+| `connector_ref_pending` | Associazioni connettore → nome del conto portate da `reset --keep-settings` (migrazione 0020) | `UNIQUE(connector, ref)` |
 | `reconcile_ticks` | Transazioni spuntate durante una riconciliazione in corso (migrazione 0018) | Chiave `(account_id, transaction_id)`, `ON DELETE CASCADE` |
 | `op_log` | Giornale dell'annullamento (migrazione 0015) | Vedi «Giornale di annullamento» |
 | `import_batches`, `connector_account_refs` | Lotti di import annullabili, associazioni `ref` → conto | `source_sha256` per riconoscere un file già importato |
@@ -382,11 +383,11 @@ Ogni use case di scrittura è una sola transazione SQL: o si applica tutto o nie
 
 **Ripristino** — `fui restore` controlla il file con `PRAGMA integrity_check` e la versione dello schema, fa un backup dell'archivio corrente, scrive in un file temporaneo nella stessa directory e lo sostituisce con un `rename` atomico. Il dump completo in JSON o CSV segue lo stesso percorso dopo aver ricostruito un archivio temporaneo.
 
-**Dump completo v2 e ripristino da dump** — `fui export --all --format json` scrive un dump v2: ogni entità dello schema più la configurazione, con gli importi come interi in unità minime. `fui restore FILE.json` riconosce il dump, fa un backup con motivo `restore`, ricostruisce l'archivio in un file temporaneo (migrazioni, poi inserimento di tutte le entità nello stesso ordine di dipendenza) e lo sostituisce con un `rename` atomico, come il reset.
+**Dump completo v2 e ripristino da dump** — `fui export --all --format json --output DIR` scrive `DIR/dump.json` (formato `fui-dump`, v2): ogni tabella dello schema più il `config.toml`, con gli importi come interi in unità minime, accanto a un file per entità. `fui restore FILE.json` riconosce il dump (altrimenti errore di input), fa un backup con motivo `restore`, ricostruisce l'archivio in un file temporaneo (migrazioni, poi inserimento di tutte le tabelle in ordine di dipendenza, con rimappatura degli id delle regole) e lo sostituisce con un `rename` atomico, come il reset; la configurazione incorporata si scrive solo con `--with-config`, conservando quella attuale in `config.toml.bak`.
 
 **Registrazione all'avvio** — prima di eseguire un comando, la radice della CLI (e la TUI all'apertura) chiama `app.Catchup` con le sorgenti `CatchupSource` delle ricorrenze e delle rate dei finanziamenti: ognuna crea le transazioni in sospeso scadute fino a oggi, è idempotente e non fa nulla se il suo modulo è spento. Il passaggio è saltato per `help`, `completion`, `__complete`, `init`, `reset`, `restore`, `backup`, `version` e quando l'archivio manca o è bloccato.
 
-**Reset** — `fui reset` costruisce l'archivio nuovo in un file temporaneo nella stessa directory: esegue le migrazioni, crea le categorie predefinite e, con `--keep-settings`, copia categorie, tag, regole, profili di import e associazioni dei connettori dall'archivio corrente (le associazioni si ricollegano per nome del conto al primo import successivo). Prima del `rename` atomico crea un backup con motivo `reset`, che la rotazione di `backup.keep` non cancella mai; resta finché l'utente non lo elimina. Il file di configurazione non viene toccato.
+**Reset** — `fui reset` costruisce l'archivio nuovo in un file temporaneo nella stessa directory: esegue le migrazioni, crea le categorie predefinite e, con `--keep-settings`, copia categorie, tag, regole, profili di import e associazioni dei connettori dall'archivio corrente (le associazioni, salvate per nome del conto nella tabella `connector_ref_pending` (migrazione 0020), si ricollegano al primo import successivo che trova un conto con quel nome). Prima del `rename` atomico crea un backup con motivo `reset`, che la rotazione di `backup.keep` non cancella mai; resta finché l'utente non lo elimina. Il file di configurazione non viene toccato.
 
 ## Configurazione, log e sicurezza
 
@@ -645,7 +646,7 @@ Le decisioni architetturali si registrano come ADR in `docs/adr/NNNN-titolo.md` 
 
 | Sezione | Modifica |
 | --- | --- |
-| Modello dati e schema SQLite | Migrazioni 0016–0019 (dati di import, periodo del budget, spunte di riconciliazione, tipo `wallet` e scala dei prezzi); giornale di annullamento con maschere di campi; scala dei prezzi |
+| Modello dati e schema SQLite | Migrazioni 0016–0020 (dati di import, periodo del budget, spunte di riconciliazione, tipo `wallet` e scala dei prezzi, associazioni dei connettori in attesa); giornale di annullamento con maschere di campi; scala dei prezzi |
 | Moduli | Esclusione dei conti `investment` e `wallet` quando il relativo modulo è spento |
 | Persistenza, migrazioni e backup | Registrazione all'avvio di ricorrenze e rate; dump completo v2 e `fui restore`; il reset conserva le associazioni dei connettori |
 | Decisioni tecniche e punti aperti | ADR 0020; ADR 0016 emendato |

@@ -28,7 +28,8 @@ All notable changes to FUI are listed here, newest first. The format follows
   `invest list/edit/rm/coupon`, `position list --by-security`, `asset show/edit/rm/value rm/link/unlink`.
 - Insights, simulations and connectors: insight FX handling, known recurrences, `simulate cashflow --account`,
   OFX and CAMT.053 `error` and `balance` records.
-- `fui export --all` full dump and `fui restore FILE.json` to rebuild the archive from it.
+- `fui export --all` full dump (`dump.json`, every table plus config) and `fui restore FILE.json [--with-config]` to
+  rebuild the archive from it.
 - ADR 0020 records the product decisions of the v0.5 gap closure.
 
 ### Changed
@@ -37,7 +38,7 @@ All notable changes to FUI are listed here, newest first. The format follows
   runway, reports and the Dashboard.
 - Budget carry-over is on by default for new budgets; existing budgets keep their setting.
 - Report `enter` drills into a row and `r` runs it; spending counts outflows only.
-- `reset --keep-settings` keeps connector associations too.
+- `reset --keep-settings` keeps connector associations too (re-linked by account name at the next import).
 - Functional and technical specifications updated (versions 1.4 and 1.5); ADR 0016 now covers every transaction
   write.
 - Widiba "Rimborso Titoli" stays a transaction of kind `investment`.
