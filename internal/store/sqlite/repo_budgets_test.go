@@ -77,6 +77,83 @@ func TestMigrateFromV4AddsBudgetTables(t *testing.T) {
 	}
 }
 
+// TestMigrateBudgetPeriodKeepsBudgets runs the budget-period migration on a populated archive
+// (budgets with carry 0/1, non-default thresholds, overrides and moves): every value survives and
+// existing budgets become monthly.
+func TestMigrateBudgetPeriodKeepsBudgets(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "data", "fui.db")
+	ctx := context.Background()
+
+	db := mustOpenRawDB(t, dbPath)
+	migrationsFS, err := fs.Sub(migrationFS, "migrations")
+	if err != nil {
+		t.Fatalf("fs.Sub: %v", err)
+	}
+	provider, err := goose.NewProvider(goose.DialectSQLite3, db, migrationsFS)
+	if err != nil {
+		t.Fatalf("goose.NewProvider: %v", err)
+	}
+	if _, err := provider.UpTo(ctx, budgetPeriodMigration-1); err != nil {
+		t.Fatalf("migrate to v%d: %v", budgetPeriodMigration-1, err)
+	}
+	mustExec(t, db, `INSERT INTO categories (id, name, kind) VALUES (1, 'Food', 'expense'), (2, 'Home', 'expense')`)
+	mustExec(t, db, `INSERT INTO budgets (id, name, mode, amount_minor, currency, carry, threshold_warn, threshold_over)
+		VALUES (1, 'Food', 'cap', 10000, 'EUR', 0, 80, 100), (2, 'Home', 'envelope', 20000, 'EUR', 1, 70, 120)`)
+	mustExec(t, db, `INSERT INTO budget_targets (budget_id, category_id) VALUES (1, 1), (2, 2)`)
+	mustExec(t, db, `INSERT INTO budget_amounts (budget_id, year, month, amount_minor) VALUES (2, 2026, 1, 5000)`)
+	mustExec(t, db, `INSERT INTO budget_moves (date, from_budget_id, to_budget_id, amount_minor, currency)
+		VALUES ('2026-01-05', NULL, 2, 100, 'EUR')`)
+	mustClose(t, db)
+
+	store, err := Open(ctx, Options{
+		Path: dbPath, BackupDir: filepath.Join(root, "data", "backups"), BackupKeep: 10,
+		Clock: clock.NewFixed(time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC)),
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	var got []domain.Budget
+	if err := store.WithTx(ctx, func(r app.Repos) (err error) {
+		got, err = r.Budgets().List(ctx)
+		return err
+	}); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("List = %d budgets, want 2", len(got))
+	}
+	food, home := got[0], got[1]
+	if food.Period != domain.BudgetMonthly || home.Period != domain.BudgetMonthly {
+		t.Errorf("periods = %q, %q; want both monthly", food.Period, home.Period)
+	}
+	if food.Carry || !home.Carry || food.Amount.Minor() != 10000 || home.Amount.Minor() != 20000 ||
+		food.Mode != domain.BudgetCap || home.Mode != domain.BudgetEnvelope {
+		t.Errorf("budgets changed by migration: %+v %+v", food, home)
+	}
+	if home.Thresholds != (domain.BudgetThresholds{Warn: 70, Over: 120}) ||
+		food.Thresholds != (domain.BudgetThresholds{Warn: 80, Over: 100}) {
+		t.Errorf("thresholds = %+v, %+v; want 80/100 and 70/120", food.Thresholds, home.Thresholds)
+	}
+	if o := home.Overrides[domain.MonthKey{Year: 2026, Month: 1}]; o.Minor() != 5000 {
+		t.Errorf("override = %v, want 5000", o)
+	}
+	var moves int
+	_ = store.writeDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM budget_moves WHERE to_budget_id = 2").Scan(&moves)
+	if moves != 1 {
+		t.Errorf("moves = %d, want 1", moves)
+	}
+	if _, err := store.writeDB.ExecContext(ctx, `UPDATE budgets SET period = 'week' WHERE id = 1`); err == nil {
+		t.Error("period 'week' accepted, want a CHECK violation")
+	}
+}
+
+// budgetPeriodMigration is the migration number of the budget period column; change it here if
+// the migration is renumbered.
+const budgetPeriodMigration = 16
+
 // TestResetWipesBudgets checks that Reset (with or without KeepSettings) never carries budgets,
 // their targets, overrides or envelope moves into the fresh archive.
 func TestResetWipesBudgets(t *testing.T) {

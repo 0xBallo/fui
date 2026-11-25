@@ -1,6 +1,6 @@
 -- name: InsertBudget :one
-INSERT INTO budgets (name, mode, amount_minor, currency, carry, threshold_warn, threshold_over)
-VALUES (@name, @mode, @amount_minor, @currency, @carry, @threshold_warn, @threshold_over)
+INSERT INTO budgets (name, mode, period, amount_minor, currency, carry, threshold_warn, threshold_over)
+VALUES (@name, @mode, @period, @amount_minor, @currency, @carry, @threshold_warn, @threshold_over)
 RETURNING *;
 
 -- name: UpdateBudget :execrows
@@ -8,6 +8,7 @@ UPDATE budgets
 SET
     name = @name,
     mode = @mode,
+    period = @period,
     amount_minor = @amount_minor,
     currency = @currency,
     carry = @carry,

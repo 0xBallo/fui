@@ -23,6 +23,10 @@ func toBudget(row gen.Budget, targets []gen.BudgetTarget, amounts []gen.BudgetAm
 	if err != nil {
 		return domain.Budget{}, fmt.Errorf("parse budget currency %q: %w", row.Currency, err)
 	}
+	period, err := domain.ParseBudgetPeriod(row.Period)
+	if err != nil {
+		return domain.Budget{}, fmt.Errorf("parse budget period %q: %w", row.Period, err)
+	}
 	amount, err := domain.NewMoney(row.AmountMinor, cur)
 	if err != nil {
 		return domain.Budget{}, fmt.Errorf("parse budget amount: %w", err)
@@ -31,6 +35,7 @@ func toBudget(row gen.Budget, targets []gen.BudgetTarget, amounts []gen.BudgetAm
 		ID:     domain.BudgetID(row.ID),
 		Name:   row.Name,
 		Mode:   mode,
+		Period: period,
 		Amount: amount,
 		Carry:  row.Carry != 0,
 		Thresholds: domain.BudgetThresholds{
@@ -56,6 +61,14 @@ func toBudget(row gen.Budget, targets []gen.BudgetTarget, amounts []gen.BudgetAm
 		b.Overrides[domain.MonthKey{Year: int(a.Year), Month: int(a.Month)}] = over
 	}
 	return b, nil
+}
+
+// budgetPeriodOrMonth maps the zero period to the monthly default.
+func budgetPeriodOrMonth(p domain.BudgetPeriod) string {
+	if p == "" {
+		return string(domain.BudgetMonthly)
+	}
+	return string(p)
 }
 
 func (r budgetRepo) checkTargets(ctx context.Context, targets []domain.BudgetTarget) error {
@@ -117,6 +130,7 @@ func (r budgetRepo) Insert(ctx context.Context, b domain.Budget) (domain.Budget,
 	row, err := r.repos.queries.InsertBudget(ctx, gen.InsertBudgetParams{
 		Name:          b.Name,
 		Mode:          string(b.Mode),
+		Period:        budgetPeriodOrMonth(b.Period),
 		AmountMinor:   b.Amount.Minor(),
 		Currency:      b.Amount.Currency().Code(),
 		Carry:         boolToInt64(b.Carry),
@@ -146,6 +160,7 @@ func (r budgetRepo) Update(ctx context.Context, b domain.Budget) error {
 		ID:            int64(b.ID),
 		Name:          b.Name,
 		Mode:          string(b.Mode),
+		Period:        budgetPeriodOrMonth(b.Period),
 		AmountMinor:   b.Amount.Minor(),
 		Currency:      b.Amount.Currency().Code(),
 		Carry:         boolToInt64(b.Carry),

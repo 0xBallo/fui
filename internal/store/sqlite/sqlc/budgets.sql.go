@@ -161,7 +161,7 @@ func (q *Queries) DeleteBudget(ctx context.Context, id int64) (int64, error) {
 }
 
 const getBudget = `-- name: GetBudget :one
-SELECT id, name, mode, amount_minor, currency, carry, threshold_warn, threshold_over, created_at, updated_at
+SELECT id, name, mode, amount_minor, currency, carry, threshold_warn, threshold_over, created_at, updated_at, period
 FROM budgets
 WHERE id = ?1
 `
@@ -180,19 +180,21 @@ func (q *Queries) GetBudget(ctx context.Context, id int64) (Budget, error) {
 		&i.ThresholdOver,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Period,
 	)
 	return i, err
 }
 
 const insertBudget = `-- name: InsertBudget :one
-INSERT INTO budgets (name, mode, amount_minor, currency, carry, threshold_warn, threshold_over)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-RETURNING id, name, mode, amount_minor, currency, carry, threshold_warn, threshold_over, created_at, updated_at
+INSERT INTO budgets (name, mode, period, amount_minor, currency, carry, threshold_warn, threshold_over)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+RETURNING id, name, mode, amount_minor, currency, carry, threshold_warn, threshold_over, created_at, updated_at, period
 `
 
 type InsertBudgetParams struct {
 	Name          string
 	Mode          string
+	Period        string
 	AmountMinor   int64
 	Currency      string
 	Carry         int64
@@ -204,6 +206,7 @@ func (q *Queries) InsertBudget(ctx context.Context, arg InsertBudgetParams) (Bud
 	row := q.db.QueryRowContext(ctx, insertBudget,
 		arg.Name,
 		arg.Mode,
+		arg.Period,
 		arg.AmountMinor,
 		arg.Currency,
 		arg.Carry,
@@ -222,6 +225,7 @@ func (q *Queries) InsertBudget(ctx context.Context, arg InsertBudgetParams) (Bud
 		&i.ThresholdOver,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Period,
 	)
 	return i, err
 }
@@ -360,7 +364,7 @@ func (q *Queries) ListBudgetTargets(ctx context.Context) ([]BudgetTarget, error)
 }
 
 const listBudgets = `-- name: ListBudgets :many
-SELECT id, name, mode, amount_minor, currency, carry, threshold_warn, threshold_over, created_at, updated_at
+SELECT id, name, mode, amount_minor, currency, carry, threshold_warn, threshold_over, created_at, updated_at, period
 FROM budgets
 ORDER BY id
 `
@@ -385,6 +389,7 @@ func (q *Queries) ListBudgets(ctx context.Context) ([]Budget, error) {
 			&i.ThresholdOver,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Period,
 		); err != nil {
 			return nil, err
 		}
@@ -439,18 +444,20 @@ UPDATE budgets
 SET
     name = ?1,
     mode = ?2,
-    amount_minor = ?3,
-    currency = ?4,
-    carry = ?5,
-    threshold_warn = ?6,
-    threshold_over = ?7,
+    period = ?3,
+    amount_minor = ?4,
+    currency = ?5,
+    carry = ?6,
+    threshold_warn = ?7,
+    threshold_over = ?8,
     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-WHERE id = ?8
+WHERE id = ?9
 `
 
 type UpdateBudgetParams struct {
 	Name          string
 	Mode          string
+	Period        string
 	AmountMinor   int64
 	Currency      string
 	Carry         int64
@@ -463,6 +470,7 @@ func (q *Queries) UpdateBudget(ctx context.Context, arg UpdateBudgetParams) (int
 	result, err := q.db.ExecContext(ctx, updateBudget,
 		arg.Name,
 		arg.Mode,
+		arg.Period,
 		arg.AmountMinor,
 		arg.Currency,
 		arg.Carry,
