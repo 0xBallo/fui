@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"math/big"
 	"slices"
 )
 
@@ -116,7 +117,7 @@ func NewBudget(b Budget) (Budget, error) {
 	if b.Thresholds == (BudgetThresholds{}) {
 		b.Thresholds = DefaultBudgetThresholds
 	}
-	if t := b.Thresholds; t.Warn < 1 || t.Warn > t.Over {
+	if t := b.Thresholds; t.Warn < 1 || t.Warn >= t.Over {
 		return Budget{}, invalidValue("thresholds", fmt.Sprintf("%d/%d", t.Warn, t.Over))
 	}
 	return b, nil
@@ -170,6 +171,81 @@ func BudgetPeriods(from Date, n, startDay int) ([]Period, error) {
 		}
 	}
 	return out, nil
+}
+
+// PeriodFor returns the period of b containing d: the budget month, or for a yearly budget the
+// budget year (January to December budget months, aligned with startDay) that d falls in.
+func (b Budget) PeriodFor(d Date, startDay int) (Period, error) {
+	mp, err := MonthPeriod(d, startDay)
+	if err != nil {
+		return Period{}, err
+	}
+	if b.Period != BudgetYearly {
+		return mp, nil
+	}
+	y := mp.From().Year()
+	janStart, err := monthStart(y, 1, startDay)
+	if err != nil {
+		return Period{}, err
+	}
+	decStart, err := monthStart(y, 12, startDay)
+	if err != nil {
+		return Period{}, err
+	}
+	jan, err := MonthPeriod(janStart, startDay)
+	if err != nil {
+		return Period{}, err
+	}
+	dec, err := MonthPeriod(decStart, startDay)
+	if err != nil {
+		return Period{}, err
+	}
+	return NewPeriod(jan.From(), dec.To())
+}
+
+// BudgetPeriodsFor returns n consecutive periods of b.Period, the first one containing from.
+func BudgetPeriodsFor(b Budget, from Date, n, startDay int) ([]Period, error) {
+	out := make([]Period, 0, n)
+	d := from
+	for range n {
+		p, err := b.PeriodFor(d, startDay)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+		if d, err = p.To().AddDays(1); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+// SuggestedMonthly spreads remaining over the budget months left in p, from the month containing
+// asOf to the end of p inclusive, rounded half away from zero. With no month left it is remaining.
+func SuggestedMonthly(remaining Money, p Period, asOf Date, startDay int) (Money, error) {
+	d := asOf
+	if d.Before(p.From()) {
+		d = p.From()
+	}
+	months := int64(0)
+	for !d.After(p.To()) {
+		mp, err := MonthPeriod(d, startDay)
+		if err != nil {
+			return Money{}, err
+		}
+		months++
+		if d, err = mp.To().AddDays(1); err != nil {
+			return Money{}, err
+		}
+	}
+	if months == 0 {
+		return remaining, nil
+	}
+	q, err := RoundDiv(big.NewInt(remaining.Minor()), big.NewInt(months))
+	if err != nil {
+		return Money{}, err
+	}
+	return NewMoney(q, remaining.Currency())
 }
 
 // BudgetMove moves money between envelopes; a zero From or To is the unassigned pool, so
