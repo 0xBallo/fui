@@ -1,0 +1,69 @@
+# G01 budget: create-on-set, multi-target, thresholds, carry, period, copy --from.
+exec fui init --preset expense --currency EUR
+exec fui account add Checking --kind checking --currency EUR --opening-balance 5000
+exec fui category add Spesa
+exec fui category add Affitto
+exec fui category add Utenze
+exec fui category add Viaggi
+exec fui tag add casa
+
+# Spec example: creates the budget Spesa (target = category Spesa) with a November override.
+exec fui budget set Spesa 400 --month 2026-11 --json
+stdout '"name":"Spesa"'
+stdout '"period":"month"'
+stdout '"carry":true'
+stdout '"warn_at":80'
+stdout '"over_at":100'
+
+# --dry-run changes nothing.
+exec fui budget set Affitto 700 --dry-run
+exec fui budget list --json
+! stdout 'Affitto'
+
+# No category with that name: not_found.
+! exec fui budget set Nessuna 100
+stderr 'not_found|Nessuna'
+
+# Multi-target cap with custom thresholds and no carry.
+exec fui budget set Casa 900 --category Affitto --category Utenze --tag casa --warn 70 --over 110 --no-carry --json
+stdout '"name":"Casa"'
+stdout '"carry":false'
+stdout '"warn_at":70'
+stdout '"over_at":110'
+! exec fui budget set Casa 900 --carry --no-carry
+stderr 'mutually exclusive'
+
+# Annual cap.
+exec fui budget set Vacanze 1200 --category Groceries --period year --json
+stdout '"period":"year"'
+
+exec fui add -- -50,00 Coop -c Spesa -a Checking --date 2026-11-05
+exec fui add -- -800,00 Padrone -c Affitto -a Checking --date 2026-11-02
+exec fui budget status --month 2026-11 --json
+stdout '"name":"Casa","period":"month","warn_at":70,"over_at":110'
+stdout '"state":"WARNING"'
+exec fui budget status --month 2026-11
+stdout 'WARNING'
+exec fui add -- -300,00 Padrone -c Utenze -a Checking --date 2026-11-03
+exec fui budget status --month 2026-11
+stdout 'OVER'
+exec fui budget status --month 2026-11 --csv
+stdout 'NAME,PERIOD'
+exec fui budget list
+stdout 'PERIOD'
+stdout 'year'
+
+# copy --from picks the given source month, not only the previous one.
+exec fui budget set Spesa 450 --month 2026-09
+exec fui budget copy --from 2026-09 --to 2026-12 --yes --json
+stdout '"updates":1'
+exec fui budget list --json
+stdout '"2026-12":45000'
+! exec fui budget copy --from 2026-12 --to 2026-12 --yes
+stderr 'itself'
+
+# Yearly envelope shows the suggested monthly quota.
+exec fui config set budget.mode envelope
+exec fui budget set Viaggi 1200 --category Viaggi --period year --json
+exec fui budget status --month 2026-11 --json
+stdout '"suggested_monthly"'

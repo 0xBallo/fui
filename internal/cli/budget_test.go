@@ -46,16 +46,21 @@ func TestBudgetSetListStatusCap(t *testing.T) {
 	}
 }
 
-func TestBudgetSetTagTarget(t *testing.T) {
-	deps := newBudgetTestDeps(t, domain.BudgetCap)
+func seedBudgetTag(t *testing.T, deps *Deps, name string) {
+	t.Helper()
 	ctx := context.Background()
-	plan, err := deps.Service.PlanAddTag(ctx, app.AddTagRequest{Name: "trip"})
+	plan, err := deps.Service.PlanAddTag(ctx, app.AddTagRequest{Name: name})
 	if err != nil {
 		t.Fatalf("PlanAddTag: %v", err)
 	}
 	if _, err := deps.Service.ApplyAddTag(ctx, plan); err != nil {
 		t.Fatalf("ApplyAddTag: %v", err)
 	}
+}
+
+func TestBudgetSetTagTarget(t *testing.T) {
+	deps := newBudgetTestDeps(t, domain.BudgetCap)
+	seedBudgetTag(t, deps, "trip")
 
 	buf := outBuf(deps)
 	mustRunCmd(t, deps, newBudgetSetCmd(deps), []string{"#trip", "300", "--json"})
@@ -146,14 +151,102 @@ func TestBudgetCopy(t *testing.T) {
 	}
 }
 
-func TestBudgetCopyFromMismatch(t *testing.T) {
+func TestBudgetCopyFrom(t *testing.T) {
 	deps := newBudgetTestDeps(t, domain.BudgetCap)
 	seedCategory(t, deps, "Groceries")
 	mustRunCmd(t, deps, newBudgetSetCmd(deps), []string{"Groceries", "350"})
-	mustRunCmd(t, deps, newBudgetSetCmd(deps), []string{"Groceries", "400", "--month", "2026-10"})
+	mustRunCmd(t, deps, newBudgetSetCmd(deps), []string{"Groceries", "400", "--month", "2026-09"})
 
-	if err := runCmd(deps, newBudgetCopyCmd(deps), []string{"--from", "2026-09", "--to", "2026-11", "--yes"}); err == nil {
-		t.Fatal("expected an error for a --from that is not the month right before --to")
+	// --from is honoured even when it is not the month right before --to.
+	buf := outBuf(deps)
+	mustRunCmd(t, deps, newBudgetCopyCmd(deps), []string{"--from", "2026-09", "--to", "2026-11", "--yes", "--json"})
+	if !strings.Contains(buf.String(), `"updates":1`) {
+		t.Fatalf("budget copy = %q, want updates:1", buf.String())
+	}
+	buf = outBuf(deps)
+	mustRunCmd(t, deps, newBudgetListCmd(deps), []string{"--json"})
+	if !strings.Contains(buf.String(), `"2026-11":40000`) {
+		t.Fatalf("budget list = %q, want the 2026-11 override", buf.String())
+	}
+
+	for _, args := range [][]string{
+		{"--from", "2026-11", "--to", "2026-11", "--yes"},
+		{"--from", "nope", "--yes"},
+	} {
+		if err := runCmd(deps, newBudgetCopyCmd(deps), args); err == nil {
+			t.Fatalf("copy %v: expected an error", args)
+		}
+	}
+}
+
+func TestBudgetSetFlags(t *testing.T) {
+	deps := newBudgetTestDeps(t, domain.BudgetCap)
+	for _, c := range []string{"Rent", "Utilities", "Fun", "Gifts"} {
+		seedCategory(t, deps, c)
+	}
+	seedBudgetTag(t, deps, "home")
+
+	tests := []struct {
+		name    string
+		args    []string
+		want    []string
+		wantErr string
+	}{
+		{
+			name: "multi target yearly thresholds no-carry",
+			args: []string{
+				"Home", "1200", "--category", "Rent", "--category", "Utilities", "--tag", "home",
+				"--period", "year", "--warn", "70", "--over", "110", "--no-carry", "--json",
+			},
+			want: []string{`"name":"Home"`, `"period":"year"`, `"warn_at":70`, `"over_at":110`, `"carry":false`},
+		},
+		{
+			name: "new budget defaults",
+			args: []string{"Fun", "500", "--json"},
+			want: []string{`"period":"month"`, `"warn_at":80`, `"over_at":100`, `"carry":true`},
+		},
+		{name: "carry and no-carry", args: []string{"Rent", "5", "--carry", "--no-carry"}, wantErr: "mutually exclusive"},
+		{name: "bad period", args: []string{"Rent", "5", "--period", "week"}, wantErr: "period"},
+		{name: "unknown category", args: []string{"Nothing", "5"}, wantErr: "Nothing"},
+		{name: "dry run", args: []string{"Gifts", "50", "--dry-run", "--json"}, want: []string{"changes"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := outBuf(deps)
+			err := runCmd(deps, newBudgetSetCmd(deps), tc.args)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, want containing %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("set %v: %v", tc.args, err)
+			}
+			for _, w := range tc.want {
+				if !strings.Contains(buf.String(), w) {
+					t.Fatalf("output %q missing %q", buf.String(), w)
+				}
+			}
+		})
+	}
+}
+
+func TestBudgetStatusYearlyEnvelope(t *testing.T) {
+	deps := newBudgetTestDeps(t, domain.BudgetEnvelope)
+	seedCategory(t, deps, "Holidays")
+	mustRunCmd(t, deps, newBudgetSetCmd(deps), []string{"Holidays", "1200", "--period", "year"})
+	mustRunCmd(t, deps, newBudgetAssignCmd(deps), []string{"Holidays", "1200", "--date", "2026-11-02"})
+
+	buf := outBuf(deps)
+	mustRunCmd(t, deps, newBudgetStatusCmd(deps), []string{"--month", "2026-11", "--json"})
+	if !strings.Contains(buf.String(), `"period":"year"`) || !strings.Contains(buf.String(), `"suggested_monthly":60000`) {
+		t.Fatalf("status = %q, want yearly with suggested_monthly 60000", buf.String())
+	}
+	buf = outBuf(deps)
+	mustRunCmd(t, deps, newBudgetStatusCmd(deps), []string{"--month", "2026-11", "--csv"})
+	if !strings.Contains(buf.String(), "SUGGESTED_MONTHLY") || !strings.Contains(buf.String(), "year") {
+		t.Fatalf("status csv = %q", buf.String())
 	}
 }
 
