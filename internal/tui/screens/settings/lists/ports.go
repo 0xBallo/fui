@@ -46,7 +46,7 @@ type RulesUseCases interface {
 	ApplyEdit(ctx context.Context, p rules.RulePlan) error
 	PlanRemove(ctx context.Context, name string) (rules.RulePlan, error)
 	ApplyRemove(ctx context.Context, p rules.RulePlan) error
-	Test(ctx context.Context, req rules.TestRequest) (domain.RuleApplyResult, error)
+	Test(ctx context.Context, req rules.TestRequest) (rules.TestResult, error)
 	ListAccounts(ctx context.Context) ([]domain.Account, error)
 	ListCategories(ctx context.Context) ([]domain.Category, error)
 	ListPayees(ctx context.Context) ([]domain.Payee, error)

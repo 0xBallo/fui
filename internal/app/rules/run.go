@@ -10,19 +10,29 @@ import (
 )
 
 // TestRequest asks which rules would act on a transaction. Give TxID to test an archived one, or
-// Text, Account and AmountMinor (signed) to test a hypothetical one. Nothing is written.
+// Text plus optionally Account and AmountMinor (signed) to test a hypothetical one. A missing
+// Account or AmountMinor is not an error: the rule conditions on it are not evaluated and the
+// result says so. An amount needs an account, whose currency it is in. Nothing is written.
 type TestRequest struct {
 	TxID        domain.TransactionID
 	Text        string
 	Account     string
-	AmountMinor int64
+	AmountMinor *int64
+}
+
+// TestResult is the outcome of Test.
+type TestResult struct {
+	domain.RuleApplyResult
+	// NotEvaluated lists the inputs ("account", "amount") the request left out, whose rule
+	// conditions were therefore skipped.
+	NotEvaluated []string
 }
 
 // Test runs the enabled rules over the described transaction.
-func (s *Service) Test(ctx context.Context, req TestRequest) (domain.RuleApplyResult, error) {
-	var out domain.RuleApplyResult
+func (s *Service) Test(ctx context.Context, req TestRequest) (TestResult, error) {
+	var out TestResult
 	err := s.store.Read(ctx, func(r app.Repos) error {
-		tx, err := testTx(ctx, r, req)
+		tx, skipped, err := testTx(ctx, r, req)
 		if err != nil {
 			return err
 		}
@@ -30,37 +40,71 @@ func (s *Service) Test(ctx context.Context, req TestRequest) (domain.RuleApplyRe
 		if err != nil {
 			return fmt.Errorf("list rules: %w", err)
 		}
-		out, err = domain.Apply(rules, tx, domain.NormalizeDescription(tx.Description))
-		return err
+		for i := range rules {
+			if slices.Contains(skipped, "account") {
+				rules[i].Conditions.AccountIDs = nil
+			}
+			if slices.Contains(skipped, "amount") {
+				rules[i].Conditions.Amount = domain.RuleAmountRange{}
+			}
+		}
+		res, err := domain.Apply(rules, tx, domain.NormalizeDescription(tx.Description))
+		if err != nil {
+			return err
+		}
+		out = TestResult{RuleApplyResult: res, NotEvaluated: skipped}
+		return nil
 	})
 	return out, err
 }
 
-func testTx(ctx context.Context, r app.Repos, req TestRequest) (domain.Transaction, error) {
+func testTx(ctx context.Context, r app.Repos, req TestRequest) (tx domain.Transaction, skipped []string, err error) {
 	if req.TxID != 0 {
 		tx, err := r.Transactions().Get(ctx, req.TxID)
 		if err != nil {
-			return tx, fmt.Errorf("get transaction %d: %w", req.TxID, err)
+			return tx, nil, fmt.Errorf("get transaction %d: %w", req.TxID, err)
 		}
-		return tx, nil
+		return tx, nil, nil
 	}
-	accts, err := r.Accounts().List(ctx)
+	if req.Account == "" && req.AmountMinor != nil {
+		return domain.Transaction{}, nil, &domain.Error{
+			Code: domain.CodeMissingField, Message: "an amount needs an account (its currency)",
+			Details: map[string]any{"field": "account"},
+		}
+	}
+	// Without an account the transaction carries a placeholder one; its conditions are skipped.
+	tx = domain.Transaction{AccountID: 1, Description: req.Text}
+	cur, err := domain.ParseCurrency("EUR")
 	if err != nil {
-		return domain.Transaction{}, fmt.Errorf("list accounts: %w", err)
+		return tx, nil, fmt.Errorf("placeholder currency: %w", err)
 	}
-	names := make([]string, len(accts))
-	for i, a := range accts {
-		names[i] = a.Name
+	if req.Account == "" {
+		skipped = append(skipped, "account")
+	} else {
+		accts, err := r.Accounts().List(ctx)
+		if err != nil {
+			return domain.Transaction{}, nil, fmt.Errorf("list accounts: %w", err)
+		}
+		names := make([]string, len(accts))
+		for i, a := range accts {
+			names[i] = a.Name
+		}
+		i, err := domain.Resolve(req.Account, names)
+		if err != nil {
+			return domain.Transaction{}, nil, fmt.Errorf("account: %w", err)
+		}
+		tx.AccountID, cur = accts[i].ID, accts[i].Currency
 	}
-	i, err := domain.Resolve(req.Account, names)
-	if err != nil {
-		return domain.Transaction{}, fmt.Errorf("account: %w", err)
+	var minor int64
+	if req.AmountMinor == nil {
+		skipped = append(skipped, "amount")
+	} else {
+		minor = *req.AmountMinor
 	}
-	m, err := domain.NewMoney(req.AmountMinor, accts[i].Currency)
-	if err != nil {
-		return domain.Transaction{}, fmt.Errorf("amount: %w", err)
+	if tx.Amount, err = domain.NewMoney(minor, cur); err != nil {
+		return domain.Transaction{}, nil, fmt.Errorf("amount: %w", err)
 	}
-	return domain.Transaction{AccountID: accts[i].ID, Amount: m, Description: req.Text}, nil
+	return tx, skipped, nil
 }
 
 // ApplyRequest applies the enabled rules to the transactions matching Filter. Rules only fill

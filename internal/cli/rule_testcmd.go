@@ -38,23 +38,25 @@ func runRuleTest(cmd *cobra.Command, deps *Deps, args []string) error {
 		return err
 	}
 	ctx := cmd.Context()
-	var res domain.RuleApplyResult
-	if lenientRuleTest(cmd, args) {
-		res, err = lenientRuleTestResult(cmd, deps, args[0])
-	} else {
-		var req rules.TestRequest
-		if req, err = ruleTestRequest(cmd, deps, args); err == nil {
-			res, err = deps.Rules.Test(ctx, req)
-		}
-	}
+	req, err := ruleTestRequest(cmd, deps, args)
 	if err != nil {
 		return err
+	}
+	res, err := deps.Rules.Test(ctx, req)
+	if err != nil {
+		return err
+	}
+	if len(res.NotEvaluated) > 0 {
+		if _, err := fmt.Fprintf(deps.Stderr, "note: %s conditions not evaluated (not given); the other conditions were checked\n",
+			strings.Join(res.NotEvaluated, "/")); err != nil {
+			return fmt.Errorf("write rule-test note: %w", err)
+		}
 	}
 	lookup, err := loadRuleLookup(ctx, deps)
 	if err != nil {
 		return err
 	}
-	return render.WriteRuleTestResult(deps.Stdout, rt.format, res, lookup)
+	return render.WriteRuleTestResult(deps.Stdout, rt.format, res.RuleApplyResult, lookup)
 }
 
 func ruleTestRequest(cmd *cobra.Command, deps *Deps, args []string) (rules.TestRequest, error) {
@@ -70,6 +72,13 @@ func ruleTestRequest(cmd *cobra.Command, deps *Deps, args []string) (rules.TestR
 	}
 	account, _ := cmd.Flags().GetString("account")
 	amount, _ := cmd.Flags().GetString("amount")
+	req := rules.TestRequest{Text: args[0], Account: account}
+	if amount == "" {
+		return req, nil
+	}
+	if account == "" {
+		return rules.TestRequest{}, missingFieldError("account")
+	}
 	cur, err := currencyOfAccount(cmd.Context(), deps, account)
 	if err != nil {
 		return rules.TestRequest{}, err
@@ -81,7 +90,9 @@ func ruleTestRequest(cmd *cobra.Command, deps *Deps, args []string) (rules.TestR
 	if m.Minor() == math.MinInt64 {
 		return rules.TestRequest{}, fmt.Errorf("amount: invalid value")
 	}
-	return rules.TestRequest{Text: args[0], Account: account, AmountMinor: m.Minor()}, nil
+	minor := m.Minor()
+	req.AmountMinor = &minor
+	return req, nil
 }
 
 func currencyOfAccount(ctx context.Context, deps *Deps, ref string) (domain.Currency, error) {
@@ -98,87 +109,4 @@ func currencyOfAccount(ctx context.Context, deps *Deps, ref string) (domain.Curr
 		return domain.Currency{}, fmt.Errorf("account: %w", err)
 	}
 	return page[i].Account.Currency, nil
-}
-
-// lenientRuleTest reports whether the hypothetical transaction lacks the account or the amount.
-// The rules engine needs both, so that case is evaluated here on text/payee conditions only.
-func lenientRuleTest(cmd *cobra.Command, args []string) bool {
-	if txID, _ := cmd.Flags().GetInt64("tx"); txID != 0 || len(args) != 1 {
-		return false
-	}
-	account, _ := cmd.Flags().GetString("account")
-	amount, _ := cmd.Flags().GetString("amount")
-	return account == "" || amount == ""
-}
-
-// lenientRuleTestResult applies the enabled rules with the conditions on the missing account
-// and/or amount switched off, and tells the user which ones were not evaluated.
-func lenientRuleTestResult(cmd *cobra.Command, deps *Deps, text string) (domain.RuleApplyResult, error) {
-	account, _ := cmd.Flags().GetString("account")
-	amount, _ := cmd.Flags().GetString("amount")
-	if account == "" && amount != "" {
-		return domain.RuleApplyResult{}, missingFieldError("account")
-	}
-	ctx := cmd.Context()
-	tx, err := lenientTx(ctx, deps, account, text)
-	if err != nil {
-		return domain.RuleApplyResult{}, err
-	}
-	all, err := deps.Rules.List(ctx)
-	if err != nil {
-		return domain.RuleApplyResult{}, err
-	}
-	var skipped []string
-	if account == "" {
-		skipped = append(skipped, "account")
-	}
-	if amount == "" {
-		skipped = append(skipped, "amount")
-	}
-	for i := range all {
-		if account == "" {
-			all[i].Conditions.AccountIDs = nil
-		}
-		if amount == "" {
-			all[i].Conditions.Amount = domain.RuleAmountRange{}
-		}
-	}
-	res, err := domain.Apply(all, tx, domain.NormalizeDescription(text))
-	if err != nil {
-		return domain.RuleApplyResult{}, err
-	}
-	if _, err := fmt.Fprintf(deps.Stderr, "note: %s conditions not evaluated (not given); only text/payee conditions were checked\n",
-		strings.Join(skipped, "/")); err != nil {
-		return domain.RuleApplyResult{}, fmt.Errorf("write rule-test note: %w", err)
-	}
-	return res, nil
-}
-
-// lenientTx builds the hypothetical transaction: the named account when given, else a
-// placeholder whose account conditions the caller has switched off. The amount is always zero.
-func lenientTx(ctx context.Context, deps *Deps, account, text string) (domain.Transaction, error) {
-	tx := domain.Transaction{AccountID: 1, Description: text}
-	cur, err := domain.ParseCurrency("EUR")
-	if err != nil {
-		return tx, fmt.Errorf("placeholder currency: %w", err)
-	}
-	if account != "" {
-		accts, err := deps.Service.ListAccounts(ctx, app.ListAccountsRequest{IncludeArchived: true})
-		if err != nil {
-			return tx, err
-		}
-		names := make([]string, len(accts))
-		for i := range accts {
-			names[i] = accts[i].Account.Name
-		}
-		i, err := domain.Resolve(account, names)
-		if err != nil {
-			return tx, fmt.Errorf("account: %w", err)
-		}
-		tx.AccountID, cur = accts[i].Account.ID, accts[i].Account.Currency
-	}
-	if tx.Amount, err = domain.NewMoney(0, cur); err != nil {
-		return tx, fmt.Errorf("amount: %w", err)
-	}
-	return tx, nil
 }

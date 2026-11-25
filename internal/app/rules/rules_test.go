@@ -3,6 +3,7 @@ package rules_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -195,7 +196,8 @@ func TestTest(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	got, err := e.svc.Test(ctx, rules.TestRequest{Text: "Bar Roma", Account: "main", AmountMinor: -250})
+	amt := int64(-250)
+	got, err := e.svc.Test(ctx, rules.TestRequest{Text: "Bar Roma", Account: "main", AmountMinor: &amt})
 	if err != nil || got.CategoryID != e.food.ID || got.CategoryRule != "coffee" {
 		t.Fatalf("Test text = %+v, %v", got, err)
 	}
@@ -209,6 +211,18 @@ func TestTest(t *testing.T) {
 	}
 	if _, err := e.svc.Test(ctx, rules.TestRequest{Text: "x", Account: "zzz"}); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("Test unknown account: %v", err)
+	}
+	// Account and amount are optional: their conditions are skipped and reported.
+	got, err = e.svc.Test(ctx, rules.TestRequest{Text: "Bar Roma"})
+	if err != nil || got.CategoryRule != "coffee" || !slices.Equal(got.NotEvaluated, []string{"account", "amount"}) {
+		t.Fatalf("Test text only = %+v, %v", got, err)
+	}
+	got, err = e.svc.Test(ctx, rules.TestRequest{Text: "Bar Roma", Account: "main"})
+	if err != nil || !slices.Equal(got.NotEvaluated, []string{"amount"}) {
+		t.Fatalf("Test without amount = %+v, %v", got, err)
+	}
+	if _, err := e.svc.Test(ctx, rules.TestRequest{Text: "x", AmountMinor: &amt}); !errors.Is(err, domain.ErrMissingField) {
+		t.Fatalf("Test amount without account: %v", err)
 	}
 }
 
@@ -305,5 +319,32 @@ func TestHintConditionsCarriedThroughAddEdit(t *testing.T) {
 	}
 	if c := list[0].Conditions; c.HintContains != "" || c.HintEquals != "transport" {
 		t.Fatalf("edited hint conditions = %+v", c)
+	}
+}
+
+func TestTestSkipsMissingInputs(t *testing.T) {
+	e := newEnv(t)
+	e.add(t, rules.AddRequest{
+		Name: "outflow-main", Priority: 1,
+		Conditions: rules.ConditionsSpec{DescriptionContains: "bar", Sign: "Outflow", Accounts: []string{"main"}},
+		Actions:    rules.ActionsSpec{Category: "food"},
+	})
+	ctx := context.Background()
+	inflow := int64(500)
+
+	// An inflow on the account does not match the outflow-only rule.
+	got, err := e.svc.Test(ctx, rules.TestRequest{Text: "Bar Roma", Account: "main", AmountMinor: &inflow})
+	if err != nil || got.CategoryRule != "" || len(got.NotEvaluated) != 0 {
+		t.Fatalf("inflow = %+v, %v", got, err)
+	}
+	// Leaving the amount out skips the sign condition, so the rule matches.
+	got, err = e.svc.Test(ctx, rules.TestRequest{Text: "Bar Roma", Account: "main"})
+	if err != nil || got.CategoryRule != "outflow-main" || !slices.Equal(got.NotEvaluated, []string{"amount"}) {
+		t.Fatalf("no amount = %+v, %v", got, err)
+	}
+	// Leaving the account out skips the account condition too.
+	got, err = e.svc.Test(ctx, rules.TestRequest{Text: "Bar Roma"})
+	if err != nil || got.CategoryRule != "outflow-main" || !slices.Equal(got.NotEvaluated, []string{"account", "amount"}) {
+		t.Fatalf("text only = %+v, %v", got, err)
 	}
 }
