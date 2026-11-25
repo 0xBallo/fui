@@ -40,6 +40,13 @@ type Screen interface {
 	InputActive() bool
 }
 
+// Targeted is implemented by the result message of an async command so the root router can
+// deliver it to the screen that started it, even when the user has switched to another tab since.
+// Messages without it (keys, window size) go to the active screen only.
+type Targeted interface {
+	ScreenID() ID
+}
+
 // ErrorMsg propagates an operational failure to be surfaced on the global status bar.
 type ErrorMsg struct {
 	Err error

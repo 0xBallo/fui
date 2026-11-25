@@ -110,6 +110,9 @@ type Model struct {
 	tagNotice    string
 
 	categorizeField components.Autocomplete
+
+	pending       PendingActions
+	pendingTarget domain.TransactionID
 }
 
 var _ screens.Screen = (*Model)(nil)
@@ -140,7 +143,12 @@ func (m *Model) SetSize(w, h int) {
 func (m *Model) Title() string { return "Transactions" }
 
 // KeyMap exposes the bindings for the global help view.
-func (m *Model) KeyMap() []key.Binding { return m.km.Bindings() }
+func (m *Model) KeyMap() []key.Binding {
+	if m.pending == nil {
+		return m.km.Bindings()
+	}
+	return append(m.km.Bindings(), m.km.ConfirmPending, m.km.SkipPending)
+}
 
 // InputActive reports whether a form, the filter panel, the quick search box, or the bulk
 // categorize field is currently capturing keystrokes.
@@ -167,6 +175,16 @@ type loadedMsg struct {
 
 // moreMsg carries one more page, appended to the already loaded window.
 type moreMsg struct{ page app.TxPage }
+
+// ScreenID routes each async result of this screen to its tab even when another one is active.
+func (loadedMsg) ScreenID() screens.ID        { return screens.TabTransactions }
+func (moreMsg) ScreenID() screens.ID          { return screens.TabTransactions }
+func (editTargetMsg) ScreenID() screens.ID    { return screens.TabTransactions }
+func (needReconcileMsg) ScreenID() screens.ID { return screens.TabTransactions }
+func (debounceMsg) ScreenID() screens.ID      { return screens.TabTransactions }
+func (searchResultMsg) ScreenID() screens.ID  { return screens.TabTransactions }
+func (splitLoadedMsg) ScreenID() screens.ID   { return screens.TabTransactions }
+func (totalsMsg) ScreenID() screens.ID        { return screens.TabTransactions }
 
 func (m *Model) load() tea.Cmd {
 	uc, req := m.uc, m.req
@@ -208,6 +226,10 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	case loadedMsg:
 		m.applyLoaded(msg)
 		return m, nil
+	case pendingDoneMsg:
+		m.applyLoaded(msg.loaded)
+		notice := msg.notice
+		return m, func() tea.Msg { return screens.StatusMsg{Text: notice} }
 	case moreMsg:
 		m.loadingMore = false
 		m.items = append(m.items, msg.page.Items...)
@@ -278,6 +300,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 func (m *Model) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	if handled, cmd := m.handleNavKey(msg); handled {
 		return m, cmd
+	}
+	if m.handlePendingKey(msg) {
+		return m, nil
 	}
 	switch {
 	case key.Matches(msg, m.km.Add):
@@ -393,6 +418,8 @@ func (m *Model) handleConfirmKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 			return m, m.submitEdit(true)
 		case confirmCategorizeReconciled:
 			return m, m.submitCategorize(true)
+		case confirmPendingConfirm, confirmPendingSkip:
+			return m, m.submitPending(purpose)
 		case confirmNone:
 			return m, nil
 		}

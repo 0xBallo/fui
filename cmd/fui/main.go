@@ -251,6 +251,9 @@ func tuiConfig(cfg *config.Config, deps *cli.Deps, store *sqlite.Store, clk app.
 			})
 		}},
 		AlertRecurring: recurrenceAlerts{svc: deps.Recurring, modules: modules},
+		Pending: pendingActions{
+			txs: deps.Service, recurring: deps.Recurring, loans: deps.Loans, modules: modules,
+		},
 		Budget: budgetUseCases{build: func() *budgeting.Service {
 			return budgeting.New(store, clk, budgeting.Config{
 				Locale: loc, BaseCurrency: base, MonthStartDay: cfg.MonthStartDay,

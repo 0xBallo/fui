@@ -24,6 +24,11 @@ type KeyMap struct {
 	PrevChip    key.Binding
 	NextChip    key.Binding
 	RemoveChip  key.Binding
+	// ConfirmPending and SkipPending act on a pending row. ConfirmPending shares "c" with
+	// Categorize, which keeps it on every other row, so both stay out of Bindings (no false
+	// collision) and are added to the help only when the PendingActions port is wired.
+	ConfirmPending key.Binding
+	SkipPending    key.Binding
 	// PickDate opens the date picker on a focused From/To filter field. It shares ctrl+d with
 	// PageDown, which is a list-mode key, so it is left out of Bindings to avoid a false collision.
 	PickDate key.Binding
@@ -49,6 +54,9 @@ func DefaultKeyMap() KeyMap {
 		Categorize:  bind("c", "bulk categorize", "c"),
 		ClearFilter: bind("ctrl+r", "reset filter", "ctrl+r"),
 		PickDate:    bind("ctrl+d", "pick date", "ctrl+d"),
+
+		ConfirmPending: bind("c", "confirm pending", "c"),
+		SkipPending:    bind("S", "skip pending", "S"),
 	}
 	km.PrevChip, km.NextChip, km.RemoveChip = chipKeyBindings()
 	return km
