@@ -46,11 +46,15 @@ func ruleConditionsFromFlags(cmd flagReader, deps *Deps) (rules.ConditionsSpec, 
 	}
 	contains, _ := cmd.GetString("contains")
 	equals, _ := cmd.GetString("equals")
+	hintContains, _ := cmd.GetString("hint-contains")
+	hintEquals, _ := cmd.GetString("hint-equals")
 	sign, _ := cmd.GetString("sign")
 	accounts, _ := cmd.GetStringArray("account")
 	return rules.ConditionsSpec{
 		DescriptionContains: contains,
 		DescriptionEquals:   equals,
+		HintContains:        hintContains,
+		HintEquals:          hintEquals,
 		MinAbsMinor:         minAbs,
 		MaxAbsMinor:         maxAbs,
 		Sign:                sign,

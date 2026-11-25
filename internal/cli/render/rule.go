@@ -55,6 +55,8 @@ type RuleDTO struct {
 type RuleCondDTO struct {
 	DescriptionContains string   `json:"description_contains,omitempty"`
 	DescriptionEquals   string   `json:"description_equals,omitempty"`
+	HintContains        string   `json:"hint_contains,omitempty"`
+	HintEquals          string   `json:"hint_equals,omitempty"`
 	MinAbsMinor         *int64   `json:"min_abs_minor,omitempty"`
 	MaxAbsMinor         *int64   `json:"max_abs_minor,omitempty"`
 	Sign                string   `json:"sign,omitempty"`
@@ -80,6 +82,8 @@ func ruleDTO(r domain.Rule, lookup RuleLookup) RuleDTO {
 		Conditions: RuleCondDTO{
 			DescriptionContains: r.Conditions.DescriptionContains,
 			DescriptionEquals:   r.Conditions.DescriptionEquals,
+			HintContains:        r.Conditions.HintContains,
+			HintEquals:          r.Conditions.HintEquals,
 			MinAbsMinor:         r.Conditions.Amount.MinAbsMinor,
 			MaxAbsMinor:         r.Conditions.Amount.MaxAbsMinor,
 			Sign:                string(r.Conditions.Amount.Sign),
@@ -131,6 +135,12 @@ func ruleConditionsText(r domain.Rule, lookup RuleLookup) string {
 	}
 	if r.Conditions.DescriptionEquals != "" {
 		parts = append(parts, "equals="+r.Conditions.DescriptionEquals)
+	}
+	if r.Conditions.HintContains != "" {
+		parts = append(parts, "hint-contains="+r.Conditions.HintContains)
+	}
+	if r.Conditions.HintEquals != "" {
+		parts = append(parts, "hint-equals="+r.Conditions.HintEquals)
 	}
 	if r.Conditions.Amount.MinAbsMinor != nil {
 		parts = append(parts, fmt.Sprintf("min=%d", *r.Conditions.Amount.MinAbsMinor))
