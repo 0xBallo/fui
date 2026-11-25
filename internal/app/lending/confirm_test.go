@@ -3,6 +3,7 @@ package lending_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -209,6 +210,89 @@ func TestConfirmPending(t *testing.T) {
 		}
 		if e.get(t, inst.ID).Status != domain.StatusPending || e.get(t, rec.ID).Status != domain.StatusPending {
 			t.Error("a transaction was written despite the error")
+		}
+	})
+}
+
+func (e env) allTx(t tb) []domain.Transaction {
+	t.Helper()
+	var out []domain.Transaction
+	err := e.store.Read(context.Background(), func(r app.Repos) (err error) {
+		f, err := domain.NewTxFilter(domain.TxFilterSpec{})
+		if err != nil {
+			return err
+		}
+		out, err = r.Transactions().List(context.Background(), f, nil, 0)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func TestConfirmUndo(t *testing.T) {
+	ctx := context.Background()
+	setup := func(t *testing.T) (env, *app.Service, domain.Transaction) {
+		e := newEnv(t)
+		e.add(t, addReq())
+		e.generate(t, "2026-02-01")
+		clk := clock.NewFixed(date("2026-01-15").In(time.UTC))
+		return e, app.New(e.store, clk, e.backup, app.Config{}), e.pending(t)[0]
+	}
+	undo := func(t *testing.T, a *app.Service) error {
+		t.Helper()
+		p, err := a.PlanUndo(ctx)
+		if err != nil {
+			return err
+		}
+		return a.ApplyUndo(ctx, p)
+	}
+
+	t.Run("restores installment and confirms again", func(t *testing.T) {
+		e, a, tx := setup(t)
+		beforeTx := e.allTx(t)
+		e.confirm(t, tx)
+		if len(e.allTx(t)) <= len(beforeTx) {
+			t.Fatal("confirm created no rows")
+		}
+		if err := undo(t, a); err != nil {
+			t.Fatalf("undo: %v", err)
+		}
+		if got := e.allTx(t); !reflect.DeepEqual(beforeTx, got) {
+			t.Fatalf("after undo:\n got %+v\nwant %+v", got, beforeTx)
+		}
+		err := e.store.Read(ctx, func(r app.Repos) error {
+			_, err := r.Loans().InstallmentOfTransaction(ctx, tx.ID)
+			return err
+		})
+		if err != nil {
+			t.Fatalf("installment link lost: %v", err)
+		}
+		e.confirm(t, tx)
+		if got := e.get(t, tx.ID); got.Status != domain.StatusBooked || got.Kind != domain.KindTransfer {
+			t.Fatalf("second confirm: %+v", got)
+		}
+	})
+	t.Run("reconciled refuses", func(t *testing.T) {
+		e, a, tx := setup(t)
+		e.confirm(t, tx)
+		rec := e.get(t, tx.ID)
+		rec.Status = domain.StatusReconciled
+		if err := e.store.WithTx(ctx, func(r app.Repos) error { return r.Transactions().Update(ctx, rec) }); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := a.PlanUndo(ctx); !errors.Is(err, domain.ErrReconciled) {
+			t.Fatalf("err = %v, want reconciled", err)
+		}
+	})
+	t.Run("importer path does not journal", func(t *testing.T) {
+		e, a, tx := setup(t)
+		if _, err := e.confirmWithin(tx.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := a.PlanUndo(ctx); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("err = %v, want not found", err)
 		}
 	})
 }
