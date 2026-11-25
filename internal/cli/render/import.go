@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/0xballo/fui/internal/app"
@@ -74,7 +75,36 @@ type ImportPlanDTO struct {
 	Errors          []RowErrorDTO           `json:"errors,omitempty"`
 	Transfers       []TransferProposalDTO   `json:"transfers,omitempty"`
 	Discrepancies   []BalanceDiscrepancyDTO `json:"discrepancies,omitempty"`
+	NewPayees       []string                `json:"new_payees,omitempty"`
+	NewTags         []string                `json:"new_tags,omitempty"`
+	Warnings        []RowWarningDTO         `json:"warnings,omitempty"`
+	BalanceMismatch []BalanceMismatchDTO    `json:"balance_mismatches,omitempty"`
+	ModuleRecords   []ModuleRecordsDTO      `json:"module_records,omitempty"`
 	Bulk            bool                    `json:"bulk"`
+}
+
+// RowWarningDTO is the --json shape of a non-fatal warning tied to a source line.
+type RowWarningDTO struct {
+	Line    int    `json:"line"`
+	Message string `json:"message"`
+}
+
+// BalanceMismatchDTO is the --json shape of a stated balance the computed one contradicts.
+type BalanceMismatchDTO struct {
+	AccountRef string `json:"account_ref"`
+	AccountID  int64  `json:"account_id"`
+	Date       string `json:"date"`
+	Expected   int64  `json:"expected"`
+	Computed   int64  `json:"computed"`
+	Suggest    string `json:"suggest,omitempty"`
+}
+
+// ModuleRecordsDTO is the --json shape of the records of one module that is not enabled.
+type ModuleRecordsDTO struct {
+	Module string   `json:"module"`
+	Count  int      `json:"count"`
+	Kinds  []string `json:"kinds,omitempty"`
+	Lines  []int    `json:"lines,omitempty"`
 }
 
 func importPlanDTO(p importing.ImportPlan) ImportPlanDTO {
@@ -110,6 +140,25 @@ func importPlanDTO(p importing.ImportPlan) ImportPlanDTO {
 	for _, d := range p.Discrepancies {
 		out.Discrepancies = append(out.Discrepancies,
 			BalanceDiscrepancyDTO{AccountRef: d.AccountRef, Line: d.Line, Date: d.Date.String(), Expected: d.Expected, Actual: d.Actual})
+	}
+	for _, p := range p.NewPayees {
+		out.NewPayees = append(out.NewPayees, p.Name)
+	}
+	for _, t := range p.NewTags {
+		out.NewTags = append(out.NewTags, t.Name)
+	}
+	for _, w := range p.Warnings {
+		out.Warnings = append(out.Warnings, RowWarningDTO{Line: w.Line, Message: w.Message})
+	}
+	for _, m := range p.BalanceMismatches {
+		out.BalanceMismatch = append(out.BalanceMismatch, BalanceMismatchDTO{
+			AccountRef: m.AccountRef, AccountID: int64(m.AccountID), Date: m.Date.String(),
+			Expected: m.Expected, Computed: m.Computed, Suggest: m.Suggest,
+		})
+	}
+	for _, m := range p.ModuleRecords {
+		out.ModuleRecords = append(out.ModuleRecords,
+			ModuleRecordsDTO{Module: string(m.Module), Count: m.Count, Kinds: m.Kinds, Lines: m.Lines})
 	}
 	return out
 }
@@ -148,14 +197,77 @@ func WriteImportPlan(w io.Writer, f Format, p importing.ImportPlan) error {
 	if err != nil {
 		return err
 	}
-	for _, u := range p.Unmapped {
-		if _, werr := fmt.Fprintf(w, "unmapped: %s (%s, %s)\n", u.Ref, u.Name, u.Currency); werr != nil {
-			return fmt.Errorf("write unmapped ref: %w", werr)
-		}
+	if err := writeImportDetails(w, p); err != nil {
+		return err
 	}
 	if p.Bulk {
 		if _, werr := fmt.Fprintln(w, "This is a bulk change: it needs --yes or a confirmation."); werr != nil {
 			return fmt.Errorf("write plan note: %w", werr)
+		}
+	}
+	return nil
+}
+
+// importDetailLines lists what the user should review before confirming: one line per item,
+// grouped by kind and prefixed by it so that the output stays greppable.
+func importDetailLines(p importing.ImportPlan) []string {
+	var l []string
+	for _, u := range p.Unmapped {
+		l = append(l, fmt.Sprintf("unmapped: %s (%s, %s)", u.Ref, u.Name, u.Currency))
+	}
+	for _, x := range p.Warnings {
+		l = append(l, fmt.Sprintf("warning: line %d: %s", x.Line, x.Message))
+	}
+	for _, c := range p.NewCategories {
+		l = append(l, "new category: "+c.Name)
+	}
+	for _, t := range p.NewTags {
+		l = append(l, "new tag: "+t.Name)
+	}
+	for _, x := range p.NewPayees {
+		l = append(l, "new payee: "+x.Name)
+	}
+	for _, e := range p.Errors {
+		l = append(l, fmt.Sprintf("error: line %d: %s", e.Line, e.Message))
+	}
+	for _, d := range p.Discrepancies {
+		l = append(l, fmt.Sprintf("discrepancy: line %d: %s %s balance %d, expected %d",
+			d.Line, d.AccountRef, d.Date, d.Actual, d.Expected))
+	}
+	for i, t := range p.Transfers {
+		l = append(l, "transfer proposal: "+TransferProposalText(i, t))
+	}
+	for _, m := range p.BalanceMismatches {
+		line := fmt.Sprintf("balance mismatch: %s on %s: statement %d, computed %d", m.AccountRef, m.Date, m.Expected, m.Computed)
+		if m.Suggest != "" {
+			line += "; record it with: " + m.Suggest
+		}
+		l = append(l, line)
+	}
+	for _, m := range p.ModuleRecords {
+		l = append(l, fmt.Sprintf("module %s is disabled: %d record(s) (%s) skipped; use --enable-modules %s",
+			m.Module, m.Count, strings.Join(m.Kinds, ", "), m.Module))
+	}
+	return l
+}
+
+// TransferProposalText describes proposal i in one line, shared by the preview and the prompt.
+func TransferProposalText(i int, t importing.TransferProposal) string {
+	other := fmt.Sprintf("row %d", t.Other)
+	if t.Other < 0 {
+		other = fmt.Sprintf("existing transaction %d", int64(t.Existing))
+	}
+	state := "not accepted"
+	if t.Accept {
+		state = "accepted"
+	}
+	return fmt.Sprintf("#%d row %d <-> %s (%s, %s)", i, t.Row, other, t.Reason, state)
+}
+
+func writeImportDetails(w io.Writer, p importing.ImportPlan) error {
+	for _, line := range importDetailLines(p) {
+		if _, err := fmt.Fprintln(w, line); err != nil {
+			return fmt.Errorf("write import detail: %w", err)
 		}
 	}
 	return nil
@@ -169,12 +281,17 @@ type ImportResultDTO struct {
 	Categories   int    `json:"categories"`
 	Transfers    int    `json:"transfers"`
 	BackupPath   string `json:"backup_path,omitempty"`
+	// Warnings lists what the apply skipped, e.g. records of modules left disabled.
+	Warnings []RowWarningDTO `json:"warnings,omitempty"`
 }
 
 func importResultDTO(res importing.ImportResult) ImportResultDTO {
 	dto := ImportResultDTO{
 		Transactions: res.Transactions, Accounts: res.Accounts, Categories: res.Categories,
 		Transfers: res.Transfers, BackupPath: res.BackupPath,
+	}
+	for _, w := range res.Warnings {
+		dto.Warnings = append(dto.Warnings, RowWarningDTO{Line: w.Line, Message: w.Message})
 	}
 	if res.Batch.ID != 0 {
 		dto.BatchID = int64(res.Batch.ID)
@@ -194,10 +311,21 @@ func WriteImportResult(w io.Writer, f Format, res importing.ImportResult) error 
 		[]string{"accounts", strconv.Itoa(res.Accounts)}, []string{"categories", strconv.Itoa(res.Categories)},
 		[]string{"transfers", strconv.Itoa(res.Transfers)},
 	)
+	var err error
 	if f == CSV {
-		return WriteCSV(w, t)
+		err = WriteCSV(w, t)
+	} else {
+		err = WriteTable(w, t, false)
 	}
-	return WriteTable(w, t, false)
+	if err != nil {
+		return err
+	}
+	for _, x := range res.Warnings {
+		if _, werr := fmt.Fprintf(w, "warning: line %d: %s\n", x.Line, x.Message); werr != nil {
+			return fmt.Errorf("write import warning: %w", werr)
+		}
+	}
+	return nil
 }
 
 // ImportBatchDTO is the --json shape of one import batch.
