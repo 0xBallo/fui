@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/lending"
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/module"
 )
@@ -20,6 +21,8 @@ type ImportResult struct {
 	Accounts     int
 	Securities   int
 	SecurityOps  int
+	Loans        int // loans created
+	LoanVersions int // loan schedule versions stored
 	Categories   int
 	Payees       int
 	Tags         int
@@ -27,7 +30,10 @@ type ImportResult struct {
 	// RecurrencesConfirmed counts the rows that booked a pending transaction a recurrence
 	// created instead of inserting a new one (see recur.go); included in Transactions too.
 	RecurrencesConfirmed int
-	BackupPath           string
+	// InstallmentsConfirmed counts the rows that booked a pending loan installment and split it
+	// into principal transfer and interest (see recur.go); included in Transactions too.
+	InstallmentsConfirmed int
+	BackupPath            string
 	// Warnings lists what the apply skipped, e.g. records of modules left disabled.
 	Warnings []RowWarning
 }
@@ -74,8 +80,8 @@ func (s *Service) ApplyImportWith(ctx context.Context, p ImportPlan, opts ApplyO
 	if err != nil {
 		return ImportResult{}, err
 	}
-	if p.Counts().Included == 0 {
-		return ImportResult{}, nil
+	if p.Counts().Included == 0 && !p.hasLoanWrites(opts.EnableModules) {
+		return ImportResult{Warnings: loanWarnings(p.ModuleRecords, opts.EnableModules)}, nil
 	}
 	path, err := s.backup.Backup(ctx, app.BackupReasonImport)
 	if err != nil {
@@ -106,16 +112,16 @@ func (s *Service) ApplyImportWith(ctx context.Context, p ImportPlan, opts ApplyO
 		}
 		return ImportResult{}, err
 	}
-	res.Warnings = append(res.Warnings, loanWarnings(p.ModuleRecords)...)
+	res.Warnings = append(res.Warnings, loanWarnings(p.ModuleRecords, opts.EnableModules)...)
 	return res, nil
 }
 
-// loanWarnings reports the loan records the import detected and does not write; security
+// loanWarnings reports the loan records skipped because the loans module stays off; security
 // operations warn row by row.
-func loanWarnings(records []ModuleRecords) []RowWarning {
+func loanWarnings(records []ModuleRecords, enabled []module.ID) []RowWarning {
 	var out []RowWarning
 	for _, m := range records {
-		if m.Module != module.Loans {
+		if m.Module != module.Loans || slices.Contains(enabled, m.Module) {
 			continue
 		}
 		for _, line := range m.Lines {
@@ -177,6 +183,9 @@ func (w *writer) run(ctx context.Context, res *ImportResult) error {
 	if err := w.link(ctx, res); err != nil {
 		return err
 	}
+	if err := w.loans(ctx, res); err != nil {
+		return err
+	}
 	if err := w.importTransactions(ctx, res); err != nil {
 		return err
 	}
@@ -198,6 +207,16 @@ func (w *writer) importTransactions(ctx context.Context, res *ImportResult) erro
 				return fmt.Errorf("confirm pending transaction of line %d: %w", row.Line, err)
 			}
 			res.RecurrencesConfirmed++
+			if row.ConfirmsInstallment {
+				plan, err := lending.ConfirmWithin(ctx, w.r, t.ID)
+				if err != nil {
+					return fmt.Errorf("confirm loan installment of line %d: %w", row.Line, err)
+				}
+				for _, msg := range plan.Warnings {
+					res.Warnings = append(res.Warnings, RowWarning{Line: row.Line, Message: msg})
+				}
+				res.InstallmentsConfirmed++
+			}
 		} else if t, err = w.r.Transactions().Insert(ctx, w.txs[i]); err != nil {
 			return fmt.Errorf("create transaction of line %d: %w", row.Line, err)
 		}

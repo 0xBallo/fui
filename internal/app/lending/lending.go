@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/recurring"
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/module"
 )
@@ -25,6 +26,9 @@ const EntityLoan = "loan"
 type Config struct {
 	Locale   domain.Locale  // number and date input format; default en-US
 	Location *time.Location // zone that defines "today"; default time.Local
+
+	// Recurring confirms recurrence transactions in ConfirmPending; nil disables that path.
+	Recurring *recurring.Service
 }
 
 // Service runs the loan use cases over a Store.

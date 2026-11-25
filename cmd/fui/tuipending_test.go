@@ -50,14 +50,9 @@ type fakeLoans struct {
 	err   error
 }
 
-func (f *fakeLoans) PlanConfirm(context.Context, module.Set, domain.TransactionID) (lending.ConfirmPlan, error) {
-	f.calls = append(f.calls, "plan-confirm")
-	return lending.ConfirmPlan{}, f.err
-}
-
-func (f *fakeLoans) ApplyConfirm(context.Context, lending.ConfirmPlan) error {
-	f.calls = append(f.calls, "apply-confirm")
-	return nil
+func (f *fakeLoans) ConfirmPending(context.Context, module.Set, domain.TransactionID) (lending.PendingConfirmed, error) {
+	f.calls = append(f.calls, "confirm-pending")
+	return lending.PendingConfirmed{Kind: lending.PendingInstallment}, f.err
 }
 
 func TestPendingActionsDispatch(t *testing.T) {
@@ -78,9 +73,9 @@ func TestPendingActionsDispatch(t *testing.T) {
 		wantRemoved []domain.TransactionID
 	}{
 		{name: "confirm recurring", recurrence: 7, wantNotice: noticeRecurBooked, wantRecur: []string{"plan-confirm", "apply-confirm"}},
-		{name: "confirm loan", wantNotice: noticeLoanBooked, wantLoanLog: []string{"plan-confirm", "apply-confirm"}},
-		{name: "confirm unlinked", loanErr: notLoan, wantNotice: noticeNotPending, wantLoanLog: []string{"plan-confirm"}},
-		{name: "confirm loan module off", loanErr: moduleOff, wantErr: true, wantLoanLog: []string{"plan-confirm"}},
+		{name: "confirm loan", wantNotice: noticeLoanBooked, wantLoanLog: []string{"confirm-pending"}},
+		{name: "confirm unlinked", loanErr: notLoan, wantNotice: noticeNotPending, wantLoanLog: []string{"confirm-pending"}},
+		{name: "confirm loan module off", loanErr: moduleOff, wantErr: true, wantLoanLog: []string{"confirm-pending"}},
 		{name: "skip recurring removes the pending tx", skip: true, recurrence: 7, wantNotice: noticeRecurSkip, wantRemoved: []domain.TransactionID{1}},
 		{name: "skip loan or unlinked", skip: true, wantNotice: noticeNoSkip},
 	}

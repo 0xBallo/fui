@@ -109,6 +109,16 @@ const (
 	RateTypeMixed RateType = "mixed"
 )
 
+// LoanKind is the loan kind enum of a schedule record.
+type LoanKind string
+
+const (
+	// LoanKindMortgage identifies mortgages.
+	LoanKindMortgage LoanKind = "mortgage"
+	// LoanKindLoan identifies personal loans.
+	LoanKindLoan LoanKind = "loan"
+)
+
 // SecurityKind is the security kind enum.
 type SecurityKind string
 
@@ -207,12 +217,18 @@ type BalanceRecord struct {
 	Amount  int64  `json:"amount"`
 }
 
-// ScheduleRecord declares loan schedule metadata.
+// ScheduleRecord declares loan schedule metadata. The optional loan fields let the importer
+// create the loan when the account has none yet.
 type ScheduleRecord struct {
-	Account   string   `json:"account"`
-	ValidFrom string   `json:"valid_from"`
-	Rate      int64    `json:"rate"`
-	RateType  RateType `json:"rate_type"`
+	Account      string   `json:"account"`
+	ValidFrom    string   `json:"valid_from"`
+	Rate         int64    `json:"rate"`
+	RateType     RateType `json:"rate_type"`
+	DebitAccount string   `json:"debit_account,omitempty"`
+	Kind         LoanKind `json:"kind,omitempty"`
+	Principal    int64    `json:"principal,omitempty"`
+	DisbursedOn  string   `json:"disbursed_on,omitempty"`
+	TermMonths   int      `json:"term_months,omitempty"`
 }
 
 // InstallmentRecord contains one installment.

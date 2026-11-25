@@ -54,6 +54,9 @@ type Row struct {
 	// ConfirmsPending is set when the row matches a pending transaction a recurrence created
 	// (recurring module only): applying it books that transaction instead of inserting a new one.
 	ConfirmsPending domain.TransactionID
+	// ConfirmsInstallment is set together with ConfirmsPending when that transaction is linked to
+	// a loan installment (loans module only): applying it also splits it into principal and interest.
+	ConfirmsInstallment bool
 }
 
 // SplitRow is one split row attached to an imported transaction row.
@@ -89,7 +92,7 @@ type SecurityOpPlanRow struct {
 }
 
 // ModuleRecords lists the records of one module that is not enabled, so that the user can
-// enable the module or skip them. Schedules and installments are only detected, never imported.
+// enable the module or skip them. The loan rows (Loans) carry the same Module tag.
 type ModuleRecords struct {
 	Module module.ID
 	Count  int
@@ -157,6 +160,7 @@ type ImportPlan struct {
 	NewSecurities   []domain.Security
 	Rows            []Row
 	SecurityOps     []SecurityOpPlanRow
+	Loans           []LoanPlanRow
 	Errors          []RowError
 	Warnings        []RowWarning
 	Transfers       []TransferProposal
@@ -236,6 +240,13 @@ func (p *ImportPlan) refresh() {
 			Summary: fmt.Sprintf("create %d transactions (%d new, %d duplicate, %d doubtful, %d errors)",
 				n.Included, n.New, n.Duplicate, n.Doubtful, n.Errors),
 		})
+	if n := p.installmentsConfirmed(); n > 0 {
+		changes = append(changes, app.Change{
+			Op: app.OpUpdate, Entity: app.EntityTransaction,
+			Fields:  map[string]any{"count": n, "loan_installments": true},
+			Summary: fmt.Sprintf("confirm %d pending loan installments", n),
+		})
+	}
 	if len(p.SecurityOps) > 0 {
 		changes = append(changes, app.Change{
 			Op: app.OpCreate, Entity: "security_op",
@@ -244,6 +255,9 @@ func (p *ImportPlan) refresh() {
 			},
 			Summary: fmt.Sprintf("create %d security operations", secOps),
 		})
+	}
+	if c, ok := p.loansChange(); ok {
+		changes = append(changes, c)
 	}
 	p.Changes, p.Bulk = changes, true
 }
@@ -286,6 +300,16 @@ func (p *ImportPlan) appendEntityCreates(changes []app.Change) []app.Change {
 		})
 	}
 	return changes
+}
+
+func (p *ImportPlan) installmentsConfirmed() int {
+	n := 0
+	for _, row := range p.Rows {
+		if row.Include && row.ConfirmsInstallment {
+			n++
+		}
+	}
+	return n
 }
 
 func (p *ImportPlan) includedSecurityOps() int {

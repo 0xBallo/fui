@@ -208,7 +208,7 @@ func wireStore(ctx context.Context, cfg *config.Config, appClock app.Clock, deps
 		Mode: domain.BudgetMode(cfg.Budget.Mode), Modules: modules,
 	})
 	deps.Recurring = recurring.New(store, appClock, store, recurring.Config{Locale: domain.Locale(cfg.Locale)})
-	deps.Loans = lending.New(store, appClock, store, lending.Config{Locale: domain.Locale(cfg.Locale)})
+	deps.Loans = lending.New(store, appClock, store, lending.Config{Locale: domain.Locale(cfg.Locale), Recurring: deps.Recurring})
 	loc := domain.Locale(cfg.Locale)
 	deps.Investing = investing.New(store, appClock, investing.Config{Locale: loc, BaseCurrency: baseCurrency, Modules: modules})
 	deps.Assets = assetting.New(store, appClock, store, assetting.Config{Locale: loc, BaseCurrency: baseCurrency})
