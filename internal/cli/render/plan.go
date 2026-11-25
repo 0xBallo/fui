@@ -19,10 +19,12 @@ type ChangeDTO struct {
 type PlanDTO struct {
 	Changes []ChangeDTO `json:"changes"`
 	Bulk    bool        `json:"bulk"`
+	// Notices lists side effects such as an implicitly created payee.
+	Notices []string `json:"notices,omitempty"`
 }
 
 func planDTO(p app.Plan) PlanDTO {
-	out := PlanDTO{Bulk: p.Bulk, Changes: make([]ChangeDTO, len(p.Changes))}
+	out := PlanDTO{Bulk: p.Bulk, Notices: p.Notices, Changes: make([]ChangeDTO, len(p.Changes))}
 	for i, c := range p.Changes {
 		out.Changes[i] = ChangeDTO{Op: string(c.Op), Entity: c.Entity, Summary: c.Summary, Fields: c.Fields}
 	}

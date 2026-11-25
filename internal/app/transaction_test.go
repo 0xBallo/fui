@@ -3,7 +3,11 @@ package app_test
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -434,4 +438,106 @@ func TestCategorizeTxApplyIsAtomic(t *testing.T) {
 	if v.Category != "" {
 		t.Errorf("partial write survived a failed ApplyCategorizeTx: category = %q", v.Category)
 	}
+}
+
+func TestAddTxPayeeAndTags(t *testing.T) {
+	ctx := t.Context()
+	e := newEnv(t)
+	e.account(t, "A", "checking", "EUR", "0")
+	pp, err := e.svc.PlanAddPayee(ctx, app.AddPayeeRequest{Name: "Esselunga"})
+	wantNoErr(t, err)
+	_, err = e.svc.ApplyAddPayee(ctx, pp)
+	wantNoErr(t, err)
+
+	tests := []struct {
+		name       string
+		payee      string
+		tags       []string
+		wantPayee  string
+		wantTags   []string
+		wantNotice []string
+		wantNPayee int
+	}{
+		{name: "known payee, case-insensitive", payee: "esselunga", wantPayee: "Esselunga", wantNPayee: 1},
+		{
+			name: "unknown payee and duplicate tag", payee: "Trattoria", tags: []string{"Out", "out", "fun"},
+			wantPayee: "Trattoria", wantTags: []string{"Out", "fun"}, wantNPayee: 2,
+			wantNotice: []string{"created payee Trattoria", "created tag Out", "created tag fun"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := app.AddTxRequest{Account: "A", Amount: "-1", Payee: tt.payee, Tags: tt.tags}
+			p, err := e.svc.PlanAddTx(ctx, req)
+			wantNoErr(t, err)
+			if diff := cmp.Diff(tt.wantNotice, p.Notices); diff != "" {
+				t.Errorf("notices (-want +got):\n%s", diff)
+			}
+			if got, want := len(p.Changes), 1+len(tt.wantNotice); got != want {
+				t.Errorf("changes = %d, want %d", got, want)
+			}
+			tx, err := e.svc.ApplyAddTx(ctx, p)
+			wantNoErr(t, err)
+			v, err := e.svc.ShowTx(ctx, tx.ID)
+			wantNoErr(t, err)
+			if v.Payee != tt.wantPayee {
+				t.Errorf("payee = %q, want %q", v.Payee, tt.wantPayee)
+			}
+			if diff := cmp.Diff(tt.wantTags, v.Tags, cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("tags (-want +got):\n%s", diff)
+			}
+			payees, err := e.svc.ListPayees(ctx)
+			wantNoErr(t, err)
+			if len(payees) != tt.wantNPayee {
+				t.Errorf("payees = %d, want %d", len(payees), tt.wantNPayee)
+			}
+		})
+	}
+
+	// a dry run (plan only) creates nothing
+	_, err = e.svc.PlanAddTx(ctx, app.AddTxRequest{Account: "A", Amount: "-1", Payee: "Never", Tags: []string{"ghost"}})
+	wantNoErr(t, err)
+	payees, _ := e.svc.ListPayees(ctx)
+	tags, _ := e.svc.ListTags(ctx)
+	if len(payees) != 2 || len(tags) != 2 {
+		t.Errorf("plan wrote: payees=%d tags=%d", len(payees), len(tags))
+	}
+	_, err = e.svc.PlanAddTx(ctx, app.AddTxRequest{Account: "A", Amount: "-1", Tags: []string{" "}})
+	wantCode(t, err, domain.ErrMissingField)
+}
+
+func TestEditTxPayeeAndTags(t *testing.T) {
+	ctx := t.Context()
+	e := newEnv(t)
+	e.account(t, "A", "checking", "EUR", "0")
+	tx := e.tx(t, app.AddTxRequest{Account: "A", Amount: "-10", Payee: "Bar", Tags: []string{"x", "y"}})
+
+	edit := func(req app.EditTxRequest) app.TxView {
+		t.Helper()
+		req.ID = tx.ID
+		p, err := e.svc.PlanEditTx(ctx, req)
+		wantNoErr(t, err)
+		_, err = e.svc.ApplyEditTx(ctx, p)
+		wantNoErr(t, err)
+		v, err := e.svc.ShowTx(ctx, tx.ID)
+		wantNoErr(t, err)
+		return v
+	}
+	v := edit(app.EditTxRequest{Payee: ptr("BAR"), AddTags: []string{"z", "X"}, RemoveTags: []string{"y"}})
+	if v.Payee != "Bar" || !slices.Equal(v.Tags, []string{"x", "z"}) {
+		t.Errorf("view = %q %v", v.Payee, v.Tags)
+	}
+	v = edit(app.EditTxRequest{Payee: ptr("")})
+	if v.Payee != "" || len(v.Tags) != 2 {
+		t.Errorf("clear: %q %v", v.Payee, v.Tags)
+	}
+	p, err := e.svc.PlanEditTx(ctx, app.EditTxRequest{ID: tx.ID, Payee: ptr("New")})
+	wantNoErr(t, err)
+	if len(p.Notices) != 1 || p.Notices[0] != "created payee New" {
+		t.Errorf("notices = %v", p.Notices)
+	}
+	_, err = e.svc.PlanEditTx(ctx, app.EditTxRequest{ID: tx.ID, RemoveTags: []string{"nope"}})
+	wantCode(t, err, domain.ErrNotFound)
+	_, err = e.svc.PlanEditTx(ctx, app.EditTxRequest{ID: tx.ID, AddTags: []string{"q"}, Payee: nil, RemoveTags: nil})
+	wantNoErr(t, err)
 }
