@@ -2,6 +2,7 @@ package report
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -36,6 +37,8 @@ func (m *Model) refreshResultView() {
 	switch data := m.result.data.(type) {
 	case reporting.SeriesResult:
 		m.viewSeries(data)
+	case reporting.NetWorthResult:
+		m.viewSeries(data.Series())
 	case reporting.DebtResult:
 		m.note = "Loan: " + data.Loan
 		m.viewSeries(data.SeriesResult)
@@ -47,6 +50,8 @@ func (m *Model) refreshResultView() {
 		m.viewBudget(data)
 	case reporting.ForecastResult:
 		m.viewForecast(data)
+	case reporting.GroupedResult:
+		m.viewGrouped(data)
 	default:
 		m.table.SetColumns(nil)
 		m.table.SetRows(nil)
@@ -133,6 +138,54 @@ func (m *Model) viewForecast(f reporting.ForecastResult) {
 		notes = append(notes, "first below minimum: "+f.FirstBelowMin)
 	}
 	m.note = joinNotes(notes)
+}
+
+// viewGrouped shows a spending or cash-flow result: spending rows carry only a total, cash-flow
+// rows add the inflow and outflow next to the net.
+func (m *Model) viewGrouped(g reporting.GroupedResult) {
+	cashFlow := m.result.kind == reporting.KindCashFlow || isCashFlow(g)
+	cols := []components.Column{
+		{Title: groupTitle(g.GroupBy), Width: 22, Align: lipgloss.Left},
+		{Title: "Total", Width: 14, Align: lipgloss.Right},
+	}
+	if cashFlow {
+		cols = []components.Column{
+			{Title: groupTitle(g.GroupBy), Width: 22, Align: lipgloss.Left},
+			{Title: "Inflow", Width: 14, Align: lipgloss.Right},
+			{Title: "Outflow", Width: 14, Align: lipgloss.Right},
+			{Title: "Net", Width: 14, Align: lipgloss.Right},
+		}
+	}
+	m.table.SetColumns(cols)
+	rows := make([]components.Row, 0, len(g.Rows)+1)
+	for _, r := range g.Rows {
+		cells := []string{r.Key, m.fmtAmount(r.Total)}
+		if cashFlow {
+			cells = []string{r.Key, m.optAmount(r.Inflow), m.optAmount(r.Outflow), m.fmtAmount(r.Total)}
+		}
+		rows = append(rows, components.Row{ID: r.Key, Cells: cells})
+	}
+	total := []string{"TOTAL", m.fmtAmount(g.Total)}
+	if cashFlow {
+		total = []string{"TOTAL", "", "", m.fmtAmount(g.Total)}
+	}
+	rows = append(rows, components.Row{ID: "TOTAL", Cells: total})
+	m.table.SetRows(rows)
+}
+
+func (m *Model) optAmount(a *reporting.Amount) string {
+	if a == nil {
+		return ""
+	}
+	return m.fmtAmount(*a)
+}
+
+// groupTitle is the first column header of a grouped report.
+func groupTitle(by string) string {
+	if by == "" {
+		return "Group"
+	}
+	return strings.ToUpper(by[:1]) + by[1:]
 }
 
 func joinNotes(notes []string) string {

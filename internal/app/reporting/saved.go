@@ -25,12 +25,24 @@ const (
 	KindForecast = "forecast"
 	KindSpending = "spending"
 	KindCashFlow = "cash-flow"
+	KindCompare  = "compare"
 )
 
-var reportKinds = []string{KindBalance, KindBudget, KindDebt, KindInterest, KindNetWorth, KindPayees, KindForecast, KindSpending, KindCashFlow}
+// SpecVersion2 marks a SavedSpec that uses the filter, grouping, granularity, horizon and compare
+// fields; reports saved before them have no version (v1) and run exactly as they always did.
+const SpecVersion2 = 2
+
+var reportKinds = []string{KindBalance, KindBudget, KindDebt, KindInterest, KindNetWorth, KindPayees, KindForecast, KindSpending, KindCashFlow, KindCompare}
+
+// CompareSpec names the two periods of a saved compare report (see ValidPeriodSpec); empty ones
+// default as in CompareRequest.
+type CompareSpec struct {
+	A string `json:"a,omitempty"`
+	B string `json:"b,omitempty"`
+}
 
 // SavedSpec is the stored definition of a saved report; Period is relative (see ResolveRelative)
-// so the report stays current. The forecast ignores Period.
+// or absolute (see ResolvePeriodSpec). The forecast ignores Period.
 type SavedSpec struct {
 	Period  string `json:"period,omitempty"`
 	Account string `json:"account,omitempty"`
@@ -38,6 +50,23 @@ type SavedSpec struct {
 	Limit   int    `json:"limit,omitempty"`
 	// MinBalance is the forecast's minimum balance.
 	MinBalance string `json:"min_balance,omitempty"`
+	// Version is 0 (v1) or SpecVersion2. PlanSave sets it to 2 when a v2 field is used. Only v2
+	// spending and cash-flow reports return grouped results.
+	Version int `json:"version,omitempty"`
+	// Filter narrows the transactions of the spending, cash-flow, top-payees, balance and compare
+	// reports. Its From, To, Month and Year must be empty: the period is Period.
+	Filter *app.ListTxRequest `json:"filter,omitempty"`
+	// GroupBy is the spending or cash-flow dimension (see domain.ParseReportGroup).
+	GroupBy string `json:"group_by,omitempty"`
+	// Granularity is the series bucket (see domain.ParseGranularity); the forecast takes day or week.
+	Granularity string `json:"granularity,omitempty"`
+	// Horizon is the forecast span (see ParseHorizon).
+	Horizon string       `json:"horizon,omitempty"`
+	Compare *CompareSpec `json:"compare,omitempty"`
+}
+
+func (s SavedSpec) usesV2() bool {
+	return s.Filter != nil || s.GroupBy != "" || s.Granularity != "" || s.Horizon != "" || s.Compare != nil
 }
 
 // SavePlan is the plan to store a saved report.
@@ -59,8 +88,17 @@ func (a *Analytics) PlanSave(ctx context.Context, name, kind string, spec SavedS
 	if !slices.Contains(reportKinds, kind) {
 		return SavePlan{}, invalid("kind", fmt.Sprintf("unknown report kind %q", kind))
 	}
-	if spec.Period != "" && !ValidRelativePeriod(spec.Period) {
-		return SavePlan{}, invalid("period", fmt.Sprintf("unknown relative period %q", spec.Period))
+	if spec.Period != "" && !ValidPeriodSpec(spec.Period) {
+		return SavePlan{}, invalid("period", fmt.Sprintf("unknown period %q", spec.Period))
+	}
+	if spec.Version != 0 && spec.Version != SpecVersion2 {
+		return SavePlan{}, invalid("version", fmt.Sprintf("unknown saved report version %d", spec.Version))
+	}
+	if spec.usesV2() || kind == KindCompare {
+		spec.Version = SpecVersion2
+	}
+	if err := a.validateV2(ctx, kind, spec); err != nil {
+		return SavePlan{}, err
 	}
 	raw, err := json.Marshal(spec)
 	if err != nil {
@@ -86,6 +124,55 @@ func (a *Analytics) PlanSave(ctx context.Context, name, kind string, spec SavedS
 		return nil
 	})
 	return out, err
+}
+
+// validateV2 checks the v2 fields of spec: the filter resolves and has no absolute period, and the
+// group-by, granularity, horizon and compare periods are known.
+func (a *Analytics) validateV2(ctx context.Context, kind string, spec SavedSpec) error {
+	if err := validateV2Fields(kind, spec); err != nil {
+		return err
+	}
+	f := spec.Filter
+	if f == nil {
+		return nil
+	}
+	if f.From != "" || f.To != "" || f.Month != "" || f.Year != 0 {
+		return invalid("filter", "a saved filter cannot hold from, to, month or year: the period is relative")
+	}
+	return a.store.Read(ctx, func(r app.Repos) error {
+		_, err := a.resolveFilter(ctx, r, *f)
+		return err
+	})
+}
+
+func validateV2Fields(kind string, spec SavedSpec) error {
+	if spec.GroupBy != "" {
+		if _, err := domain.ParseReportGroup(spec.GroupBy); err != nil {
+			return err
+		}
+	}
+	if spec.Granularity != "" {
+		g, err := domain.ParseGranularity(spec.Granularity)
+		if err != nil {
+			return err
+		}
+		if kind == KindForecast && g != domain.GranDay && g != domain.GranWeek {
+			return invalid("granularity", fmt.Sprintf("invalid granularity %q (expected day or week)", spec.Granularity))
+		}
+	}
+	if spec.Horizon != "" {
+		if _, err := ParseHorizon(spec.Horizon); err != nil {
+			return err
+		}
+	}
+	if c := spec.Compare; c != nil {
+		for _, p := range []string{c.A, c.B} {
+			if p != "" && !ValidPeriodSpec(p) {
+				return invalid("compare", fmt.Sprintf("unknown period %q", p))
+			}
+		}
+	}
+	return nil
 }
 
 // ApplySave stores the saved report.
@@ -176,15 +263,9 @@ func (a *Analytics) Run(ctx context.Context, ref string) (SavedResult, error) {
 	if err := json.Unmarshal([]byte(sr.ParamsJSON), &spec); err != nil {
 		return SavedResult{}, fmt.Errorf("decode params of %q: %w", sr.Name, err)
 	}
-	req := ReportRequest{Account: spec.Account, Loan: spec.Loan, Limit: spec.Limit}
-	if spec.Period != "" {
-		today, err := a.today()
-		if err != nil {
-			return SavedResult{}, err
-		}
-		if req.Period, err = ResolveRelative(spec.Period, today, a.cfg.MonthStartDay); err != nil {
-			return SavedResult{}, err
-		}
+	req, err := a.savedRequest(sr.Kind, spec)
+	if err != nil {
+		return SavedResult{}, err
 	}
 	out := SavedResult{Name: sr.Name, Kind: sr.Kind}
 	switch sr.Kind {
@@ -197,17 +278,67 @@ func (a *Analytics) Run(ctx context.Context, ref string) (SavedResult, error) {
 	case KindInterest:
 		out.Data, err = a.InterestPaid(ctx, req)
 	case KindNetWorth:
-		out.Data, err = a.NetWorth(ctx, req)
+		out.Data, err = a.NetWorthReport(ctx, req)
 	case KindPayees:
 		out.Data, err = a.TopPayees(ctx, req)
 	case KindForecast:
-		out.Data, err = a.Forecast(ctx, ForecastRequest{MinBalance: spec.MinBalance})
+		out.Data, err = a.Forecast(ctx, ForecastRequest{MinBalance: spec.MinBalance, Horizon: spec.Horizon, Granularity: spec.Granularity})
 	case KindSpending, KindCashFlow:
-		out.Data, err = a.mvp(ctx, sr.Kind, req)
+		out.Data, err = a.runGrouped(ctx, sr.Kind, spec, req)
+	case KindCompare:
+		creq := CompareRequest{ByCategory: true, Filter: req.Filter}
+		if spec.Compare != nil {
+			creq.A, creq.B = spec.Compare.A, spec.Compare.B
+		}
+		out.Data, err = a.ComparePeriods(ctx, creq)
 	default:
 		err = invalid("kind", fmt.Sprintf("unknown report kind %q", sr.Kind))
 	}
 	return out, err
+}
+
+// savedRequest builds the ReportRequest of a saved spec, resolving its period as of today.
+func (a *Analytics) savedRequest(kind string, spec SavedSpec) (ReportRequest, error) {
+	req := ReportRequest{Account: spec.Account, Loan: spec.Loan, Limit: spec.Limit}
+	if spec.Filter != nil {
+		req.Filter = *spec.Filter
+	}
+	var err error
+	if spec.GroupBy != "" {
+		if req.GroupBy, err = domain.ParseReportGroup(spec.GroupBy); err != nil {
+			return req, err
+		}
+	}
+	if spec.Granularity != "" && kind != KindForecast {
+		if req.Granularity, err = domain.ParseGranularity(spec.Granularity); err != nil {
+			return req, err
+		}
+	}
+	if spec.Period != "" {
+		today, err := a.today()
+		if err != nil {
+			return req, err
+		}
+		if req.Period, err = ResolvePeriodSpec(spec.Period, today, a.cfg.MonthStartDay); err != nil {
+			return req, err
+		}
+	}
+	return req, nil
+}
+
+// runGrouped runs a spending or cash-flow report: the grouped one for v2 specs, the MVP use case
+// over the Source for v1 ones so they keep their output.
+func (a *Analytics) runGrouped(ctx context.Context, kind string, spec SavedSpec, req ReportRequest) (any, error) {
+	if spec.Version < SpecVersion2 {
+		return a.mvp(ctx, kind, req)
+	}
+	if spec.Account != "" {
+		req.Filter.Accounts = append(slices.Clone(req.Filter.Accounts), spec.Account)
+	}
+	if kind == KindSpending {
+		return a.Spending(ctx, req)
+	}
+	return a.CashFlow(ctx, req)
 }
 
 func invalid(field, msg string) error {

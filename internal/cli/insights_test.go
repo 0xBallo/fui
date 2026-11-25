@@ -220,12 +220,3 @@ func TestReportCompare(t *testing.T) {
 		t.Fatal("bad period must fail")
 	}
 }
-
-func TestPermilleText(t *testing.T) {
-	neg, pos := int64(-125), int64(1005)
-	for want, in := range map[string]*int64{"-": nil, "-12.5%": &neg, "100.5%": &pos} {
-		if got := permilleText(in); got != want {
-			t.Errorf("permilleText = %q, want %q", got, want)
-		}
-	}
-}

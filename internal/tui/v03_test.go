@@ -60,8 +60,8 @@ func (v03Report) ListAccounts(context.Context, app.ListAccountsRequest) ([]app.A
 	return nil, nil
 }
 
-func (v03Report) NetWorth(context.Context, reporting.ReportRequest) (reporting.SeriesResult, error) {
-	return reporting.SeriesResult{}, nil
+func (v03Report) NetWorth(context.Context, reporting.ReportRequest) (reporting.NetWorthResult, error) {
+	return reporting.NetWorthResult{}, nil
 }
 
 func (v03Report) Today() (domain.Date, error) { return domain.NewDate(2026, 6, 15) }

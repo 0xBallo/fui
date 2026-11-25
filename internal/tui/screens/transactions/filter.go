@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -63,6 +64,19 @@ func (m *Model) openFilterForm() {
 	)
 	m.mode = modeFilter
 	m.filterForm.Focus()
+}
+
+// ApplyFilter replaces the current filter with req, as when drilling down from a report, and
+// reloads from the top of the list. Paging fields of req are ignored. The filter shows as chips,
+// removable with the usual chip keys.
+func (m *Model) ApplyFilter(req app.ListTxRequest) tea.Cmd {
+	req.After, req.Limit = nil, 0
+	m.req = req
+	m.chipFocus = 0
+	m.mode = modeList
+	m.next = nil
+	m.table.SetCursor(0)
+	return m.load()
 }
 
 func (m *Model) handleFilterKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
@@ -130,32 +144,47 @@ func (m *Model) today() domain.Date {
 	return d
 }
 
+// submitFilter rebuilds the request from the form on top of the incoming one, so criteria the form
+// has no field for (Month, Year, Tags, Payees, Batch, Text, sort) and extra values of the
+// single-value fields survive an edit.
 func (m *Model) submitFilter() tea.Cmd {
-	m.req = app.ListTxRequest{
-		From: m.filterFrom.Value(), To: m.filterTo.Value(),
-		MinAmount: m.filterMin.Value(), MaxAmount: m.filterMax.Value(),
-		Text: m.req.Text, // the quick search field is independent of the filter form
+	prev := m.req
+	req := prev
+	req.From, req.To = m.filterFrom.Value(), m.filterTo.Value()
+	req.MinAmount, req.MaxAmount = m.filterMin.Value(), m.filterMax.Value()
+	if (req.From != "" && req.From != prev.From) || (req.To != "" && req.To != prev.To) {
+		// A new explicit range replaces the Month/Year convenience period, which excludes it.
+		req.Month, req.Year = "", 0
 	}
-	if v := m.filterAccount.Value(); v != "" {
-		m.req.Accounts = []string{v}
-	}
-	if v := m.filterCategory.Value(); v != "" {
-		m.req.Categories = []string{v}
-	}
-	if v := m.filterStatus.Value(); v != "" {
-		m.req.Statuses = []string{v}
-	}
-	if v := m.filterKind.Value(); v != "" {
-		m.req.Kinds = []string{v}
-	}
-	m.req.Uncategorized = m.filterUncategorized.Value() == "yes"
+	req.Accounts = formList(m.filterAccount.Value(), prev.Accounts)
+	req.Categories = formList(m.filterCategory.Value(), prev.Categories)
+	req.Statuses = formList(m.filterStatus.Value(), prev.Statuses)
+	req.Kinds = formList(m.filterKind.Value(), prev.Kinds)
+	req.Uncategorized = m.filterUncategorized.Value() == "yes"
 	switch m.filterSign.Value() {
 	case string(domain.TxSignIncome):
-		m.req.Sign = domain.TxSignIncome
+		req.Sign = domain.TxSignIncome
 	case string(domain.TxSignExpense):
-		m.req.Sign = domain.TxSignExpense
+		req.Sign = domain.TxSignExpense
+	default:
+		if prev.Sign != domain.TxSignAny {
+			req.Sign = ""
+		}
 	}
+	m.req = req
 	return m.load()
+}
+
+// formList returns the filter list a single-value form field stands for: unchanged when the field
+// still shows the first incoming value, empty when cleared, otherwise just the typed value.
+func formList(v string, prev []string) []string {
+	switch {
+	case v == "":
+		return nil
+	case len(prev) > 0 && prev[0] == v:
+		return prev
+	}
+	return []string{v}
 }
 
 func (m *Model) viewFilter() string {
@@ -174,8 +203,8 @@ type filterChip struct {
 	kind, label, value string
 }
 
-// activeChips lists every non-empty filter field of m.req as a removable chip, in a stable order.
-func (m *Model) activeChips() []filterChip {
+// periodChips lists the date-range chips of m.req.
+func (m *Model) periodChips() []filterChip {
 	var chips []filterChip
 	if m.req.From != "" {
 		chips = append(chips, filterChip{"from", "From", m.req.From})
@@ -183,11 +212,29 @@ func (m *Model) activeChips() []filterChip {
 	if m.req.To != "" {
 		chips = append(chips, filterChip{"to", "To", m.req.To})
 	}
+	if m.req.Month != "" {
+		chips = append(chips, filterChip{"month", "Month", m.req.Month})
+	}
+	if m.req.Year != 0 {
+		chips = append(chips, filterChip{"year", "Year", strconv.Itoa(m.req.Year)})
+	}
+	return chips
+}
+
+// activeChips lists every non-empty filter field of m.req as a removable chip, in a stable order.
+func (m *Model) activeChips() []filterChip {
+	chips := m.periodChips()
 	for _, a := range m.req.Accounts {
 		chips = append(chips, filterChip{"account", "Account", a})
 	}
 	for _, c := range m.req.Categories {
 		chips = append(chips, filterChip{"category", "Category", c})
+	}
+	for _, p := range m.req.Payees {
+		chips = append(chips, filterChip{"payee", "Payee", p})
+	}
+	for _, t := range m.req.Tags {
+		chips = append(chips, filterChip{"tag", "Tag", t})
 	}
 	for _, s := range m.req.Statuses {
 		chips = append(chips, filterChip{"status", "Status", s})
@@ -270,34 +317,55 @@ func (m *Model) removeFocusedChip() tea.Cmd {
 		m.chipFocus = len(chips) - 1
 	}
 	c := chips[m.chipFocus]
+	m.clearChip(c)
+	if m.chipFocus > 0 {
+		m.chipFocus--
+	}
+	return m.load()
+}
+
+// clearChip resets the filter field chip c stands for.
+func (m *Model) clearChip(c filterChip) {
 	switch c.kind {
 	case "from":
 		m.req.From = ""
 	case "to":
 		m.req.To = ""
+	case "month":
+		m.req.Month = ""
+	case "year":
+		m.req.Year = 0
 	case "min":
 		m.req.MinAmount = ""
 	case "max":
 		m.req.MaxAmount = ""
 	case "text":
 		m.req.Text = ""
-	case "account":
-		m.req.Accounts = removeValue(m.req.Accounts, c.value)
-	case "category":
-		m.req.Categories = removeValue(m.req.Categories, c.value)
-	case "status":
-		m.req.Statuses = removeValue(m.req.Statuses, c.value)
-	case "kind":
-		m.req.Kinds = removeValue(m.req.Kinds, c.value)
 	case "uncategorized":
 		m.req.Uncategorized = false
 	case "sign":
 		m.req.Sign = ""
+	default:
+		m.clearListChip(c)
 	}
-	if m.chipFocus > 0 {
-		m.chipFocus--
+}
+
+// clearListChip removes the single value chip c stands for from its multi-value filter field.
+func (m *Model) clearListChip(c filterChip) {
+	switch c.kind {
+	case "account":
+		m.req.Accounts = removeValue(m.req.Accounts, c.value)
+	case "category":
+		m.req.Categories = removeValue(m.req.Categories, c.value)
+	case "payee":
+		m.req.Payees = removeValue(m.req.Payees, c.value)
+	case "tag":
+		m.req.Tags = removeValue(m.req.Tags, c.value)
+	case "status":
+		m.req.Statuses = removeValue(m.req.Statuses, c.value)
+	case "kind":
+		m.req.Kinds = removeValue(m.req.Kinds, c.value)
 	}
-	return m.load()
 }
 
 // removeValue returns s without its first occurrence of v, leaving s untouched.

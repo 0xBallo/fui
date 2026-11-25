@@ -1,14 +1,8 @@
 package report
 
 import (
-	"context"
-	"fmt"
-	"os"
-
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/0xballo/fui/internal/app/importing"
-	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/tui/components"
 	"github.com/0xballo/fui/internal/tui/screens"
 )
@@ -69,13 +63,16 @@ func (m *Model) openSaveForm() {
 	m.form.Focus()
 }
 
-// openExportForm opens the path and format fields to export the transactions behind the
-// currently displayed report (its period and, when set, its account).
+// openExportForm opens the what, path and format fields to export the displayed report result or
+// its transactions.
 func (m *Model) openExportForm() {
+	m.fields.what = components.NewAutocomplete("What:", "result", m.th)
+	m.fields.what.SetSuggestions([]string{exportResult, exportTransactions})
+	m.fields.what.SetValue(exportResult)
 	m.fields.path = components.NewAutocomplete("Output path:", "e.g. export.csv", m.th)
 	m.fields.format = components.NewAutocomplete("Format:", "csv", m.th)
 	m.fields.format.SetSuggestions([]string{"csv", "json", "fui"})
-	m.form = components.NewForm(&m.fields.path, &m.fields.format)
+	m.form = components.NewForm(&m.fields.what, &m.fields.path, &m.fields.format)
 	m.mode = modeExportForm
 	m.form.Focus()
 }
@@ -107,6 +104,11 @@ func (m *Model) submitForm() tea.Cmd {
 	switch m.mode {
 	case modeParamsForm:
 		return m.submitParams()
+	case modeFilterForm:
+		if err := m.submitFilter(); err != nil {
+			return errCmd(err)
+		}
+		return m.runCurrent()
 	case modeSaveForm:
 		return m.submitSave()
 	case modeExportForm:
@@ -125,58 +127,4 @@ func (m *Model) submitParams() tea.Cmd {
 	m.horizonText = m.fields.horizon.Value()
 	m.minBalText = m.fields.minBalance.Value()
 	return m.runCurrent()
-}
-
-// submitExport resolves the current report's period and account into a transaction filter and
-// writes the matching transactions to the entered path in the entered format.
-func (m *Model) submitExport() tea.Cmd {
-	m.mode = modeReport
-	path := m.fields.path.Value()
-	format := m.fields.format.Value()
-	if format == "" {
-		format = "csv"
-	}
-	if path == "" {
-		return errCmd(&domain.Error{Code: domain.CodeMissingField, Message: "output path is required", Details: map[string]any{"field": "path"}})
-	}
-	period, err := m.resolvePeriod(m.periodText)
-	if err != nil {
-		return errCmd(err)
-	}
-	accountIDs, err := m.exportAccountIDs()
-	if err != nil {
-		return errCmd(err)
-	}
-	spec := domain.TxFilterSpec{From: period.From(), To: period.To(), AccountIDs: accountIDs, Desc: true}
-	filter, err := domain.NewTxFilter(spec)
-	if err != nil {
-		return errCmd(err)
-	}
-	req := importing.ExportRequest{Filter: filter, Format: importing.ExportFormat(format)}
-	return func() tea.Msg {
-		f, err := os.Create(path) // #nosec G304 -- path is provided by the user through the TUI form.
-		if err != nil {
-			return screens.ErrorMsg{Err: fmt.Errorf("create output file: %w", err)}
-		}
-		defer f.Close() //nolint:errcheck // the file was only written to, nothing left to flush on error
-		n, err := m.uc.Export(context.Background(), req, f)
-		if err != nil {
-			return screens.ErrorMsg{Err: err}
-		}
-		return exportDoneMsg{path: path, count: n}
-	}
-}
-
-// exportAccountIDs resolves the account field (when the active report has one) to its account
-// ID; an empty field or a kind without an account exports every account.
-func (m *Model) exportAccountIDs() ([]domain.AccountID, error) {
-	if m.accountText == "" {
-		return nil, nil
-	}
-	names := m.accountNames()
-	i, err := domain.Resolve(m.accountText, names)
-	if err != nil {
-		return nil, fmt.Errorf("account: %w", err)
-	}
-	return []domain.AccountID{m.accounts[i].Account.ID}, nil
 }

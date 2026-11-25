@@ -143,9 +143,8 @@ func (s *Service) ApplyAddTx(ctx context.Context, p AddTxPlan) (domain.Transacti
 // formats as input dates. The amount range is parsed in the currency of the filtered accounts
 // (every account when none is given), which must then share one currency. The period is given
 // either as From/To, or as the convenience Month ("YYYY-MM") or Year, mutually exclusive (an
-// invalid_filter error otherwise, same as domain.TxFilterSpec). Payees is a placeholder: the
-// payees archive does not exist yet, so any name given here fails with not_found. Tags OR among
-// themselves and AND with every other field, same as domain.TxFilter.
+// invalid_filter error otherwise, same as domain.TxFilterSpec). Payees are
+// resolved by name or alias. Tags OR among themselves and AND with every other field, same as domain.TxFilter.
 type ListTxRequest struct {
 	From, To      string
 	Month         string
@@ -181,15 +180,7 @@ type TxPage struct {
 func (s *Service) ResolveTxFilter(ctx context.Context, req ListTxRequest) (domain.TxFilter, error) {
 	var f domain.TxFilter
 	err := s.store.Read(ctx, func(r Repos) error {
-		accts, cats, err := loadNames(ctx, r)
-		if err != nil {
-			return err
-		}
-		tags, err := s.loadTagsIfNeeded(ctx, r, req.Tags)
-		if err != nil {
-			return err
-		}
-		spec, err := s.txFilterSpec(req, accts, cats, tags)
+		spec, err := s.resolveTxSpec(ctx, r, req)
 		if err != nil {
 			return err
 		}
@@ -197,6 +188,32 @@ func (s *Service) ResolveTxFilter(ctx context.Context, req ListTxRequest) (domai
 		return err
 	})
 	return f, err
+}
+
+// ResolveTxFilterSpec resolves req into a TxFilterSpec inside an existing read, exactly like
+// Service.ResolveTxFilter does, for use cases that have no Service (the analytics reports). The
+// spec is returned unvalidated so the caller can adjust it before domain.NewTxFilter.
+func ResolveTxFilterSpec(ctx context.Context, r Repos, clock Clock, cfg Config, req ListTxRequest) (domain.TxFilterSpec, error) {
+	return New(nil, clock, nil, cfg).resolveTxSpec(ctx, r, req)
+}
+
+// resolveTxSpec loads what the names in req refer to and resolves them.
+func (s *Service) resolveTxSpec(ctx context.Context, r Repos, req ListTxRequest) (domain.TxFilterSpec, error) {
+	accts, cats, err := loadNames(ctx, r)
+	if err != nil {
+		return domain.TxFilterSpec{}, err
+	}
+	tags, err := s.loadTagsIfNeeded(ctx, r, req.Tags)
+	if err != nil {
+		return domain.TxFilterSpec{}, err
+	}
+	var payees []domain.Payee
+	if len(req.Payees) > 0 {
+		if payees, err = r.Payees().List(ctx); err != nil {
+			return domain.TxFilterSpec{}, fmt.Errorf("list payees: %w", err)
+		}
+	}
+	return s.txFilterSpec(req, accts, cats, tags, payees)
 }
 
 // ListTx returns one page of the matching transactions.
@@ -211,11 +228,7 @@ func (s *Service) ListTx(ctx context.Context, req ListTxRequest) (TxPage, error)
 		if err != nil {
 			return err
 		}
-		tags, err := s.loadTagsIfNeeded(ctx, r, req.Tags)
-		if err != nil {
-			return err
-		}
-		spec, err := s.txFilterSpec(req, accts, cats, tags)
+		spec, err := s.resolveTxSpec(ctx, r, req)
 		if err != nil {
 			return err
 		}
@@ -266,11 +279,7 @@ func (s *Service) loadTagsIfNeeded(ctx context.Context, r Repos, names []string)
 	return tags, nil
 }
 
-func (s *Service) txFilterSpec(req ListTxRequest, accts []domain.Account, cats []domain.Category, tags []domain.Tag) (domain.TxFilterSpec, error) {
-	if len(req.Payees) > 0 {
-		return domain.TxFilterSpec{}, newError(domain.ErrNotFound,
-			map[string]any{"field": "payee"}, "payee filter: no payees archive yet")
-	}
+func (s *Service) txFilterSpec(req ListTxRequest, accts []domain.Account, cats []domain.Category, tags []domain.Tag, payees []domain.Payee) (domain.TxFilterSpec, error) {
 	spec := domain.TxFilterSpec{
 		Text: textnorm.Normalize(req.Text), Year: req.Year, Uncategorized: req.Uncategorized,
 		ImportBatchID: domain.ImportBatchID(req.Batch), Sign: req.Sign, Sort: req.Sort, Desc: req.Desc,
@@ -310,6 +319,13 @@ func (s *Service) txFilterSpec(req ListTxRequest, accts []domain.Account, cats [
 			return domain.TxFilterSpec{}, err
 		}
 		spec.TagIDs = append(spec.TagIDs, tg.ID)
+	}
+	for _, ref := range req.Payees {
+		py, err := pickPayee(payees, ref)
+		if err != nil {
+			return domain.TxFilterSpec{}, err
+		}
+		spec.PayeeIDs = append(spec.PayeeIDs, py.ID)
 	}
 	if err := s.applyStatusAndKind(req, &spec); err != nil {
 		return domain.TxFilterSpec{}, err

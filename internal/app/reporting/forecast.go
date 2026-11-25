@@ -42,7 +42,9 @@ type ForecastResult struct {
 // MinBalance, a typed amount in each account's currency (the base currency for the total),
 // to Config.MinBalance; empty means no minimum.
 type ForecastRequest struct {
+	Horizon     string // "Nd", "Nw", "Nm" or a bare number of days; overrides HorizonDays
 	HorizonDays int
+	Granularity string // GranularityDay (default) or GranularityWeek
 	MinBalance  string
 }
 
@@ -56,9 +58,19 @@ func (a *Analytics) Forecast(ctx context.Context, req ForecastRequest) (Forecast
 		err = app.WrapModuleError(err)
 		return ForecastResult{}, err
 	}
-	horizonDays := cmp.Or(req.HorizonDays, a.cfg.HorizonDays)
 	minimum := cmp.Or(req.MinBalance, a.cfg.MinBalance)
+	gran := cmp.Or(req.Granularity, GranularityDay)
+	if gran != GranularityDay && gran != GranularityWeek {
+		return ForecastResult{}, &domain.Error{
+			Code: domain.CodeInvalidValue, Message: fmt.Sprintf("invalid granularity %q (expected day or week)", gran),
+			Details: map[string]any{"field": "granularity", "value": gran},
+		}
+	}
 	start, err := a.today()
+	if err != nil {
+		return ForecastResult{}, err
+	}
+	horizonDays, err := a.horizonDays(req, start)
 	if err != nil {
 		return ForecastResult{}, err
 	}
@@ -93,13 +105,13 @@ func (a *Analytics) Forecast(ctx context.Context, req ForecastRequest) (Forecast
 		if err != nil {
 			return fmt.Errorf("forecast: %w", err)
 		}
-		out, err = a.assemble(ctx, r, accts, proj, start, horizonDays, minimum)
+		out, err = a.assemble(ctx, r, accts, proj, start, horizonDays, minimum, gran)
 		return err
 	})
 	return out, err
 }
 
-func (a *Analytics) assemble(ctx context.Context, r app.Repos, accts []domain.Account, proj []domain.AccountForecast, start domain.Date, days int, minimum string) (ForecastResult, error) {
+func (a *Analytics) assemble(ctx context.Context, r app.Repos, accts []domain.Account, proj []domain.AccountForecast, start domain.Date, days int, minimum, gran string) (ForecastResult, error) {
 	out := ForecastResult{Start: start.String(), Days: days, Accounts: []AccountProjection{}, Total: []Point{}}
 	totals := make([]domain.Money, days+1)
 	for i := range totals {
@@ -129,12 +141,45 @@ func (a *Analytics) assemble(ctx context.Context, r app.Repos, accts []domain.Ac
 				return ForecastResult{}, err
 			}
 		}
+		if gran == GranularityWeek {
+			ap.Series = weekSeries(ap.Series)
+		}
 		out.Accounts = append(out.Accounts, ap)
 	}
 	if err := a.totalSeries(&out, totals, start, minimum); err != nil {
 		return ForecastResult{}, err
 	}
+	if gran == GranularityWeek {
+		out.Total = weekSeries(out.Total)
+	}
 	return out, nil
+}
+
+// weekSeries keeps the last point of each ISO week; first-below dates are computed on the
+// daily series beforehand, so they stay day-exact.
+func weekSeries(points []Point) []Point {
+	dates := make([]domain.Date, len(points))
+	for i, p := range points {
+		dates[i], _ = domain.ParseDate(p.Date)
+	}
+	_, out := weekBuckets(dates, points)
+	return out
+}
+
+// horizonDays resolves the horizon: the request (Horizon, then HorizonDays) over the config.
+func (a *Analytics) horizonDays(req ForecastRequest, start domain.Date) (int, error) {
+	if req.Horizon == "" && req.HorizonDays != 0 {
+		return req.HorizonDays, nil
+	}
+	h, err := ParseHorizon(cmp.Or(req.Horizon, a.cfg.Horizon))
+	if err != nil {
+		return 0, err
+	}
+	days, err := h.Days(start)
+	if err != nil {
+		return 0, fmt.Errorf("forecast horizon: %w", err)
+	}
+	return days, nil
 }
 
 // totalSeries fills the total series of out and its first days below zero and below minimum.

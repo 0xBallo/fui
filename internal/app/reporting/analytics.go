@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/0xballo/fui/internal/app"
@@ -11,16 +12,14 @@ import (
 	"github.com/0xballo/fui/internal/module"
 )
 
-// DefaultHorizonDays is the forecast horizon when Config.HorizonDays is unset.
-const DefaultHorizonDays = 90
-
 // Config holds the settings the analytics use cases depend on.
 type Config struct {
 	Locale        domain.Locale   // amount input format; default en-US
 	BaseCurrency  domain.Currency // totals are converted into it
 	MonthStartDay int             // 1..31; default 1
 	BudgetMode    domain.BudgetMode
-	HorizonDays   int            // forecast.horizon in days; default 90
+	Horizon       string         // forecast.horizon: Nd, Nw, Nm or bare days; default DefaultHorizon
+	HorizonDays   int            // legacy horizon in days, used when Horizon is empty
 	MinBalance    string         // forecast minimum balance, typed amount; empty = none
 	Location      *time.Location // zone that defines "today"; default time.Local
 	Modules       module.Set     // enabled modules; analytics must be among them
@@ -47,8 +46,11 @@ func NewAnalytics(store app.Store, clock app.Clock, source Source, cfg Config) *
 	if cfg.BudgetMode == "" {
 		cfg.BudgetMode = domain.BudgetCap
 	}
-	if cfg.HorizonDays == 0 {
-		cfg.HorizonDays = DefaultHorizonDays
+	if cfg.Horizon == "" {
+		cfg.Horizon = DefaultHorizon
+		if cfg.HorizonDays > 0 {
+			cfg.Horizon = strconv.Itoa(cfg.HorizonDays) + "d"
+		}
 	}
 	if cfg.Location == nil {
 		cfg.Location = time.Local

@@ -22,12 +22,16 @@ type UseCases interface {
 	// BalanceOverTime, NetWorth, RemainingDebt, InterestPaid, TopPayees, BudgetVsActual and
 	// Forecast run the predefined reports (internal/app/reporting.Analytics).
 	BalanceOverTime(ctx context.Context, req reporting.ReportRequest) (reporting.SeriesResult, error)
-	NetWorth(ctx context.Context, req reporting.ReportRequest) (reporting.SeriesResult, error)
+	NetWorth(ctx context.Context, req reporting.ReportRequest) (reporting.NetWorthResult, error)
 	RemainingDebt(ctx context.Context, req reporting.ReportRequest) (reporting.DebtResult, error)
 	InterestPaid(ctx context.Context, req reporting.ReportRequest) (reporting.InterestResult, error)
 	TopPayees(ctx context.Context, req reporting.ReportRequest) (reporting.PayeesResult, error)
 	BudgetVsActual(ctx context.Context, req reporting.ReportRequest) (reporting.BudgetResult, error)
 	Forecast(ctx context.Context, req reporting.ForecastRequest) (reporting.ForecastResult, error)
+
+	// Spending and CashFlow run the grouped spending and cash-flow reports.
+	Spending(ctx context.Context, req reporting.ReportRequest) (reporting.GroupedResult, error)
+	CashFlow(ctx context.Context, req reporting.ReportRequest) (reporting.GroupedResult, error)
 
 	// List, Run, PlanSave, ApplySave, PlanRemove and ApplyRemove manage saved reports.
 	List(ctx context.Context) ([]app.SavedReport, error)
@@ -46,4 +50,12 @@ type UseCases interface {
 
 	// Export writes the transactions matching req to w (internal/app/importing.Service.Export).
 	Export(ctx context.Context, req importing.ExportRequest, w io.Writer) (int, error)
+
+	// ResolveTxFilter resolves a transaction filter request (account and category names, amount
+	// range) into the filter Export takes (internal/app.Service.ResolveTxFilter).
+	ResolveTxFilter(ctx context.Context, req app.ListTxRequest) (domain.TxFilter, error)
+
+	// ExportResult writes a report result (the data of a reportResult) to w as "csv" or "json".
+	// It is a port so this package does not depend on the CLI renderers.
+	ExportResult(w io.Writer, format string, data any) error
 }

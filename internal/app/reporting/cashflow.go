@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
 )
 
@@ -117,4 +118,53 @@ func (result *CashFlowResult) computeTotals() error {
 	result.TotalOutflow = totalOutflow
 	result.TotalNet = totalNet
 	return nil
+}
+
+// CashFlow reports inflow, outflow and net in the period, in the base currency, grouped by
+// req.GroupBy (month by default) over the rows matching req.Filter. Transfers and investments
+// are left out; split transactions count per split row. Total is the net. Grouping by tag
+// counts a transaction fully in each of its tags and in an "untagged" row, so tag rows may sum
+// away from the total; the other groupings sum to it.
+func (a *Analytics) CashFlow(ctx context.Context, req ReportRequest) (GroupedResult, error) {
+	if err := a.gate(); err != nil {
+		return GroupedResult{}, err
+	}
+	by, err := reportGroup(req.GroupBy, domain.GroupMonth)
+	if err != nil {
+		return GroupedResult{}, err
+	}
+	p, err := a.period(req.Period)
+	if err != nil {
+		return GroupedResult{}, err
+	}
+	out := GroupedResult{Period: periodLabel(p), GroupBy: string(by), Rows: []GroupedRow{}}
+	err = a.store.Read(ctx, func(r app.Repos) error {
+		rows, err := a.reportRows(ctx, r, req, p, rowOptions{excludeKinds: transferKinds, withTags: by == domain.GroupTag})
+		if err != nil {
+			return err
+		}
+		g, err := a.newGrouper(ctx, r, by, p)
+		if err != nil {
+			return err
+		}
+		total := zeroMoney(a.cfg.BaseCurrency)
+		for _, row := range rows {
+			base, err := a.toBase(ctx, r, row.Amount, row.Date)
+			if err != nil {
+				return err
+			}
+			if total, err = total.Add(base); err != nil {
+				return err
+			}
+			if err := g.add(row, base); err != nil {
+				return err
+			}
+		}
+		if out.Rows, err = g.result(false); err != nil {
+			return err
+		}
+		out.Total = amountOf(total)
+		return nil
+	})
+	return out, err
 }

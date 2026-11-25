@@ -1,0 +1,1 @@
+{"period":"2026","points":[{"date":"2026-09-30","liquidity":{"minor":1000,"currency":"EUR"},"total":{"minor":1000,"currency":"EUR"}},{"date":"2026-10-31","liquidity":{"minor":1000,"currency":"EUR"},"positions":{"minor":500,"currency":"EUR"},"debts":{"minor":-300,"currency":"EUR"},"total":{"minor":1200,"currency":"EUR"}}]}

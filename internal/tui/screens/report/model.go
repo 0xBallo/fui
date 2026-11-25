@@ -2,7 +2,7 @@ package report
 
 import (
 	"context"
-	"strconv"
+	"fmt"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -26,6 +26,7 @@ const (
 	modeConfirmRemove
 	modeCompare
 	modeSim
+	modeFilterForm
 )
 
 // reportResult is the currently displayed report: its kind, a title label, the saved report name
@@ -35,6 +36,11 @@ type reportResult struct {
 	label string
 	saved string
 	data  any
+	// filter, groupBy and granularity are what the report was run with (stored by a saved v2
+	// spec); the title shows them and a drill-down inherits the filter.
+	filter      app.ListTxRequest
+	groupBy     string
+	granularity string
 }
 
 // Model is the analytics (reports) screen: it runs the predefined reports and saved reports of
@@ -61,6 +67,12 @@ type Model struct {
 	limitText   string
 	horizonText string
 	minBalText  string
+
+	// filter, groupByText and granText come from the filter form; ff are its fields.
+	filter      app.ListTxRequest
+	groupByText string
+	granText    string
+	ff          filterFields
 
 	table components.Table
 	line  components.LineChart
@@ -89,7 +101,7 @@ var _ screens.Screen = (*Model)(nil)
 type formFields struct {
 	period, account, loan, limit, horizon, minBalance components.Autocomplete
 	name                                              components.Autocomplete
-	path, format                                      components.Autocomplete
+	what, path, format                                components.Autocomplete
 }
 
 // New builds the report screen over uc, formatting amounts with loc and resolving relative
@@ -131,12 +143,13 @@ func (m *Model) Title() string { return "Reports" }
 
 // KeyMap exposes the bindings for the global help view.
 func (m *Model) KeyMap() []key.Binding {
-	return append(append(m.km.Bindings(), m.compareBindings()...), m.simBindings()...)
+	bindings := m.km.bindings(m.drillable())
+	return append(append(bindings, m.compareBindings()...), m.simBindings()...)
 }
 
 // InputActive reports whether a form is capturing keystrokes.
 func (m *Model) InputActive() bool {
-	return m.mode == modeParamsForm || m.mode == modeSaveForm || m.mode == modeExportForm ||
+	return m.mode == modeParamsForm || m.mode == modeSaveForm || m.mode == modeExportForm || m.mode == modeFilterForm ||
 		(m.mode == modeCompare && m.cmp.formActive) || m.simInputActive() || m.help.IsOpen()
 }
 
@@ -172,7 +185,8 @@ type savedListLoadedMsg struct{ rows []app.SavedReport }
 // savedRemovedMsg confirms a saved report was deleted.
 type savedRemovedMsg struct{}
 
-// exportDoneMsg confirms a transaction export finished.
+// exportDoneMsg confirms a report export finished; count is the number of transactions written
+// (-1 for a result export).
 type exportDoneMsg struct {
 	path  string
 	count int
@@ -219,15 +233,15 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 }
 
 func exportStatus(msg exportDoneMsg) string {
-	if msg.count == 1 {
-		return "Exported 1 transaction to " + msg.path
+	if msg.count >= 0 {
+		return fmt.Sprintf("Exported %d transactions to %s", msg.count, msg.path)
 	}
-	return "Exported " + strconv.Itoa(msg.count) + " transactions to " + msg.path
+	return "Exported report to " + msg.path
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	switch m.mode {
-	case modeParamsForm, modeSaveForm, modeExportForm:
+	case modeParamsForm, modeSaveForm, modeExportForm, modeFilterForm:
 		return m.handleFormKey(msg)
 	case modeConfirmRemove:
 		return m.handleConfirmKey(msg)
@@ -255,22 +269,36 @@ func (m *Model) handleReportKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		return m, m.cycleKind(1)
 	case key.Matches(msg, m.km.Refresh):
 		return m, m.runCurrent()
-	case key.Matches(msg, m.km.Params):
-		m.openParamsForm()
-	case key.Matches(msg, m.km.Save):
-		m.openSaveForm()
+	case key.Matches(msg, m.km.Drill):
+		return m, m.drill()
 	case key.Matches(msg, m.km.Saved):
 		return m, m.loadSaved()
-	case key.Matches(msg, m.km.Export):
-		m.openExportForm()
-	case key.Matches(msg, m.km.Explain):
-		m.help.Open()
+	case m.openPanel(msg):
 	case m.compareEnabled() && key.Matches(msg, m.cmp.km.Open):
 		return m, m.openCompare()
 	case m.simEnabled() && key.Matches(msg, m.sim.km.Open):
 		return m, m.openSim()
 	}
 	return m, nil
+}
+
+// openPanel opens the form or overlay msg asks for, and reports whether it was one.
+func (m *Model) openPanel(msg tea.KeyMsg) bool {
+	switch {
+	case key.Matches(msg, m.km.Params):
+		m.openParamsForm()
+	case key.Matches(msg, m.km.Filter):
+		m.openFilterForm()
+	case key.Matches(msg, m.km.Save):
+		m.openSaveForm()
+	case key.Matches(msg, m.km.Export):
+		m.openExportForm()
+	case key.Matches(msg, m.km.Explain):
+		m.help.Open()
+	default:
+		return false
+	}
+	return true
 }
 
 // cycleKind moves to the next or previous predefined report and runs it, leaving period and

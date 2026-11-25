@@ -9,6 +9,7 @@ import (
 	"github.com/0xballo/fui/internal/app/budgeting"
 	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/app/reporting"
+	"github.com/0xballo/fui/internal/cli/render"
 	"github.com/0xballo/fui/internal/domain"
 )
 
@@ -112,8 +113,8 @@ func (u reportUseCases) BalanceOverTime(ctx context.Context, r reporting.ReportR
 	return u.analytics().BalanceOverTime(ctx, r)
 }
 
-func (u reportUseCases) NetWorth(ctx context.Context, r reporting.ReportRequest) (reporting.SeriesResult, error) {
-	return u.analytics().NetWorth(ctx, r)
+func (u reportUseCases) NetWorth(ctx context.Context, r reporting.ReportRequest) (reporting.NetWorthResult, error) {
+	return u.analytics().NetWorthReport(ctx, r)
 }
 
 func (u reportUseCases) RemainingDebt(ctx context.Context, r reporting.ReportRequest) (reporting.DebtResult, error) {
@@ -134,6 +135,29 @@ func (u reportUseCases) BudgetVsActual(ctx context.Context, r reporting.ReportRe
 
 func (u reportUseCases) Forecast(ctx context.Context, r reporting.ForecastRequest) (reporting.ForecastResult, error) {
 	return u.analytics().Forecast(ctx, r)
+}
+
+func (u reportUseCases) Spending(ctx context.Context, r reporting.ReportRequest) (reporting.GroupedResult, error) {
+	return u.analytics().Spending(ctx, r)
+}
+
+func (u reportUseCases) CashFlow(ctx context.Context, r reporting.ReportRequest) (reporting.GroupedResult, error) {
+	return u.analytics().CashFlow(ctx, r)
+}
+
+// ExportResult writes a report result as csv or json with the same renderers as `fui report`.
+func (u reportUseCases) ExportResult(w io.Writer, format string, data any) error {
+	var f render.Format
+	switch format {
+	case "csv":
+		f = render.CSV
+	case "json":
+		f = render.JSON
+	default:
+		return fmt.Errorf("export report: unknown format %q", format)
+	}
+	// Machine formats do not use the locale.
+	return render.WriteReportResult(w, f, domain.LocaleENUS, data)
 }
 
 func (u reportUseCases) List(ctx context.Context) ([]app.SavedReport, error) {
@@ -164,6 +188,10 @@ func (u reportUseCases) Today() (domain.Date, error) { return u.svc.Today() }
 
 func (u reportUseCases) ListAccounts(ctx context.Context, req app.ListAccountsRequest) ([]app.AccountBalance, error) {
 	return u.svc.ListAccounts(ctx, req)
+}
+
+func (u reportUseCases) ResolveTxFilter(ctx context.Context, req app.ListTxRequest) (domain.TxFilter, error) {
+	return u.svc.ResolveTxFilter(ctx, req)
 }
 
 func (u reportUseCases) Export(ctx context.Context, req importing.ExportRequest, w io.Writer) (int, error) {

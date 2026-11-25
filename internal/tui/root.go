@@ -386,6 +386,9 @@ func (r *Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		r.status, r.err = msg.Text, nil
 		return r, nil
 	case screens.SwitchScreenMsg:
+		if msg.Filter != nil {
+			return r.switchToFiltered(msg.Target, *msg.Filter)
+		}
 		return r.switchTo(msg.Target)
 	case undoPlannedMsg:
 		return r.undoPlanned(msg)
@@ -448,6 +451,20 @@ func (r *Root) switchTo(target screens.ID) (tea.Model, tea.Cmd) {
 	}
 	r.active, r.status, r.err = target, "", nil
 	return r, r.tabs[r.active].Init()
+}
+
+// switchToFiltered navigates to target and, when that screen can receive a filter, applies it
+// instead of the screen's plain Init so the unfiltered list is never loaded; other screens
+// behave as in switchTo and ignore the filter.
+func (r *Root) switchToFiltered(target screens.ID, req app.ListTxRequest) (tea.Model, tea.Cmd) {
+	model, cmd := r.switchTo(target)
+	if r.active != target {
+		return model, cmd
+	}
+	if fr, ok := r.tabs[target].(screens.FilterReceiver); ok {
+		return r, fr.ApplyFilter(req)
+	}
+	return model, cmd
 }
 
 // forward delivers msg to the active screen, or to the screen it targets when it is a result of an
