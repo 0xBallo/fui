@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -94,6 +95,9 @@ type PACParams struct {
 type CashFlowParams struct {
 	Months int             `json:"months"`
 	Events []CashFlowEvent `json:"events,omitempty"`
+	// Accounts restricts the projection to these accounts (names or IDs);
+	// empty means every liquidity account.
+	Accounts []string `json:"accounts,omitempty"`
 }
 
 // CashFlowEvent is one hypothetical event of a cash-flow simulation.
@@ -120,6 +124,14 @@ type CashFlowMonth struct {
 	ScenarioMinor int64  `json:"scenario_minor"`
 }
 
+// CashFlowAccount is the month series of one account, or of the hypothetical
+// events (Account "events", ID 0).
+type CashFlowAccount struct {
+	Account string          `json:"account"`
+	ID      int64           `json:"id"`
+	Months  []CashFlowMonth `json:"months"`
+}
+
 // CashFlowResult is the output of a cash-flow simulation run.
 type CashFlowResult struct {
 	Start          string          `json:"start"`
@@ -128,6 +140,8 @@ type CashFlowResult struct {
 	FirstBelowZero string          `json:"first_below_zero,omitempty"`
 	EndDeltaMinor  int64           `json:"end_delta_minor"`
 	RunwayMonths   int             `json:"runway_months,omitempty"`
+	// Accounts is the per-account breakdown, set only when params select accounts.
+	Accounts []CashFlowAccount `json:"accounts,omitempty"`
 }
 
 // RunResult is the output of one simulation run.
@@ -472,7 +486,7 @@ func (s *Service) runCashFlow(ctx context.Context, enabled module.Set, p CashFlo
 	if err != nil {
 		return CashFlowResult{}, err
 	}
-	opening, baseFlows, err := s.forecastBase(ctx, enabled, start, p.Months)
+	opening, baseFlows, forecast, err := s.forecastBase(ctx, enabled, start, p.Months)
 	if err != nil {
 		return CashFlowResult{}, err
 	}
@@ -480,7 +494,25 @@ func (s *Service) runCashFlow(ctx context.Context, enabled module.Set, p CashFlo
 	if err != nil {
 		return CashFlowResult{}, err
 	}
-	res, err := simulate.CashFlow(start, opening, baseFlows, events, p.Months)
+	var (
+		res    simulate.CashFlowResult
+		series []simulate.AccountSeries
+		names  map[domain.AccountID]string
+	)
+	if len(p.Accounts) == 0 {
+		res, err = simulate.CashFlow(start, opening, baseFlows, events, p.Months)
+	} else {
+		var accts []simulate.AccountFlows
+		accts, names, err = s.selectAccounts(ctx, forecast, start, p.Accounts)
+		if err != nil {
+			return CashFlowResult{}, err
+		}
+		opening = 0
+		for _, a := range accts {
+			opening += a.Opening
+		}
+		res, series, err = simulate.CashFlowByAccount(start, accts, events, p.Months)
+	}
 	if err != nil {
 		return CashFlowResult{}, err
 	}
@@ -494,24 +526,123 @@ func (s *Service) runCashFlow(ctx context.Context, enabled module.Set, p CashFlo
 	if res.HasFirstBelowZero {
 		out.FirstBelowZero = res.FirstBelowZero.String()
 	}
-	for i, row := range res.Months {
-		out.Months[i] = CashFlowMonth{
-			End:           row.End.String(),
-			BaseMinor:     row.Base,
-			ScenarioMinor: row.Scenario,
+	out.Months = cashFlowMonths(res.Months)
+	for _, sr := range series {
+		name := "events"
+		if sr.ID != 0 {
+			name = names[sr.ID]
 		}
+		out.Accounts = append(out.Accounts, CashFlowAccount{Account: name, ID: int64(sr.ID), Months: cashFlowMonths(sr.Months)})
 	}
 	return out, nil
 }
 
-func (s *Service) forecastBase(ctx context.Context, enabled module.Set, start domain.Date, months int) (int64, []simulate.Flow, error) {
+func cashFlowMonths(in []simulate.MonthPoint) []CashFlowMonth {
+	out := make([]CashFlowMonth, len(in))
+	for i, row := range in {
+		out[i] = CashFlowMonth{End: row.End.String(), BaseMinor: row.Base, ScenarioMinor: row.Scenario}
+	}
+	return out
+}
+
+// selectAccounts resolves refs (account name, case-insensitive, or numeric ID)
+// and derives each account's opening and base flows in the base currency, with
+// the rate in force on start for the whole horizon, as the forecast total does.
+func (s *Service) selectAccounts(ctx context.Context, fc reporting.ForecastResult, start domain.Date, refs []string) ([]simulate.AccountFlows, map[domain.AccountID]string, error) {
+	var all []domain.Account
+	err := s.store.Read(ctx, func(r app.Repos) (err error) {
+		all, err = r.Accounts().List(ctx)
+		return err
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("list accounts: %w", err)
+	}
+	byName := make(map[string]domain.Account, len(all))
+	for _, a := range all {
+		byName[strings.ToLower(a.Name)] = a
+	}
+	var out []simulate.AccountFlows
+	names := map[domain.AccountID]string{}
+	seen := map[domain.AccountID]bool{}
+	for _, ref := range refs {
+		ref = strings.TrimSpace(ref)
+		acct, ok := byName[strings.ToLower(ref)]
+		if !ok {
+			for _, a := range all {
+				if strconv.FormatInt(int64(a.ID), 10) == ref {
+					acct, ok = a, true
+					break
+				}
+			}
+		}
+		if !ok {
+			return nil, nil, &domain.Error{Code: domain.CodeNotFound, Message: fmt.Sprintf("account %q not found", ref), Details: map[string]any{"field": "accounts"}}
+		}
+		if seen[acct.ID] {
+			continue
+		}
+		var proj *reporting.AccountProjection
+		for i := range fc.Accounts {
+			if fc.Accounts[i].Account == acct.Name {
+				proj = &fc.Accounts[i]
+				break
+			}
+		}
+		if proj == nil || len(proj.Series) == 0 {
+			return nil, nil, invalid("accounts", fmt.Sprintf("account %q is not a liquidity account", ref))
+		}
+		seen[acct.ID] = true
+		names[acct.ID] = acct.Name
+		af, err := s.accountFlows(ctx, acct, *proj, start)
+		if err != nil {
+			return nil, nil, err
+		}
+		out = append(out, af)
+	}
+	return out, names, nil
+}
+
+func (s *Service) accountFlows(ctx context.Context, acct domain.Account, proj reporting.AccountProjection, start domain.Date) (simulate.AccountFlows, error) {
+	af := simulate.AccountFlows{ID: acct.ID}
+	prev := int64(0)
+	err := s.store.Read(ctx, func(r app.Repos) error {
+		for i, pt := range proj.Series {
+			cur, err := domain.ParseCurrency(pt.Amount.Currency)
+			if err != nil {
+				return err
+			}
+			m, err := domain.NewMoney(pt.Amount.Minor, cur)
+			if err != nil {
+				return err
+			}
+			base, err := s.toBase(ctx, r, m, start)
+			if err != nil {
+				return err
+			}
+			if i == 0 {
+				af.Opening = base.Minor()
+			} else {
+				day, err := domain.ParseDate(pt.Date)
+				if err != nil {
+					return fmt.Errorf("forecast date %q: %w", pt.Date, err)
+				}
+				af.Flows = append(af.Flows, simulate.Flow{Date: day, Amount: base.Minor() - prev})
+			}
+			prev = base.Minor()
+		}
+		return nil
+	})
+	return af, err
+}
+
+func (s *Service) forecastBase(ctx context.Context, enabled module.Set, start domain.Date, months int) (int64, []simulate.Flow, reporting.ForecastResult, error) {
 	horizon, err := start.AddMonths(months)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, reporting.ForecastResult{}, err
 	}
 	days, err := daysBetween(start, horizon)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, reporting.ForecastResult{}, err
 	}
 	uc := reporting.NewAnalytics(s.store, s.clock, nil, reporting.Config{
 		Locale:        s.cfg.Locale,
@@ -522,10 +653,10 @@ func (s *Service) forecastBase(ctx context.Context, enabled module.Set, start do
 	})
 	forecast, err := uc.Forecast(ctx, reporting.ForecastRequest{HorizonDays: days})
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, reporting.ForecastResult{}, err
 	}
 	if len(forecast.Total) == 0 {
-		return 0, nil, errors.New("forecast returned no total points")
+		return 0, nil, reporting.ForecastResult{}, errors.New("forecast returned no total points")
 	}
 	opening := forecast.Total[0].Amount.Minor
 	flows := make([]simulate.Flow, 0, len(forecast.Total)-1)
@@ -533,13 +664,13 @@ func (s *Service) forecastBase(ctx context.Context, enabled module.Set, start do
 	for i := 1; i < len(forecast.Total); i++ {
 		day, err := domain.ParseDate(forecast.Total[i].Date)
 		if err != nil {
-			return 0, nil, fmt.Errorf("forecast date %q: %w", forecast.Total[i].Date, err)
+			return 0, nil, reporting.ForecastResult{}, fmt.Errorf("forecast date %q: %w", forecast.Total[i].Date, err)
 		}
 		cur := forecast.Total[i].Amount.Minor
 		flows = append(flows, simulate.Flow{Date: day, Amount: cur - prev})
 		prev = cur
 	}
-	return opening, flows, nil
+	return opening, flows, forecast, nil
 }
 
 func (s *Service) investmentBase(ctx context.Context, enabled module.Set, fixed int64, fromCurrentPositions bool) (int64, error) {

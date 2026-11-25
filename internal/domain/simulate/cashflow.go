@@ -163,3 +163,60 @@ func annuity(capital, rateBP int64, years int) (int64, error) {
 	}
 	return round(float64(capital) * r / (1 - math.Pow(1+r, -n))), nil
 }
+
+// AccountFlows is the opening balance and base flows of one account.
+type AccountFlows struct {
+	ID      domain.AccountID
+	Opening int64
+	Flows   []Flow
+}
+
+// AccountSeries is the month series attributed to one account. ID 0 holds the
+// contribution of the events (scenario only, Base 0).
+type AccountSeries struct {
+	ID     domain.AccountID
+	Months []MonthPoint
+}
+
+// CashFlowByAccount is CashFlow over the summed accounts, plus one series per
+// account and an ID 0 series for the events, so that the series sum to the
+// total for both Base and Scenario. StopIncome applies to each account's flows.
+func CashFlowByAccount(start domain.Date, accts []AccountFlows, events []Event, months int) (CashFlowResult, []AccountSeries, error) {
+	var opening int64
+	var all []Flow
+	for _, a := range accts {
+		opening += a.Opening
+		all = append(all, a.Flows...)
+	}
+	total, err := CashFlow(start, opening, all, events, months)
+	if err != nil {
+		return CashFlowResult{}, nil, err
+	}
+	// Only StopIncome reshapes existing flows; the other kinds add flows that
+	// belong to the events series.
+	var stops, adds []Event
+	for _, ev := range events {
+		if ev.Kind == StopIncome {
+			stops = append(stops, ev)
+		} else {
+			adds = append(adds, ev)
+		}
+	}
+	series := make([]AccountSeries, 0, len(accts)+1)
+	for _, a := range accts {
+		r, err := CashFlow(start, a.Opening, a.Flows, stops, months)
+		if err != nil {
+			return CashFlowResult{}, nil, err
+		}
+		series = append(series, AccountSeries{ID: a.ID, Months: r.Months})
+	}
+	ev, err := CashFlow(start, 0, nil, adds, months)
+	if err != nil {
+		return CashFlowResult{}, nil, err
+	}
+	for i := range ev.Months {
+		ev.Months[i].Base = 0
+	}
+	series = append(series, AccountSeries{Months: ev.Months})
+	return total, series, nil
+}
