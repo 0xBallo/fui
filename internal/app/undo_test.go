@@ -203,6 +203,7 @@ func TestUndoRefusals(t *testing.T) {
 		tp, err := e.svc.PlanTagTransaction(ctx, app.TagTransactionRequest{ID: tx.ID, Add: []string{tg.Name}})
 		wantNoErr(t, err)
 		wantNoErr(t, e.svc.ApplyTagTransaction(ctx, tp))
+		e.with(t, func(r app.Repos) error { return r.Tags().SetTags(ctx, tx.ID, nil) })
 		before := e.store.Snapshot()
 		_, err = e.svc.PlanUndo(ctx)
 		wantCode(t, err, domain.ErrInvalidValue)

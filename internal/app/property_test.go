@@ -156,3 +156,45 @@ func TestPlanNeverWrites(t *testing.T) {
 		}
 	})
 }
+
+// Undoing a random sequence of categorize, tag and untag in reverse restores the initial state.
+func TestUndoCategorizeTagSequences(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		e := newEnv(rt)
+		e.account(rt, "A", "checking", "EUR", "0")
+		e.category(rt, "C1", "expense")
+		e.category(rt, "C2", "expense")
+		e.tag(rt, "x")
+		e.tag(rt, "y")
+		ids := []domain.TransactionID{
+			e.tx(rt, app.AddTxRequest{Account: "A", Amount: "-5", Date: "2026-10-01", Category: "C1"}).ID,
+			e.tx(rt, app.AddTxRequest{Account: "A", Amount: "-6", Date: "2026-10-02"}).ID,
+		}
+		initial := e.state(rt)
+		states := []string{initial}
+		for range rapid.IntRange(1, 10).Draw(rt, "ops") {
+			id := rapid.SampledFrom(ids).Draw(rt, "id")
+			name := rapid.SampledFrom([]string{"x", "y"}).Draw(rt, "tag")
+			switch rapid.IntRange(0, 2).Draw(rt, "op") {
+			case 0: // always journaled, even when it changes nothing
+				e.categorize(rt, rapid.SampledFrom([]string{"C1", "C2", ""}).Draw(rt, "cat"), ids...)
+				states = append(states, e.state(rt))
+				continue
+			case 1:
+				e.tagOp(rt, id, name, false)
+			default:
+				e.tagOp(rt, id, name, true)
+			}
+			// A tag or untag that changes nothing writes no journal entry.
+			if s := e.state(rt); s != states[len(states)-1] {
+				states = append(states, s)
+			}
+		}
+		for i := len(states) - 2; i >= 0; i-- {
+			e.undo(rt)
+			if got := e.state(rt); got != states[i] {
+				rt.Fatalf("undo to step %d:\n%s\nwant:\n%s", i, got, states[i])
+			}
+		}
+	})
+}
