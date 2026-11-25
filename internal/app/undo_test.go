@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"pgregory.net/rapid"
 
@@ -317,4 +318,226 @@ func TestEditAmountOfSplitTxRejected(t *testing.T) {
 	if got := e.state(t); got != before {
 		t.Fatalf("undo edit of split tx:\n%s\nwant\n%s", got, before)
 	}
+}
+
+func (e env) with(t tb, fn func(r app.Repos) error) {
+	t.Helper()
+	if err := e.store.WithTx(context.Background(), fn); err != nil {
+		t.Fatalf("WithTx: %v", err)
+	}
+}
+
+// tagJournaled sets the tags of id and journals it as a masked tag entry.
+func (e env) tagJournaled(t tb, id domain.TransactionID, tg domain.Tag) {
+	t.Helper()
+	e.with(t, func(r app.Repos) error {
+		j, err := app.BeginJournal(context.Background(), r, id)
+		if err != nil {
+			return err
+		}
+		if err := r.Tags().SetTags(context.Background(), id, []domain.TagID{tg.ID}); err != nil {
+			return err
+		}
+		return j.Commit(context.Background(), r, fixedClock{time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)},
+			app.OpKindTag, app.UndoFieldTags)
+	})
+}
+
+func TestUndoMask(t *testing.T) {
+	ctx := t.Context()
+	setup := func(t *testing.T) (env, domain.Transaction, domain.Tag) {
+		e := newEnv(t)
+		e.account(t, "A", "checking", "EUR", "0")
+		tx := e.tx(t, app.AddTxRequest{Account: "A", Amount: "-5", Date: "2026-10-01", Description: "old"})
+		tg := e.tag(t, "x")
+		e.tagJournaled(t, tx.ID, tg)
+		return e, tx, tg
+	}
+	t.Run("description edit is not stale and survives", func(t *testing.T) {
+		e, tx, _ := setup(t)
+		e.with(t, func(r app.Repos) error {
+			cur, err := r.Transactions().Get(ctx, tx.ID)
+			if err != nil {
+				return err
+			}
+			cur.Description = "new"
+			return r.Transactions().Update(ctx, cur)
+		})
+		e.undo(t)
+		v, err := e.svc.ShowTx(ctx, tx.ID)
+		wantNoErr(t, err)
+		if v.Transaction.Description != "new" || len(v.Tags) != 0 {
+			t.Fatalf("after undo: %q tags=%v", v.Transaction.Description, v.Tags)
+		}
+	})
+	t.Run("changed tags are stale", func(t *testing.T) {
+		e, tx, _ := setup(t)
+		e.with(t, func(r app.Repos) error { return r.Tags().SetTags(ctx, tx.ID, nil) })
+		_, err := e.svc.PlanUndo(ctx)
+		wantCode(t, err, domain.ErrInvalidValue)
+	})
+	t.Run("reconciled refuses", func(t *testing.T) {
+		e, tx, _ := setup(t)
+		e.with(t, func(r app.Repos) error {
+			cur, err := r.Transactions().Get(ctx, tx.ID)
+			if err != nil {
+				return err
+			}
+			cur.Status = domain.StatusReconciled
+			return r.Transactions().Update(ctx, cur)
+		})
+		_, err := e.svc.PlanUndo(ctx)
+		wantCode(t, err, domain.ErrReconciled)
+	})
+}
+
+func TestUndoTrackedRowsAndGroups(t *testing.T) {
+	ctx := t.Context()
+	e := newEnv(t)
+	e.account(t, "A", "checking", "EUR", "0")
+	e.with(t, func(r app.Repos) error {
+		j, err := app.BeginJournal(ctx, r, 999) // missing ids are ignored
+		if err != nil {
+			return err
+		}
+		cur, err := domain.ParseCurrency("EUR")
+		if err != nil {
+			return err
+		}
+		m, err := domain.NewMoney(-100, cur)
+		if err != nil {
+			return err
+		}
+		d, err := domain.ParseDate("2026-10-01")
+		if err != nil {
+			return err
+		}
+		tx, err := domain.NewTransaction(domain.Transaction{AccountID: 1, Date: d, Amount: m, Status: domain.StatusBooked, Kind: domain.KindPayment})
+		if err != nil {
+			return err
+		}
+		tx, err = r.Transactions().Insert(ctx, tx)
+		if err != nil {
+			return err
+		}
+		j.Track(tx.ID, tx.ID)
+		return j.Commit(ctx, r, fixedClock{time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)}, app.OpKindRecurConfirm)
+	})
+	e.undo(t)
+	if got := e.state(t); got != "" {
+		t.Fatalf("state after undo = %q", got)
+	}
+}
+
+func TestUndoDanglingRefs(t *testing.T) {
+	ctx := t.Context()
+	e := newEnv(t)
+	e.account(t, "A", "checking", "EUR", "0")
+	py := e.payee(t, "Shop")
+	var batch domain.ImportBatchID
+	var rec app.RecurrenceID
+	var id domain.TransactionID
+	e.with(t, func(r app.Repos) error {
+		b, err := r.Imports().InsertBatch(ctx, app.ImportBatch{Connector: "x", Source: "s", SourceSHA256: "ab"})
+		if err != nil {
+			return err
+		}
+		batch = b.ID
+		cur, _ := domain.ParseCurrency("EUR")
+		m, _ := domain.NewMoney(-100, cur)
+		d, _ := domain.ParseDate("2026-10-01")
+		rule, err := domain.NewRecurrenceRule(1, domain.RecurrenceMonths, 1)
+		if err != nil {
+			return err
+		}
+		rc, err := r.Recurrences().Insert(ctx, app.Recurrence{AccountID: 1, Amount: m, Rule: rule, Start: d, NextDate: d})
+		if err != nil {
+			return err
+		}
+		rec = rc.ID
+		tx, err := domain.NewTransaction(domain.Transaction{
+			AccountID: 1, Date: d, Amount: m, Status: domain.StatusBooked, Kind: domain.KindPayment,
+			PayeeID: py.ID, ImportBatchID: batch, RecurrenceID: domain.RecurrenceID(rec),
+		})
+		if err != nil {
+			return err
+		}
+		tx, err = r.Transactions().Insert(ctx, tx)
+		id = tx.ID
+		return err
+	})
+	e.remove(t, id)
+	e.with(t, func(r app.Repos) error {
+		if err := r.Payees().Delete(ctx, py.ID); err != nil {
+			return err
+		}
+		if err := r.Imports().DeleteBatch(ctx, batch); err != nil {
+			return err
+		}
+		return r.Recurrences().Delete(ctx, rec)
+	})
+	p, err := e.svc.PlanUndo(ctx)
+	wantNoErr(t, err)
+	if len(p.Warnings) != 3 {
+		t.Fatalf("warnings = %v", p.Warnings)
+	}
+	wantNoErr(t, e.svc.ApplyUndo(ctx, p))
+	v, err := e.svc.ShowTx(ctx, id)
+	wantNoErr(t, err)
+	if tr := v.Transaction; tr.PayeeID != 0 || tr.ImportBatchID != 0 || tr.RecurrenceID != 0 {
+		t.Fatalf("refs not cleared: %+v", tr)
+	}
+}
+
+func TestUndoImplicitPayee(t *testing.T) {
+	ctx := t.Context()
+	payees := func(e env) int {
+		var n int
+		e.with(t, func(r app.Repos) error {
+			l, err := r.Payees().List(ctx)
+			n = len(l)
+			return err
+		})
+		return n
+	}
+	t.Run("removed on undo", func(t *testing.T) {
+		e := newEnv(t)
+		e.account(t, "A", "checking", "EUR", "0")
+		e.tx(t, app.AddTxRequest{Account: "A", Amount: "-5", Date: "2026-10-01", Payee: "Brand New"})
+		if payees(e) != 1 {
+			t.Fatal("payee not created")
+		}
+		e.undo(t)
+		if payees(e) != 0 {
+			t.Fatal("payee kept")
+		}
+	})
+	t.Run("removed with its last user", func(t *testing.T) {
+		e := newEnv(t)
+		e.account(t, "A", "checking", "EUR", "0")
+		e.tx(t, app.AddTxRequest{Account: "A", Amount: "-5", Date: "2026-10-01", Payee: "Brand New"})
+		e.tx(t, app.AddTxRequest{Account: "A", Amount: "-6", Date: "2026-10-02", Payee: "Brand New"})
+		e.undo(t)
+		e.undo(t)
+		if payees(e) != 0 {
+			t.Fatal("payee should go with its last user")
+		}
+	})
+	t.Run("kept when another row uses it", func(t *testing.T) {
+		e := newEnv(t)
+		e.account(t, "A", "checking", "EUR", "0")
+		tx := e.tx(t, app.AddTxRequest{Account: "A", Amount: "-5", Date: "2026-10-01", Payee: "Brand New"})
+		e.with(t, func(r app.Repos) error {
+			l, _ := r.Payees().List(ctx)
+			other := tx
+			other.ID = 0
+			other.PayeeID = l[0].ID
+			_, err := r.Transactions().Insert(ctx, other)
+			return err
+		})
+		e.undo(t)
+		if payees(e) != 1 {
+			t.Fatal("payee in use was deleted")
+		}
+	})
 }

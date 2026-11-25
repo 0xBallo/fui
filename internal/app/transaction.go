@@ -134,7 +134,7 @@ func (s *Service) ApplyAddTx(ctx context.Context, p AddTxPlan) (domain.Transacti
 		if err != nil {
 			return err
 		}
-		return s.journal(ctx, r, OpKindTxAdd, undoPayload{After: after})
+		return s.journal(ctx, r, OpKindTxAdd, undoPayload{After: after, CreatedPayee: createdPayee(p.Links, tx)})
 	})
 	return out, err
 }
@@ -593,7 +593,7 @@ func (s *Service) ApplyEditTx(ctx context.Context, p EditTxPlan) (domain.Transac
 		if err != nil {
 			return err
 		}
-		return s.journal(ctx, r, OpKindTxEdit, undoPayload{Before: before, After: after})
+		return s.journal(ctx, r, OpKindTxEdit, undoPayload{Before: before, After: after, CreatedPayee: createdPayee(p.Links, tx)})
 	})
 	return p.Tx, err
 }
@@ -933,6 +933,14 @@ func (l txLinks) createPayee(ctx context.Context, r Repos, tx *domain.Transactio
 	}
 	tx.PayeeID = p.ID
 	return nil
+}
+
+// createdPayee is the ID of the payee createPayee just inserted for tx, 0 when none.
+func createdPayee(l txLinks, tx domain.Transaction) int64 {
+	if l.NewPayee == nil {
+		return 0
+	}
+	return int64(tx.PayeeID)
 }
 
 func (l txLinks) storeTags(ctx context.Context, r Repos, id domain.TransactionID) error {
