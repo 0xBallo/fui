@@ -1,12 +1,17 @@
 package transactions
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/google/go-cmp/cmp"
 
+	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/tui/screens"
+	"github.com/0xballo/fui/internal/tui/screens/screentest"
 	"github.com/0xballo/fui/internal/tui/theme"
 )
 
@@ -93,5 +98,88 @@ func TestFilterViewShowsPickHint(t *testing.T) {
 	}
 	if !strings.Contains(m.viewFilter(), "ctrl+d pick date") {
 		t.Fatal("expected the pick date hint on From")
+	}
+}
+
+// recordingUC captures every ListTx request and answers with an empty page, so filters naming
+// entities absent from the archive are not rejected.
+type recordingUC struct {
+	UseCases
+	reqs []app.ListTxRequest
+}
+
+func (r *recordingUC) ListTx(_ context.Context, req app.ListTxRequest) (app.TxPage, error) {
+	r.reqs = append(r.reqs, req)
+	return app.TxPage{}, nil
+}
+
+func TestApplyFilterMapsEveryField(t *testing.T) {
+	fx := screentest.New(t)
+	fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "1000", OpenedOn: "2026-01-01"})
+	rec := &recordingUC{UseCases: fx.Service}
+	m := New(rec, domain.LocaleENUS, theme.Default())
+	m.SetSize(100, 30)
+
+	want := app.ListTxRequest{
+		From: "2026-06-01", To: "2026-06-30", Accounts: []string{"Checking"}, Categories: []string{"Food"},
+		Tags: []string{"trip"}, Payees: []string{"Shop"}, Uncategorized: true,
+		MinAmount: "1", MaxAmount: "99", Statuses: []string{"booked"}, Text: "milk",
+		After: &app.TxCursor{}, Limit: 7, // paging is owned by the screen and must be discarded
+	}
+	m.table.SetCursor(5)
+	scr := run(t, screens.Screen(m), m.ApplyFilter(want))
+
+	got := rec.reqs[0]
+	want.After, want.Limit = nil, pageSize
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Fatalf("ListTx request mismatch (-want +got):\n%s", diff)
+	}
+	if c := scr.(*Model).table.Cursor(); c != 0 {
+		t.Fatalf("cursor = %d, want 0", c)
+	}
+	chips := scr.(*Model).chipsView()
+	for _, s := range []string{"From: 2026-06-01", "Tag: trip", "Payee: Shop", "Uncategorized: yes", "Search: milk"} {
+		if !strings.Contains(chips, s) {
+			t.Errorf("chips %q lack %q", chips, s)
+		}
+	}
+}
+
+func TestApplyFilterMonthYearAndClear(t *testing.T) {
+	fx := screentest.New(t)
+	rec := &recordingUC{UseCases: fx.Service}
+	m := New(rec, domain.LocaleENUS, theme.Default())
+	m.SetSize(100, 30)
+
+	scr := run(t, screens.Screen(m), m.ApplyFilter(app.ListTxRequest{Month: "2026-06"}))
+	if got := rec.reqs[0].Month; got != "2026-06" {
+		t.Fatalf("Month = %q", got)
+	}
+	scr = run(t, scr, m.ApplyFilter(app.ListTxRequest{Year: 2026}))
+	if r := rec.reqs[1]; r.Year != 2026 || r.Month != "" {
+		t.Fatalf("second filter must replace the first, got %+v", r)
+	}
+	if !strings.Contains(m.chipsView(), "Year: 2026") {
+		t.Fatalf("missing year chip: %q", m.chipsView())
+	}
+
+	scr, cmd := scr.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
+	run(t, scr, cmd)
+	if r := rec.reqs[2]; r.Year != 0 || r.Month != "" {
+		t.Fatalf("reset must clear the filter, got %+v", r)
+	}
+}
+
+func TestRemoveChipClearsTagPayeeMonth(t *testing.T) {
+	fx := screentest.New(t)
+	m := New(fx.Service, domain.LocaleENUS, theme.Default())
+	m.SetSize(100, 30)
+	m.req = app.ListTxRequest{Month: "2026-06", Tags: []string{"a", "b"}, Payees: []string{"p"}}
+	for range 4 {
+		m.removeFocusedChip()
+		m.chipFocus = 0
+	}
+	if len(m.activeChips()) != 0 {
+		t.Fatalf("chips left: %+v", m.activeChips())
 	}
 }

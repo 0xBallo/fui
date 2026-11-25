@@ -4,6 +4,8 @@ package screens
 import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/0xballo/fui/internal/app"
 )
 
 // ID designates a top-level screen routed by numeric keys.
@@ -57,7 +59,16 @@ type StatusMsg struct {
 	Text string
 }
 
-// SwitchScreenMsg asks the root router to navigate to another tab.
+// SwitchScreenMsg asks the root router to navigate to another tab. A non-nil Filter is handed to
+// the target screen when it implements FilterReceiver and ignored otherwise.
 type SwitchScreenMsg struct {
 	Target ID
+	Filter *app.ListTxRequest
+}
+
+// FilterReceiver is implemented by screens that can be opened already narrowed to a transaction
+// filter (for example a drill-down from a report). ApplyFilter replaces any filter the screen
+// holds and returns the command that reloads it, which also serves as the screen's Init.
+type FilterReceiver interface {
+	ApplyFilter(req app.ListTxRequest) tea.Cmd
 }
