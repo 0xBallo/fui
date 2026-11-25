@@ -39,16 +39,9 @@ func (m *Model) SetPositionsUseCases(uc PositionsUseCases) {
 }
 
 func (m *Model) keyBindings() []key.Binding {
-	bindings := m.km.Bindings()
+	out := m.km.base()
 	if m.positionsUC != nil {
-		return bindings
-	}
-	out := make([]key.Binding, 0, len(bindings)-1)
-	for _, binding := range bindings {
-		if binding.Help().Key == m.km.Price.Help().Key {
-			continue
-		}
-		out = append(out, binding)
+		out = append(out, m.km.Price, m.km.Security, m.km.Op, m.km.Ops)
 	}
 	return out
 }
@@ -71,11 +64,11 @@ func (m *Model) resizePositions(w, h int) {
 }
 
 func (m *Model) positionsVisible() bool {
-	return m.positionsUC != nil && m.detail.Account.Kind == domain.AccountInvestment
+	return m.positionsUC != nil && m.opsAccount(m.detail.Account.Kind)
 }
 
 func (m *Model) loadDetailPositions(ctx context.Context, account domain.Account) ([]positionViewRow, error) {
-	if m.positionsUC == nil || account.Kind != domain.AccountInvestment {
+	if m.positionsUC == nil || !m.opsAccount(account.Kind) {
 		return nil, nil
 	}
 	lines, err := m.positionsUC.ListPositions(ctx, investing.PositionsRequest{Account: account.Name})

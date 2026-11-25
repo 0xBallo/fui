@@ -293,6 +293,7 @@ func (r *Root) newAccounts() *accounts.Model {
 	if r.cfg.Positions != nil && r.cfg.Modules.Has(module.Investments) {
 		m.SetPositionsUseCases(r.cfg.Positions)
 	}
+	m.SetCryptoEnabled(r.cfg.Modules.Has(module.Crypto))
 	return m
 }
 

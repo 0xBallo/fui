@@ -28,6 +28,11 @@ const (
 	modeReconcilePreview
 	modeConfirm
 	modePriceForm
+	modeSecurityForm
+	modeOpForm
+	modeOps
+	modeOpEditForm
+	modeOpConfirm
 )
 
 // Model is the accounts screen: a list of balances, the movement detail of one account, and the
@@ -75,6 +80,8 @@ type Model struct {
 
 	positionsUC PositionsUseCases
 	positions   positionState
+	secops      secOpsState
+	crypto      bool
 }
 
 var _ screens.Screen = (*Model)(nil)
@@ -97,6 +104,7 @@ func New(uc UseCases, loc domain.Locale, th theme.Theme) *Model {
 	}, th)
 	m.confirm = components.NewConfirmDialog(th)
 	m.initPositions()
+	m.initSecOps()
 	return m
 }
 
@@ -136,7 +144,8 @@ func (m *Model) KeyMap() []key.Binding { return m.keyBindings() }
 
 // InputActive reports whether the add-account form is capturing keystrokes.
 func (m *Model) InputActive() bool {
-	return m.mode == modeForm || m.mode == modeReconcileForm || m.mode == modePriceForm
+	return m.mode == modeForm || m.mode == modeReconcileForm || m.mode == modePriceForm ||
+		m.mode == modeSecurityForm || m.mode == modeOpForm || m.mode == modeOpEditForm
 }
 
 // loadedMsg carries a fresh account listing back into Update.
@@ -214,6 +223,9 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		m.setPositions(msg.positions)
 		m.mode = modeDetail
 		return m, nil
+	case opsLoadedMsg:
+		m.setOps(msg.lines)
+		return m, nil
 	case reconcilePlannedMsg:
 		m.setReconcilePlan(msg)
 		return m, nil
@@ -241,6 +253,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		return m.handleConfirmKey(msg)
 	case modePriceForm:
 		return m.handlePriceFormKey(msg)
+	case modeSecurityForm, modeOpForm:
+		return m.handleSecFormKey(msg, modeDetail)
+	case modeOpEditForm:
+		return m.handleSecFormKey(msg, modeOps)
+	case modeOps:
+		return m.handleOpsKey(msg)
+	case modeOpConfirm:
+		return m.handleOpConfirmKey(msg)
 	case modeDetail:
 		return m.handleDetailKey(msg)
 	case modeList:
@@ -304,6 +324,14 @@ func (m *Model) handleDetailKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		m.openReconcileForm(m.detail.Account.Name, modeDetail)
 	case key.Matches(msg, m.km.Price):
 		m.openPriceForm()
+	case key.Matches(msg, m.km.Security):
+		m.openSecurityForm()
+	case key.Matches(msg, m.km.Op):
+		m.openOpForm()
+	case key.Matches(msg, m.km.Ops):
+		if m.positionsVisible() {
+			return m, m.loadOps(m.detail.Account.Name)
+		}
 	}
 	return m, nil
 }
@@ -385,11 +413,17 @@ func (m *Model) submitReconcilePlan() tea.Cmd {
 
 func (m *Model) openAddForm() {
 	m.nameField = components.NewAutocomplete("Name:", "e.g. Main checking", m.th)
-	m.kindField = components.NewAutocomplete("Kind:", "cash/checking/credit_card/savings/investment/loan", m.th)
-	m.kindField.SetSuggestions([]string{
+	kinds := []string{
 		string(domain.AccountCash), string(domain.AccountChecking), string(domain.AccountCreditCard),
 		string(domain.AccountSavings), string(domain.AccountInvestment), string(domain.AccountLoan),
-	})
+	}
+	hint := "cash/checking/credit_card/savings/investment/loan"
+	if m.crypto {
+		kinds = append(kinds, string(domain.AccountWallet))
+		hint += "/wallet"
+	}
+	m.kindField = components.NewAutocomplete("Kind:", hint, m.th)
+	m.kindField.SetSuggestions(kinds)
 	m.currField = components.NewAutocomplete("Currency:", "EUR", m.th)
 	m.openField = components.NewAutocomplete("Opening balance:", "0", m.th)
 	m.dateField = components.NewAutocomplete("Opened on:", "today", m.th)
@@ -477,6 +511,12 @@ func (m *Model) View() string {
 		return components.Modal(m.th, m.width, m.height, m.confirm.View())
 	case modePriceForm:
 		return components.Modal(m.th, m.width, m.height, m.viewPriceForm())
+	case modeSecurityForm, modeOpForm, modeOpEditForm:
+		return components.Modal(m.th, m.width, m.height, m.viewSecForm("enter next/save · esc cancel"))
+	case modeOps:
+		return m.viewOps()
+	case modeOpConfirm:
+		return components.Modal(m.th, m.width, m.height, m.confirm.View())
 	case modeDetail:
 		return m.viewDetail()
 	case modeList:

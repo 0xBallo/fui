@@ -18,6 +18,7 @@ import (
 )
 
 type positionsStub struct {
+	accounts.PositionsUseCases
 	linesByAccount map[string][]investing.PositionLine
 	planReq        investing.SetPriceRequest
 	applyCount     int
