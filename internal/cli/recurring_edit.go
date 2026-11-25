@@ -32,15 +32,6 @@ func newRecurringEditCmd(deps *Deps) *cobra.Command {
 	return cmd
 }
 
-// changedInt returns a pointer to the value of flag when the caller set it, else nil.
-func changedInt(cmd *cobra.Command, flag string) *int {
-	if !cmd.Flags().Changed(flag) {
-		return nil
-	}
-	v, _ := cmd.Flags().GetInt(flag)
-	return &v
-}
-
 func runRecurringEdit(cmd *cobra.Command, deps *Deps, idArg string) error {
 	if err := requireRecurring(deps); err != nil {
 		return err
