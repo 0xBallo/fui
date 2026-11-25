@@ -12,7 +12,6 @@ import (
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
-	"github.com/0xballo/fui/internal/module"
 	"github.com/0xballo/fui/internal/tui/components"
 	"github.com/0xballo/fui/internal/tui/screens"
 	"github.com/0xballo/fui/internal/tui/theme"
@@ -68,6 +67,10 @@ type Model struct {
 	reconcileForm         components.Form
 	reconcilePlan         app.ReconcilePlan
 	reconcileNotice       string
+	reconcileBalance      string
+	reconcileDate         string
+	reconcileCands        []domain.Transaction
+	reconcileCursor       int
 	reconcileBackMode     mode
 
 	positionsUC PositionsUseCases
@@ -180,12 +183,6 @@ type detailLoadedMsg struct {
 	positions []positionViewRow
 }
 
-type reconcilePlannedMsg struct {
-	plan app.ReconcilePlan
-}
-
-type reconcileAppliedMsg struct{ loaded loadedMsg }
-
 func (m *Model) loadDetail(name string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -218,8 +215,10 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		m.mode = modeDetail
 		return m, nil
 	case reconcilePlannedMsg:
-		m.reconcilePlan = msg.plan
-		m.mode = modeReconcilePreview
+		m.setReconcilePlan(msg)
+		return m, nil
+	case reconcileSavedMsg:
+		m.reconcileNotice = msg.notice
 		return m, nil
 	case reconcileAppliedMsg:
 		m.applyLoaded(msg.loaded)
@@ -371,56 +370,17 @@ func (m *Model) handleReconcileFormKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd)
 }
 
 func (m *Model) submitReconcilePlan() tea.Cmd {
-	account := m.reconcileAccount
 	balance := strings.TrimSpace(m.reconcileBalanceField.Value())
-	date := strings.TrimSpace(m.reconcileDateField.Value())
 	if balance == "" {
 		m.reconcileNotice = "Statement balance is required."
 		return nil
 	}
 	m.reconcileNotice = ""
-	uc := m.uc
-	return func() tea.Msg {
-		plan, err := uc.PlanReconcile(context.Background(), module.Default(), app.ReconcileRequest{
-			Account: account, StatementBalance: balance, Date: date,
-		})
-		if err != nil {
-			return screens.ErrorMsg{Err: err}
-		}
-		return reconcilePlannedMsg{plan: plan}
-	}
-}
-
-func (m *Model) handleReconcilePreviewKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
-		m.mode = m.reconcileBackMode
-		return m, nil
-	case "enter":
-		if !m.reconcilePlan.Difference.IsZero() {
-			m.reconcileNotice = "Difference must be zero to close reconciliation."
-			return m, nil
-		}
-		return m, m.submitReconcileApply()
-	}
-	return m, nil
-}
-
-func (m *Model) submitReconcileApply() tea.Cmd {
-	plan := m.reconcilePlan
-	uc := m.uc
-	return func() tea.Msg {
-		ctx := context.Background()
-		if err := uc.ApplyReconcile(ctx, module.Default(), plan); err != nil {
-			return screens.ErrorMsg{Err: err}
-		}
-		msg := m.fetch(ctx)
-		loaded, ok := msg.(loadedMsg)
-		if !ok {
-			return msg
-		}
-		return reconcileAppliedMsg{loaded: loaded}
-	}
+	m.reconcileBalance = balance
+	m.reconcileDate = strings.TrimSpace(m.reconcileDateField.Value())
+	m.reconcileCands = nil
+	m.reconcileCursor = 0
+	return m.planReconcileCmd(nil, nil)
 }
 
 func (m *Model) openAddForm() {
@@ -562,32 +522,6 @@ func (m *Model) viewReconcileForm() string {
 	out += "\n\n" + m.th.Muted.Render("enter preview · esc cancel")
 	if m.reconcileNotice != "" {
 		out += "\n" + m.th.Warning.Render(m.reconcileNotice)
-	}
-	return out
-}
-
-func (m *Model) viewReconcilePreview() string {
-	p := m.reconcilePlan
-	out := m.th.Title.Render("Reconcile preview") + "\n"
-	out += m.th.Base.Render("Account: " + p.Account.Name)
-	out += "\n" + m.th.Base.Render("Date: "+p.Date.String()+"   Statement: "+domain.FormatAmount(p.StatementBalance, m.loc))
-	diffLine := "Difference: " + domain.FormatAmount(p.Difference, m.loc)
-	if p.Difference.IsZero() {
-		out += "\n" + m.th.StatusBar.Render(diffLine)
-		out += "\n" + m.th.Muted.Render("enter close reconciliation · esc back")
-	} else {
-		out += "\n" + m.th.Warning.Render(diffLine)
-		out += "\n" + m.th.Muted.Render("esc back (close is available only when difference is zero)")
-	}
-	if len(p.Unreconciled) > 0 {
-		out += "\n\n" + m.th.Header.Render("Unreconciled up to date:")
-		for _, tx := range p.Unreconciled {
-			out += "\n" + m.th.Base.Render(
-				tx.Date.Format(m.loc)+"  "+tx.Description+"  "+domain.FormatAmount(tx.Amount, m.loc))
-		}
-	}
-	if m.reconcileNotice != "" {
-		out += "\n\n" + m.th.Warning.Render(m.reconcileNotice)
 	}
 	return out
 }

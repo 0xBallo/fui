@@ -7,6 +7,17 @@ import (
 	"github.com/0xballo/fui/internal/domain"
 )
 
+// PendingActions resolves pending transactions created by recurrences and loan schedules. It is
+// optional: without it the confirm and skip keys do nothing. Each method returns the notice to show
+// in the status bar; a pending transaction the port cannot act on is reported through the notice,
+// not as an error.
+type PendingActions interface {
+	// Confirm books the pending transaction.
+	Confirm(ctx context.Context, id domain.TransactionID) (notice string, err error)
+	// Skip drops the pending occurrence without booking it.
+	Skip(ctx context.Context, id domain.TransactionID) (notice string, err error)
+}
+
 // UseCases is the subset of app.Service this screen needs, received by interface so tests can
 // supply a stub store-free implementation.
 type UseCases interface {
@@ -15,6 +26,7 @@ type UseCases interface {
 	TxTotals(ctx context.Context, req app.ListTxRequest) (app.TxTotals, error)
 	ListAccounts(ctx context.Context, req app.ListAccountsRequest) ([]app.AccountBalance, error)
 	ListCategories(ctx context.Context) ([]domain.Category, error)
+	ListPayees(ctx context.Context) ([]domain.Payee, error)
 	ListTags(ctx context.Context) ([]domain.Tag, error)
 	ListSplits(ctx context.Context, id domain.TransactionID) ([]domain.Split, error)
 	PlanAddTx(ctx context.Context, req app.AddTxRequest) (app.AddTxPlan, error)

@@ -99,6 +99,8 @@ type Config struct {
 	Flow           dashboard.FlowUseCases
 	AlertBudget    dashboard.AlertBudgetUseCases
 	AlertRecurring dashboard.AlertRecurringUseCases
+	// Pending enables confirming and skipping pending rows on the Transactions tab.
+	Pending transactions.PendingActions
 }
 
 // Root is the top-level Bubble Tea model: it routes between the screens (fixed keys 1..7),
@@ -147,7 +149,7 @@ func (r *Root) rebuild() {
 	}, theme.LipglossDetector{})
 	r.tabs = [len(tabNames)]screens.Screen{}
 	r.tabs[screens.TabDashboard] = r.newDashboard()
-	r.tabs[screens.TabTransactions] = transactions.New(r.uc, r.loc, r.th)
+	r.tabs[screens.TabTransactions] = r.newTransactions()
 	r.tabs[screens.TabAccounts] = r.newAccounts()
 	if cfg.Budget != nil && cfg.Modules.Has(module.Budget) {
 		r.tabs[screens.TabBudget] = budget.New(cfg.Budget, r.loc, r.th)
@@ -174,6 +176,16 @@ func (r *Root) rebuild() {
 	if r.height > 0 {
 		r.resize()
 	}
+}
+
+// newTransactions builds the register, with the confirm and skip keys when the pending-row port
+// is wired.
+func (r *Root) newTransactions() *transactions.Model {
+	m := transactions.New(r.uc, r.loc, r.th)
+	if r.cfg.Pending != nil {
+		m.SetPendingActions(r.cfg.Pending)
+	}
+	return m
 }
 
 // newDashboard builds the dashboard with the v0.3 net worth and insights features whose module is
@@ -354,9 +366,19 @@ func (r *Root) switchTo(target screens.ID) (tea.Model, tea.Cmd) {
 	return r, r.tabs[r.active].Init()
 }
 
+// forward delivers msg to the active screen, or to the screen it targets when it is a result of an
+// async command that may have been started on a tab that is no longer active.
 func (r *Root) forward(msg tea.Msg) (tea.Model, tea.Cmd) {
-	scr, cmd := r.tabs[r.active].Update(msg)
-	r.tabs[r.active] = scr
+	target := r.active
+	if t, ok := msg.(screens.Targeted); ok {
+		if id := t.ScreenID(); id >= 0 && int(id) < len(r.tabs) && r.tabs[id] != nil {
+			target = id
+		} else {
+			return r, nil // its screen no longer exists (module disabled meanwhile)
+		}
+	}
+	scr, cmd := r.tabs[target].Update(msg)
+	r.tabs[target] = scr
 	return r, cmd
 }
 

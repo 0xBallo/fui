@@ -1,6 +1,8 @@
 package settings
 
 import (
+	"slices"
+
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -88,21 +90,58 @@ func (m *Model) sectionLabels() []string {
 func (m *Model) nextSection() tea.Cmd {
 	restore := m.restoreTheme()
 	m.section = (m.section + 1) % section(builtinSections+len(m.subs))
-	if s := m.activeSub(); s != nil {
-		return tea.Batch(restore, s.Init())
+	if i := int(m.section) - builtinSections; i >= 0 && i < len(m.subs) {
+		return tea.Batch(restore, tagCmd(m.subs[i].name, m.subs[i].scr.Init()))
 	}
 	return restore
 }
 
-// updateSub forwards msg to the active sub-view.
+// sectionMsg is the result of a command started by a sub-view, tagged with that sub-view's name
+// so it reaches it even when the user has moved to another section before it arrives.
+type sectionMsg struct {
+	section string
+	msg     tea.Msg
+}
+
+// tagCmd wraps c so its result is a sectionMsg for the named section. Messages meant for the root
+// router (errors, status, navigation, quit) pass through untouched, and batches are tagged per
+// command.
+func tagCmd(section string, c tea.Cmd) tea.Cmd {
+	if c == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		switch msg := c().(type) {
+		case nil:
+			return nil
+		case tea.BatchMsg:
+			tagged := make(tea.BatchMsg, len(msg))
+			for i, inner := range msg {
+				tagged[i] = tagCmd(section, inner)
+			}
+			return tagged
+		case screens.ErrorMsg, screens.StatusMsg, screens.SwitchScreenMsg, tea.QuitMsg:
+			return msg
+		default:
+			return sectionMsg{section: section, msg: msg}
+		}
+	}
+}
+
+// updateSub forwards msg to the active sub-view; a sectionMsg goes to the section it targets
+// instead, whichever one is active.
 func (m *Model) updateSub(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	i := int(m.section) - builtinSections
+	if tagged, ok := msg.(sectionMsg); ok {
+		i = slices.IndexFunc(m.subs, func(s sub) bool { return s.name == tagged.section })
+		msg = tagged.msg
+	}
 	if i < 0 || i >= len(m.subs) {
 		return m, nil
 	}
 	next, cmd := m.subs[i].scr.Update(msg)
 	m.subs[i].scr = next
-	return m, cmd
+	return m, tagCmd(m.subs[i].name, cmd)
 }
 
 func (m *Model) subKeyMap() []key.Binding {

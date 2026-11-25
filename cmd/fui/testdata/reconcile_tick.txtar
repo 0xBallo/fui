@@ -1,0 +1,42 @@
+# Incremental reconcile with ticks, and dynamic completion of names from the archive.
+exec fui init --currency EUR
+exec fui account add Checking --kind checking --currency EUR --opening-balance 1000
+exec fui add -- -10,00 One -a Checking --date 2026-01-05
+exec fui add -- -20,00 Two -a Checking --date 2026-01-06
+
+# Partial tick: the difference is shown and the tick is stored without --yes.
+exec fui reconcile Checking --balance 970,00 --date 2026-01-10 --tick 1
+stdout 'Ticked transactions: 1'
+stdout 'Ticks saved'
+! stdout 'Reconciliation closed'
+
+# A dry run changes nothing.
+exec fui reconcile Checking --balance 970,00 --date 2026-01-10 --tick 2 --dry-run
+stdout 'Ticked transactions: 2'
+exec fui reconcile Checking --balance 970,00 --date 2026-01-10 --json --dry-run
+stdout '"ticked":1'
+
+# Ticking the rest reaches zero: closing needs --yes.
+! exec fui reconcile Checking --balance 970,00 --date 2026-01-10 --tick 2
+stderr 'requires --yes'
+exec fui reconcile Checking --balance 970,00 --date 2026-01-10 --tick 2 --yes
+stdout 'Reconciliation closed'
+
+# Untick on a fresh account state.
+exec fui account add Savings --kind savings --currency EUR --opening-balance 0
+exec fui add -- -5,00 Three -a Savings --date 2026-01-07
+exec fui reconcile Savings --balance -5,00 --date 2026-01-10 --tick 3 --dry-run
+stdout 'Difference is zero'
+exec fui reconcile Savings --balance -1,00 --date 2026-01-10 --tick 3
+exec fui reconcile Savings --balance -1,00 --date 2026-01-10 --untick 3 --json
+stdout '"ticked":0'
+
+# Dynamic completion reads the archive.
+exec fui __complete reconcile Sa
+stdout 'Savings'
+exec fui rule add groceries --contains shop --category Groceries --priority 1
+exec fui __complete rule rm gro
+stdout 'groceries'
+exec fui budget set Groceries 400 --yes
+exec fui __complete budget set Gro
+stdout 'Groceries'

@@ -56,6 +56,7 @@ type state struct {
 	Dismissed        map[string]app.DismissedInsight
 	SavedReports     map[app.SavedReportID]app.SavedReport
 	Reconciliations  map[reconciliationKey]app.Reconciliation
+	Ticks            map[domain.AccountID]map[domain.TransactionID]struct{}
 	Assets           map[domain.AssetID]domain.Asset
 	Valuations       map[valuationKey]domain.Valuation
 	Securities       map[domain.SecurityID]domain.Security
@@ -89,6 +90,7 @@ func newState() *state {
 		Dismissed:        map[string]app.DismissedInsight{},
 		SavedReports:     map[app.SavedReportID]app.SavedReport{},
 		Reconciliations:  map[reconciliationKey]app.Reconciliation{},
+		Ticks:            map[domain.AccountID]map[domain.TransactionID]struct{}{},
 		Assets:           map[domain.AssetID]domain.Asset{},
 		Valuations:       map[valuationKey]domain.Valuation{},
 		Securities:       map[domain.SecurityID]domain.Security{},
@@ -124,6 +126,7 @@ func (s *state) clone() *state {
 		Dismissed:        maps.Clone(s.Dismissed),
 		SavedReports:     maps.Clone(s.SavedReports),
 		Reconciliations:  maps.Clone(s.Reconciliations),
+		Ticks:            cloneTicks(s.Ticks),
 		Assets:           maps.Clone(s.Assets),
 		Valuations:       maps.Clone(s.Valuations),
 		Securities:       maps.Clone(s.Securities),

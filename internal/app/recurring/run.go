@@ -189,3 +189,17 @@ func (s *Service) PlanSkip(ctx context.Context, enabled module.Set, id app.Recur
 func (s *Service) ApplySkip(ctx context.Context, p SkipPlan) error {
 	return s.write(ctx, func(r app.Repos) error { return r.Recurrences().Update(ctx, p.Recurrence) })
 }
+
+// CatchUp materialises every occurrence due through today as a pending transaction, so a command
+// or the TUI starts with up-to-date pending rows. It is a no-op while the recurring module is
+// disabled and idempotent, and returns how many transactions it created.
+func (s *Service) CatchUp(ctx context.Context, enabled module.Set, today domain.Date) (int, error) {
+	if !enabled.Has(module.Recurring) {
+		return 0, nil
+	}
+	p, err := s.PlanRun(ctx, enabled, RunRequest{Until: today.String()})
+	if err != nil {
+		return 0, err
+	}
+	return s.ApplyRun(ctx, p)
+}

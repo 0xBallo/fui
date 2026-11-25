@@ -182,9 +182,84 @@ func TestAccountsReconcileNonZeroStaysPreview(t *testing.T) {
 
 	scr, _ = sendKey(scr, tea.KeyEnter)
 	view := scr.View()
-	if !strings.Contains(view, "Difference must be zero") {
-		t.Fatalf("expected close guard on non-zero difference, got:\n%s", view)
+	if !strings.Contains(view, "difference 5.00: tick the remaining transactions") {
+		t.Fatalf("expected difference notice on non-zero difference, got:\n%s", view)
 	}
+}
+
+// reconcileTicking opens the reconcile preview for Checking with two booked transactions.
+func reconcileTicking(t *testing.T, balance string) (screentest.Fixture, screens.Screen) {
+	t.Helper()
+	fx, scr := newFixture(t)
+	fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "100", OpenedOn: "2026-01-01"})
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-10", Description: "Store", Date: "2026-06-01", Status: "booked"})
+	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-5", Description: "Cafe", Date: "2026-06-02", Status: "booked"})
+	scr = run(t, scr, scr.Init())
+	scr, _ = sendRunes(scr, "r")
+	scr, _ = sendRunes(scr, balance)
+	scr, _ = sendKey(scr, tea.KeyEnter)
+	scr, cmd := sendKey(scr, tea.KeyEnter)
+	return fx, run(t, scr, cmd)
+}
+
+func TestAccountsReconcileTickAllCloses(t *testing.T) {
+	fx, scr := reconcileTicking(t, "85")
+	scr, cmd := sendRunes(scr, " ")
+	scr = run(t, scr, cmd)
+	scr, _ = sendRunes(scr, "j")
+	scr, cmd = sendRunes(scr, " ")
+	scr = run(t, scr, cmd)
+	view := scr.View()
+	if strings.Count(view, "[x]") != 2 || !strings.Contains(view, "Difference: 0.00") {
+		t.Fatalf("expected both ticked and zero difference, got:\n%s", view)
+	}
+	scr, cmd = sendKey(scr, tea.KeyEnter)
+	scr = run(t, scr, cmd)
+	if strings.Contains(scr.View(), "Reconcile preview") {
+		t.Fatalf("expected close, got:\n%s", scr.View())
+	}
+	page, err := fx.Service.ListTx(context.Background(), app.ListTxRequest{Accounts: []string{"Checking"}})
+	if err != nil {
+		t.Fatalf("ListTx: %v", err)
+	}
+	for _, it := range page.Items {
+		if it.Transaction.Status != domain.StatusReconciled {
+			t.Fatalf("expected all reconciled, got %+v", page.Items)
+		}
+	}
+}
+
+func TestAccountsReconcilePartialTickSavesAndUntick(t *testing.T) {
+	fx, scr := reconcileTicking(t, "85")
+	scr, cmd := sendRunes(scr, " ")
+	scr = run(t, scr, cmd)
+	if !strings.Contains(scr.View(), "Difference: -5.00") {
+		t.Fatalf("expected partial difference, got:\n%s", scr.View())
+	}
+	scr, cmd = sendKey(scr, tea.KeyEnter)
+	scr = run(t, scr, cmd)
+	view := scr.View()
+	if !strings.Contains(view, "Reconcile preview") || !strings.Contains(view, "difference -5.00: tick the remaining transactions") {
+		t.Fatalf("expected no close and a difference notice, got:\n%s", view)
+	}
+
+	// Leave and reopen: the stored tick is reloaded and still listed as ticked.
+	scr, _ = sendKey(scr, tea.KeyEsc)
+	scr, _ = sendRunes(scr, "r")
+	scr, _ = sendRunes(scr, "85")
+	scr, _ = sendKey(scr, tea.KeyEnter)
+	scr, cmd = sendKey(scr, tea.KeyEnter)
+	scr = run(t, scr, cmd)
+	if strings.Count(scr.View(), "[x]") != 1 {
+		t.Fatalf("expected the stored tick, got:\n%s", scr.View())
+	}
+
+	scr, cmd = sendRunes(scr, " ")
+	scr = run(t, scr, cmd)
+	if strings.Contains(scr.View(), "[x]") || !strings.Contains(scr.View(), "Difference: -15.00") {
+		t.Fatalf("expected untick to restore the difference, got:\n%s", scr.View())
+	}
+	_ = fx
 }
 
 func loanFixture(t *testing.T, mutate ...func(*app.Config)) screens.Screen {

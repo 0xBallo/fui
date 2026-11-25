@@ -67,6 +67,7 @@ type Model struct {
 	accounts   []string
 	categories []string
 	tags       []string
+	payees     []domain.Payee
 
 	form               components.Form
 	accountF           components.Autocomplete
@@ -77,6 +78,10 @@ type Model struct {
 	notesF             components.Autocomplete
 	statusF            components.Autocomplete
 	kindF              components.Autocomplete
+	payeeF             components.Autocomplete
+	tagsF              components.Autocomplete
+	editPayee          string
+	editTags           []string
 	editing            *domain.TransactionID
 	editingTransferLeg bool
 
@@ -110,6 +115,9 @@ type Model struct {
 	tagNotice    string
 
 	categorizeField components.Autocomplete
+
+	pending       PendingActions
+	pendingTarget domain.TransactionID
 }
 
 var _ screens.Screen = (*Model)(nil)
@@ -140,7 +148,12 @@ func (m *Model) SetSize(w, h int) {
 func (m *Model) Title() string { return "Transactions" }
 
 // KeyMap exposes the bindings for the global help view.
-func (m *Model) KeyMap() []key.Binding { return m.km.Bindings() }
+func (m *Model) KeyMap() []key.Binding {
+	if m.pending == nil {
+		return m.km.Bindings()
+	}
+	return append(m.km.Bindings(), m.km.ConfirmPending, m.km.SkipPending)
+}
 
 // InputActive reports whether a form, the filter panel, the quick search box, or the bulk
 // categorize field is currently capturing keystrokes.
@@ -161,12 +174,24 @@ type loadedMsg struct {
 	accounts       []string
 	categories     []string
 	tags           []string
+	payees         []domain.Payee
+	notice         string
 	clearSelection bool
 	totals         totalsState
 }
 
 // moreMsg carries one more page, appended to the already loaded window.
 type moreMsg struct{ page app.TxPage }
+
+// ScreenID routes each async result of this screen to its tab even when another one is active.
+func (loadedMsg) ScreenID() screens.ID        { return screens.TabTransactions }
+func (moreMsg) ScreenID() screens.ID          { return screens.TabTransactions }
+func (editTargetMsg) ScreenID() screens.ID    { return screens.TabTransactions }
+func (needReconcileMsg) ScreenID() screens.ID { return screens.TabTransactions }
+func (debounceMsg) ScreenID() screens.ID      { return screens.TabTransactions }
+func (searchResultMsg) ScreenID() screens.ID  { return screens.TabTransactions }
+func (splitLoadedMsg) ScreenID() screens.ID   { return screens.TabTransactions }
+func (totalsMsg) ScreenID() screens.ID        { return screens.TabTransactions }
 
 func (m *Model) load() tea.Cmd {
 	uc, req := m.uc, m.req
@@ -186,12 +211,22 @@ func (m *Model) loadMore() tea.Cmd {
 	}
 }
 
+// loaded applies a reloaded list and surfaces the notice of the write that triggered it, if any.
+func (m *Model) loaded(msg loadedMsg) tea.Cmd {
+	m.applyLoaded(msg)
+	if msg.notice == "" {
+		return nil
+	}
+	return func() tea.Msg { return screens.StatusMsg{Text: msg.notice} }
+}
+
 func (m *Model) applyLoaded(msg loadedMsg) {
 	m.items = msg.page.Items
 	m.next = msg.page.Next
 	m.accounts = msg.accounts
 	m.categories = msg.categories
 	m.tags = msg.tags
+	m.payees = msg.payees
 	m.totals = msg.totals
 	m.table.SetHeight(max(3, m.height-8-m.totalsHeight()))
 	m.table.SetRows(m.txRows())
@@ -206,8 +241,11 @@ func (m *Model) applyLoaded(msg loadedMsg) {
 func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case loadedMsg:
-		m.applyLoaded(msg)
-		return m, nil
+		return m, m.loaded(msg)
+	case pendingDoneMsg:
+		m.applyLoaded(msg.loaded)
+		notice := msg.notice
+		return m, func() tea.Msg { return screens.StatusMsg{Text: notice} }
 	case moreMsg:
 		m.loadingMore = false
 		m.items = append(m.items, msg.page.Items...)
@@ -216,7 +254,7 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		m.table.SetRows(m.txRows())
 		return m, nil
 	case editTargetMsg:
-		m.startEditForm(msg.tx)
+		m.startEditForm(msg.tx, msg.tags)
 		return m, nil
 	case debounceMsg:
 		if msg.seq != m.searchSeq {
@@ -278,6 +316,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 func (m *Model) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	if handled, cmd := m.handleNavKey(msg); handled {
 		return m, cmd
+	}
+	if m.handlePendingKey(msg) {
+		return m, nil
 	}
 	switch {
 	case key.Matches(msg, m.km.Add):
@@ -393,6 +434,8 @@ func (m *Model) handleConfirmKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 			return m, m.submitEdit(true)
 		case confirmCategorizeReconciled:
 			return m, m.submitCategorize(true)
+		case confirmPendingConfirm, confirmPendingSkip:
+			return m, m.submitPending(purpose)
 		case confirmNone:
 			return m, nil
 		}
@@ -447,6 +490,10 @@ func reload(ctx context.Context, uc UseCases, req app.ListTxRequest, clearSelect
 	if err != nil {
 		return screens.ErrorMsg{Err: err}
 	}
+	payees, err := uc.ListPayees(ctx)
+	if err != nil {
+		return screens.ErrorMsg{Err: err}
+	}
 	names := make([]string, len(accts))
 	for i, a := range accts {
 		names[i] = a.Account.Name
@@ -460,7 +507,7 @@ func reload(ctx context.Context, uc UseCases, req app.ListTxRequest, clearSelect
 		tagNames[i] = t.Name
 	}
 	totals := fetchTotals(ctx, uc, req)
-	return loadedMsg{page: page, accounts: names, categories: catNames, tags: tagNames, clearSelection: clearSelection, totals: totals}
+	return loadedMsg{page: page, accounts: names, categories: catNames, tags: tagNames, payees: payees, clearSelection: clearSelection, totals: totals}
 }
 
 // minTagsWidth is the narrowest terminal that still shows the Tags column.

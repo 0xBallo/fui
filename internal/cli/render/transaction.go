@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -25,7 +26,10 @@ type TransactionDTO struct {
 	// Original is the amount as the source stated it, when it differs from the booked one.
 	Original *OriginalDTO `json:"original,omitempty"`
 	// Raw is the source record as JSON text.
-	Raw string `json:"raw,omitempty"`
+	Raw     string   `json:"raw,omitempty"`
+	Payee   string   `json:"payee,omitempty"`
+	Tags    []string `json:"tags,omitempty"`
+	Notices []string `json:"notices,omitempty"`
 }
 
 // OriginalDTO is the --json shape of a transaction's original amount and currency.
@@ -41,6 +45,7 @@ func transactionDTO(v app.TxView) TransactionDTO {
 		Status: string(v.Transaction.Status), Kind: string(v.Transaction.Kind),
 		Amount: v.Transaction.Amount.Minor(), Currency: v.Transaction.Amount.Currency().Code(),
 		TransferID: int64(v.Transaction.TransferGroupID), Raw: v.Transaction.Raw,
+		Payee: v.Payee, Tags: v.Tags, Notices: v.Notices,
 	}
 	if o := v.Transaction.Original; o != nil {
 		dto.Original = &OriginalDTO{Amount: o.Minor(), Currency: o.Currency().Code()}
@@ -94,6 +99,16 @@ func WriteTx(w io.Writer, f Format, loc domain.Locale, color bool, v app.TxView)
 	}
 	if err := WriteTxList(w, f, loc, color, []app.TxView{v}); err != nil || f == CSV {
 		return err
+	}
+	if v.Payee != "" {
+		if _, err := fmt.Fprintf(w, "payee: %s\n", v.Payee); err != nil {
+			return fmt.Errorf("write payee: %w", err)
+		}
+	}
+	if len(v.Tags) > 0 {
+		if _, err := fmt.Fprintf(w, "tags: %s\n", strings.Join(v.Tags, ", ")); err != nil {
+			return fmt.Errorf("write tags: %w", err)
+		}
 	}
 	if o := v.Transaction.Original; o != nil {
 		if _, err := fmt.Fprintf(w, "original: %s %s\n", o.Currency().Code(), FormatMoney(*o, loc)); err != nil {

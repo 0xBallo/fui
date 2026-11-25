@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/0xballo/fui/internal/domain"
 )
@@ -429,4 +430,27 @@ func checkTagName(tags []domain.Tag, name string, self domain.TagID) error {
 		}
 	}
 	return nil
+}
+
+// resolveTagNames matches names exactly (case-insensitively) against tags; a name that matches
+// none is validated and returned in created. Repeated names collapse into one.
+func resolveTagNames(tags []domain.Tag, names []string) (existing, created []domain.Tag, err error) {
+	seen := map[string]bool{}
+	for _, name := range names {
+		key := domain.Tag{Name: name}.Key()
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		if i := slices.IndexFunc(tags, func(tg domain.Tag) bool { return tg.Key() == key }); i >= 0 {
+			existing = append(existing, tags[i])
+			continue
+		}
+		tg, err := domain.NewTag(name)
+		if err != nil {
+			return nil, nil, fmt.Errorf("tag: %w", err)
+		}
+		created = append(created, tg)
+	}
+	return existing, created, nil
 }

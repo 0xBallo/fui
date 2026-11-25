@@ -437,3 +437,17 @@ func (s *Service) ApplyConfirm(ctx context.Context, p ConfirmPlan) error {
 		return nil
 	})
 }
+
+// CatchUp creates the pending transactions of every installment due through today, so a command
+// or the TUI starts with up-to-date pending rows. It is a no-op while the loans module is
+// disabled and idempotent, and returns how many transactions it created.
+func (s *Service) CatchUp(ctx context.Context, enabled module.Set, today domain.Date) (int, error) {
+	if !enabled.Has(module.Loans) {
+		return 0, nil
+	}
+	p, err := s.PlanInstallments(ctx, enabled, "", today.String())
+	if err != nil {
+		return 0, err
+	}
+	return s.ApplyInstallments(ctx, p)
+}

@@ -225,13 +225,13 @@ type ruleTestedMsg struct{ result domain.RuleApplyResult }
 
 func (m *Rules) submitTest() tea.Cmd {
 	amount, _ := strconv.ParseInt(m.testAmount.Value(), 10, 64)
-	req := rules.TestRequest{Text: m.testText.Value(), Account: m.testAccount.Value(), AmountMinor: amount}
+	req := rules.TestRequest{Text: m.testText.Value(), Account: m.testAccount.Value(), AmountMinor: &amount}
 	return func() tea.Msg {
 		res, err := m.uc.Test(context.Background(), req)
 		if err != nil {
 			return screens.ErrorMsg{Err: err}
 		}
-		return ruleTestedMsg{result: res}
+		return ruleTestedMsg{result: res.RuleApplyResult}
 	}
 }
 

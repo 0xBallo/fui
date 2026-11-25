@@ -84,10 +84,57 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 			return bail(stderr, asJSON, err)
 		}
 		defer func() { _ = closeStore() }()
+		catchUp(ctx, logger, cfg, appClock, deps, args)
 	}
 
 	logger.Debug("executing command", "args", args)
 	return cli.Execute(ctx, deps, args)
+}
+
+// catchUpSkipVerbs are the commands that must not materialise due recurrences and installments:
+// they manage the archive itself, or run without needing its content.
+var catchUpSkipVerbs = map[string]bool{
+	"help": true, "completion": true, "__complete": true, "init": true, "reset": true, "restore": true,
+	"backup": true, "version": true, "config": true, "skill": true,
+}
+
+// SkipsCatchup reports whether args must not run the startup catch-up: the archive-management and
+// store-free verbs, help/version flags and --dry-run, which must never write.
+func SkipsCatchup(args []string) bool {
+	for _, a := range args {
+		switch a {
+		case "-h", "--help", "--version", "--dry-run":
+			return true
+		}
+	}
+	return catchUpSkipVerbs[firstVerb(args)]
+}
+
+// catchUp creates the pending transactions of recurrences and loan installments due through today
+// before the command or the TUI starts. A failure is logged and never aborts the command. A bare
+// invocation starts the TUI through the same wireStore path, so it is covered too.
+func catchUp(ctx context.Context, logger *slog.Logger, cfg *config.Config, clk app.Clock, deps *cli.Deps, args []string) {
+	if SkipsCatchup(args) {
+		return
+	}
+	modules, err := cfg.ModulesEnabled()
+	if err != nil {
+		logger.Warn("startup catch-up skipped", "err", err)
+		return
+	}
+	today, err := domain.FromTime(clk.Now().In(time.Local))
+	if err != nil {
+		logger.Warn("startup catch-up skipped", "err", err)
+		return
+	}
+	n, err := app.Catchup(ctx, modules, today, deps.Recurring, deps.Loans)
+	if err != nil {
+		logger.Warn("startup catch-up failed", "err", err)
+		return
+	}
+	if n > 0 {
+		logger.Info("startup catch-up created pending transactions", "count", n)
+	}
 }
 
 // bootstrap resolves the configuration and sets up file logging, in that order: logging needs
@@ -204,6 +251,9 @@ func tuiConfig(cfg *config.Config, deps *cli.Deps, store *sqlite.Store, clk app.
 			})
 		}},
 		AlertRecurring: recurrenceAlerts{svc: deps.Recurring, modules: modules},
+		Pending: pendingActions{
+			txs: deps.Service, recurring: deps.Recurring, loans: deps.Loans, modules: modules,
+		},
 		Budget: budgetUseCases{build: func() *budgeting.Service {
 			return budgeting.New(store, clk, budgeting.Config{
 				Locale: loc, BaseCurrency: base, MonthStartDay: cfg.MonthStartDay,

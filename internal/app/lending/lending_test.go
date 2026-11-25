@@ -516,3 +516,20 @@ func TestApplyInstallmentsEmpty(t *testing.T) {
 		t.Error("bad until accepted")
 	}
 }
+
+func TestCatchUp(t *testing.T) {
+	e := newEnv(t)
+	e.add(t, addReq())
+	ctx := context.Background()
+	today := date("2026-04-01")
+	off := must(module.Validate([]module.ID{module.Core}))
+	if n, err := e.svc.CatchUp(ctx, off, today); n != 0 || err != nil {
+		t.Fatalf("module off = %d, %v, want 0", n, err)
+	}
+	if n, err := e.svc.CatchUp(ctx, e.on, today); n != 3 || err != nil {
+		t.Fatalf("first CatchUp = %d, %v, want 3", n, err)
+	}
+	if n, err := e.svc.CatchUp(ctx, e.on, today); n != 0 || err != nil {
+		t.Fatalf("second CatchUp = %d, %v, want 0", n, err)
+	}
+}
