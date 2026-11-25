@@ -47,6 +47,9 @@ type Row struct {
 	Transfer   string   // transfer label shared by the two legs, as written in the stream
 	Matched    []domain.TransactionID
 	Rules      RuleEffect // what the categorization rules set on this row
+	// Hint is the source's category hint: only the rules' hint conditions see it, it never sets
+	// the category by itself.
+	Hint string
 	// ConfirmsPending is set when the row matches a pending transaction a recurrence created
 	// (recurring module only): applying it books that transaction instead of inserting a new one.
 	ConfirmsPending domain.TransactionID
@@ -101,6 +104,17 @@ type BalanceDiscrepancy struct {
 	Actual     int64
 }
 
+// BalanceMismatch is a statement balance record of an existing account that differs from the
+// balance computed at that date (archive plus the rows the import adds).
+type BalanceMismatch struct {
+	AccountRef string
+	AccountID  domain.AccountID
+	Date       domain.Date
+	Expected   int64 // balance stated by the stream
+	Computed   int64
+	Suggest    string // the reconcile command that records the stated balance
+}
+
 // ImportPlan is the plain-data result of PlanImport: what ApplyImport will do.
 type ImportPlan struct {
 	app.Plan
@@ -122,6 +136,8 @@ type ImportPlan struct {
 	Warnings        []RowWarning
 	Transfers       []TransferProposal
 	Discrepancies   []BalanceDiscrepancy
+	// BalanceMismatches lists balance records of existing accounts the computed balance contradicts.
+	BalanceMismatches []BalanceMismatch
 	// Stderr is what the connector wrote on stderr, for --verbose.
 	Stderr string
 }

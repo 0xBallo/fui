@@ -21,10 +21,14 @@ type Rule struct {
 
 // RuleConditions are all matched in AND.
 type RuleConditions struct {
-	DescriptionContains string          `json:"description_contains,omitempty"`
-	DescriptionEquals   string          `json:"description_equals,omitempty"`
-	Amount              RuleAmountRange `json:"amount,omitempty"`
-	AccountIDs          []AccountID     `json:"account_ids,omitempty"`
+	DescriptionContains string `json:"description_contains,omitempty"`
+	DescriptionEquals   string `json:"description_equals,omitempty"`
+	// HintContains and HintEquals match the category hint a source (import) attaches to a
+	// transaction; a transaction without hint never matches them.
+	HintContains string          `json:"hint_contains,omitempty"`
+	HintEquals   string          `json:"hint_equals,omitempty"`
+	Amount       RuleAmountRange `json:"amount,omitempty"`
+	AccountIDs   []AccountID     `json:"account_ids,omitempty"`
 }
 
 // RuleAmountSign filters on transaction sign.
@@ -97,6 +101,12 @@ func NewRule(r Rule) (Rule, error) {
 // specific field wins for that field; lower-priority rules can still set other
 // fields that are still unset.
 func Apply(rules []Rule, tx Transaction, normalizedText string) (RuleApplyResult, error) {
+	return ApplyWithHint(rules, tx, normalizedText, "")
+}
+
+// ApplyWithHint is Apply for a transaction carrying a source category hint, which only the
+// hint conditions look at; the hint is never applied as a category by itself.
+func ApplyWithHint(rules []Rule, tx Transaction, normalizedText, hint string) (RuleApplyResult, error) {
 	if tx.AccountID == 0 {
 		return RuleApplyResult{}, missingField("account_id")
 	}
@@ -105,6 +115,7 @@ func Apply(rules []Rule, tx Transaction, normalizedText string) (RuleApplyResult
 	}
 
 	normalizedText = normalizeRuleText(normalizedText)
+	hint = normalizeRuleText(hint)
 	sorted, err := sortedEnabledRules(rules)
 	if err != nil {
 		return RuleApplyResult{}, err
@@ -112,7 +123,7 @@ func Apply(rules []Rule, tx Transaction, normalizedText string) (RuleApplyResult
 
 	var res RuleApplyResult
 	for _, rule := range sorted {
-		ok, err := rule.Conditions.match(tx, normalizedText)
+		ok, err := rule.Conditions.match(tx, normalizedText, hint)
 		if err != nil {
 			return RuleApplyResult{}, err
 		}
@@ -190,6 +201,8 @@ func (a *RuleActions) UnmarshalJSON(data []byte) error {
 func normalizeConditions(c RuleConditions) (RuleConditions, error) {
 	c.DescriptionContains = normalizeRuleText(c.DescriptionContains)
 	c.DescriptionEquals = normalizeRuleText(c.DescriptionEquals)
+	c.HintContains = normalizeRuleText(c.HintContains)
+	c.HintEquals = normalizeRuleText(c.HintEquals)
 
 	amount, err := normalizeAmountRange(c.Amount)
 	if err != nil {
@@ -261,11 +274,17 @@ func normalizeActions(a RuleActions) (RuleActions, error) {
 	return a, nil
 }
 
-func (c RuleConditions) match(tx Transaction, normalizedText string) (bool, error) {
+func (c RuleConditions) match(tx Transaction, normalizedText, hint string) (bool, error) {
 	if c.DescriptionContains != "" && !strings.Contains(normalizedText, c.DescriptionContains) {
 		return false, nil
 	}
 	if c.DescriptionEquals != "" && normalizedText != c.DescriptionEquals {
+		return false, nil
+	}
+	if c.HintContains != "" && !strings.Contains(hint, c.HintContains) {
+		return false, nil
+	}
+	if c.HintEquals != "" && hint != c.HintEquals {
 		return false, nil
 	}
 

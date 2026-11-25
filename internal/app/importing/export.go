@@ -389,6 +389,10 @@ func (d exportData) fuiTx(t domain.Transaction) *fuiproto.TransactionRecord {
 		Status: fuiproto.TransactionStatus(t.Status), Kind: fuiproto.TransactionKind(t.Kind),
 		Category: d.category(t), Notes: t.Notes, Payee: d.payee(t), Tags: d.tagNames(t),
 	}
+	if t.Original != nil {
+		rec.Original = &fuiproto.OriginalAmount{Amount: t.Original.Minor(), Currency: t.Original.Currency().Code()}
+	}
+	rec.Raw = parseRaw(t.Raw)
 	if rec.ID == "" {
 		rec.ID = "fui-" + strconv.FormatInt(int64(t.ID), 10)
 	}

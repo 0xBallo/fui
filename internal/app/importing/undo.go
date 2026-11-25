@@ -14,6 +14,7 @@ type UndoPlan struct {
 	app.Plan
 	Batch        app.ImportBatch
 	Transactions []domain.TransactionID
+	SecurityOps  []domain.SecurityOpID
 }
 
 // ListBatches returns every import batch, most recent first.
@@ -43,20 +44,34 @@ func (s *Service) PlanUndo(ctx context.Context, batch domain.ImportBatchID) (Und
 		if err != nil {
 			return err
 		}
+		ops, err := r.Securities().ListOpsByBatch(ctx, batch)
+		if err != nil {
+			return fmt.Errorf("list security operations of batch %d: %w", batch, err)
+		}
 		out = UndoPlan{Batch: b}
 		for _, t := range txs {
 			out.Transactions = append(out.Transactions, t.ID)
+		}
+		for _, op := range ops {
+			out.SecurityOps = append(out.SecurityOps, op.ID)
 		}
 		out.Changes = []app.Change{
 			{
 				Op: app.OpDelete, Entity: app.EntityTransaction, Fields: map[string]any{"count": len(txs), "import_batch": int64(batch)},
 				Summary: fmt.Sprintf("delete %d transactions of import batch %d", len(txs), batch),
 			},
-			{
+		}
+		if len(ops) > 0 {
+			out.Changes = append(out.Changes, app.Change{
+				Op: app.OpDelete, Entity: "security_op", Fields: map[string]any{"count": len(ops), "import_batch": int64(batch)},
+				Summary: fmt.Sprintf("delete %d security operations of import batch %d", len(ops), batch),
+			})
+		}
+		out.Changes = append(out.Changes,
+			app.Change{
 				Op: app.OpDelete, Entity: EntityImportBatch, Fields: map[string]any{"id": int64(batch), "source": b.Source},
 				Summary: fmt.Sprintf("delete import batch %d (%s)", batch, b.Source),
-			},
-		}
+			})
 		out.Bulk = true
 		return nil
 	})
@@ -94,6 +109,16 @@ func (s *Service) ApplyUndo(ctx context.Context, p UndoPlan) error {
 		txs, err := batchTransactions(ctx, r, p.Batch.ID)
 		if err != nil {
 			return err
+		}
+		ops, err := r.Securities().ListOpsByBatch(ctx, p.Batch.ID)
+		if err != nil {
+			return fmt.Errorf("list security operations of batch %d: %w", p.Batch.ID, err)
+		}
+		// Ops go first: they may reference their cash transaction.
+		for _, op := range ops {
+			if err := r.Securities().DeleteOp(ctx, op.ID); err != nil {
+				return fmt.Errorf("delete security operation %d: %w", op.ID, err)
+			}
 		}
 		groups := map[domain.TransferGroupID]bool{}
 		for _, t := range txs {
