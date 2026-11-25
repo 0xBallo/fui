@@ -209,7 +209,7 @@ func tuiConfig(cfg *config.Config, deps *cli.Deps, store *sqlite.Store, clk app.
 				Locale: loc, BaseCurrency: base, MonthStartDay: cfg.MonthStartDay,
 				Mode: domain.BudgetMode(cfg.Budget.Mode), Modules: modules(),
 			})
-		}},
+		}, today: deps.Service.Today, lists: lookups{svc: deps.Service}},
 		Report: reportUseCases{
 			analytics: analytics,
 			svc:       deps.Service, importing: deps.Importing,

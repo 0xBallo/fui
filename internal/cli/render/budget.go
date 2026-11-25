@@ -24,6 +24,7 @@ type BudgetDTO struct {
 	Targets   []BudgetTargetDTO `json:"targets"`
 	Amount    int64             `json:"amount"`
 	Currency  string            `json:"currency"`
+	Period    string            `json:"period"`
 	Carry     bool              `json:"carry"`
 	Overrides map[string]int64  `json:"overrides,omitempty"`
 	WarnAt    int               `json:"warn_at"`
@@ -56,15 +57,36 @@ func monthKeyString(k domain.MonthKey) string {
 func budgetDTO(b domain.Budget) BudgetDTO {
 	return BudgetDTO{
 		ID: int64(b.ID), Name: b.Name, Mode: string(b.Mode), Targets: budgetTargetDTOs(b.Targets),
-		Amount: b.Amount.Minor(), Currency: b.Amount.Currency().Code(), Carry: b.Carry,
-		Overrides: budgetOverridesDTO(b.Overrides), WarnAt: b.Thresholds.Warn, OverAt: b.Thresholds.Over,
+		Amount: b.Amount.Minor(), Currency: b.Amount.Currency().Code(), Period: periodLabel(b), Carry: b.Carry,
+		Overrides: budgetOverridesDTO(b.Overrides), WarnAt: thresholds(b).Warn, OverAt: thresholds(b).Over,
 	}
 }
 
+// periodLabel is the budget's period as text; the zero value reads as monthly, like NewBudget does.
+func periodLabel(b domain.Budget) string {
+	if b.Period == "" {
+		return string(domain.BudgetMonthly)
+	}
+	return string(b.Period)
+}
+
+// thresholds returns the budget's warn/over percentages, falling back to the defaults for a
+// budget that never stored any.
+func thresholds(b domain.Budget) domain.BudgetThresholds {
+	if b.Thresholds == (domain.BudgetThresholds{}) {
+		return domain.DefaultBudgetThresholds
+	}
+	return b.Thresholds
+}
+
 func budgetRows(budgets []domain.Budget, loc domain.Locale) Rows {
-	t := Rows{Header: []string{"NAME", "MODE", "AMOUNT", "CARRY"}, MoneyCols: []int{2}}
+	t := Rows{Header: []string{"NAME", "MODE", "PERIOD", "AMOUNT", "CARRY", "WARN", "OVER"}, MoneyCols: []int{3}}
 	for _, b := range budgets {
-		t.Body = append(t.Body, []string{b.Name, string(b.Mode), FormatMoney(b.Amount, loc), fmt.Sprint(b.Carry)})
+		th := thresholds(b)
+		t.Body = append(t.Body, []string{
+			b.Name, string(b.Mode), periodLabel(b), FormatMoney(b.Amount, loc), fmt.Sprint(b.Carry),
+			fmt.Sprint(th.Warn), fmt.Sprint(th.Over),
+		})
 	}
 	return t
 }
@@ -117,6 +139,9 @@ func envelopeState(m domain.EnvelopeMonth) string {
 // CapStatusDTO is the --json shape of one cap evaluated for the requested month.
 type CapStatusDTO struct {
 	Name      string `json:"name"`
+	Period    string `json:"period"`
+	WarnAt    int    `json:"warn_at"`
+	OverAt    int    `json:"over_at"`
 	Amount    int64  `json:"amount"`
 	CarryIn   int64  `json:"carry_in"`
 	Available int64  `json:"available"`
@@ -129,7 +154,8 @@ type CapStatusDTO struct {
 
 func capStatusDTO(l budgeting.CapLine) CapStatusDTO {
 	return CapStatusDTO{
-		Name: l.Budget.Name, Amount: l.Amount.Minor(), CarryIn: l.CarryIn.Minor(), Available: l.Available.Minor(),
+		Name: l.Budget.Name, Period: periodLabel(l.Budget), WarnAt: thresholds(l.Budget).Warn,
+		OverAt: thresholds(l.Budget).Over, Amount: l.Amount.Minor(), CarryIn: l.CarryIn.Minor(), Available: l.Available.Minor(),
 		Spent: l.Spent.Minor(), Planned: l.Planned.Minor(), Remaining: l.Remaining.Minor(), Percent: l.Percent,
 		State: stateLabel(l.State),
 	}
@@ -138,6 +164,9 @@ func capStatusDTO(l budgeting.CapLine) CapStatusDTO {
 // EnvelopeStatusDTO is the --json shape of one envelope's ledger for the requested month.
 type EnvelopeStatusDTO struct {
 	Name      string `json:"name"`
+	Period    string `json:"period"`
+	WarnAt    int    `json:"warn_at"`
+	OverAt    int    `json:"over_at"`
 	CarryIn   int64  `json:"carry_in"`
 	Assigned  int64  `json:"assigned"`
 	MovesIn   int64  `json:"moves_in"`
@@ -146,14 +175,18 @@ type EnvelopeStatusDTO struct {
 	Planned   int64  `json:"planned"`
 	Balance   int64  `json:"balance"`
 	Overspend int64  `json:"overspend"`
-	State     string `json:"state"`
+	// SuggestedMonthly is the balance spread over the months left; 0 unless the envelope is yearly.
+	SuggestedMonthly int64  `json:"suggested_monthly"`
+	State            string `json:"state"`
 }
 
 func envelopeStatusDTO(l budgeting.EnvelopeLine) EnvelopeStatusDTO {
 	return EnvelopeStatusDTO{
-		Name: l.Budget.Name, CarryIn: l.CarryIn.Minor(), Assigned: l.Assigned.Minor(), MovesIn: l.MovesIn.Minor(),
+		Name: l.Budget.Name, Period: periodLabel(l.Budget), WarnAt: thresholds(l.Budget).Warn,
+		OverAt: thresholds(l.Budget).Over, CarryIn: l.CarryIn.Minor(), Assigned: l.Assigned.Minor(), MovesIn: l.MovesIn.Minor(),
 		MovesOut: l.MovesOut.Minor(), Spent: l.Spent.Minor(), Planned: l.Planned.Minor(), Balance: l.Balance.Minor(),
-		Overspend: l.Overspend.Minor(), State: envelopeState(l.EnvelopeMonth),
+		Overspend: l.Overspend.Minor(), SuggestedMonthly: l.SuggestedMonthly.Minor(),
+		State: envelopeState(l.EnvelopeMonth),
 	}
 }
 
@@ -198,13 +231,18 @@ func budgetStatusDTO(st budgeting.Status) BudgetStatusDTO {
 }
 
 func capStatusRows(caps []budgeting.CapLine, loc domain.Locale) Rows {
-	t := Rows{Header: []string{"NAME", "AVAILABLE", "SPENT", "PLANNED", "REMAINING", "%", "STATE"}, MoneyCols: []int{1, 2, 3, 4}}
+	t := Rows{
+		Header:    []string{"NAME", "PERIOD", "AVAILABLE", "SPENT", "PLANNED", "REMAINING", "%", "WARN", "OVER", "STATE"},
+		MoneyCols: []int{2, 3, 4, 5},
+	}
 	sorted := append([]budgeting.CapLine(nil), caps...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Budget.Name < sorted[j].Budget.Name })
 	for _, l := range sorted {
+		th := thresholds(l.Budget)
 		t.Body = append(t.Body, []string{
-			l.Budget.Name, FormatMoney(l.Available, loc), FormatMoney(l.Spent, loc), FormatMoney(l.Planned, loc),
-			FormatMoney(l.Remaining, loc), fmt.Sprint(l.Percent), stateLabel(l.State),
+			l.Budget.Name, periodLabel(l.Budget), FormatMoney(l.Available, loc), FormatMoney(l.Spent, loc),
+			FormatMoney(l.Planned, loc), FormatMoney(l.Remaining, loc), fmt.Sprint(l.Percent),
+			fmt.Sprint(th.Warn), fmt.Sprint(th.Over), stateLabel(l.State),
 		})
 	}
 	return t
@@ -212,16 +250,25 @@ func capStatusRows(caps []budgeting.CapLine, loc domain.Locale) Rows {
 
 func envelopeStatusRows(envs []budgeting.EnvelopeLine, loc domain.Locale) Rows {
 	t := Rows{
-		Header:    []string{"NAME", "CARRY_IN", "ASSIGNED", "MOVES_IN", "MOVES_OUT", "SPENT", "PLANNED", "BALANCE", "STATE"},
-		MoneyCols: []int{1, 2, 3, 4, 5, 6, 7},
+		Header: []string{
+			"NAME", "PERIOD", "CARRY_IN", "ASSIGNED", "MOVES_IN", "MOVES_OUT", "SPENT", "PLANNED", "BALANCE",
+			"SUGGESTED_MONTHLY", "WARN", "OVER", "STATE",
+		},
+		MoneyCols: []int{2, 3, 4, 5, 6, 7, 8, 9},
 	}
 	sorted := append([]budgeting.EnvelopeLine(nil), envs...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Budget.Name < sorted[j].Budget.Name })
 	for _, l := range sorted {
+		th := thresholds(l.Budget)
+		suggested := ""
+		if l.Budget.Period == domain.BudgetYearly {
+			suggested = FormatMoney(l.SuggestedMonthly, loc)
+		}
 		t.Body = append(t.Body, []string{
-			l.Budget.Name, FormatMoney(l.CarryIn, loc), FormatMoney(l.Assigned, loc), FormatMoney(l.MovesIn, loc),
-			FormatMoney(l.MovesOut, loc), FormatMoney(l.Spent, loc), FormatMoney(l.Planned, loc),
-			FormatMoney(l.Balance, loc), envelopeState(l.EnvelopeMonth),
+			l.Budget.Name, periodLabel(l.Budget), FormatMoney(l.CarryIn, loc), FormatMoney(l.Assigned, loc),
+			FormatMoney(l.MovesIn, loc), FormatMoney(l.MovesOut, loc), FormatMoney(l.Spent, loc),
+			FormatMoney(l.Planned, loc), FormatMoney(l.Balance, loc), suggested,
+			fmt.Sprint(th.Warn), fmt.Sprint(th.Over), envelopeState(l.EnvelopeMonth),
 		})
 	}
 	return t

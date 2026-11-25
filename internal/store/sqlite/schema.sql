@@ -368,7 +368,8 @@ CREATE TABLE budgets (
     threshold_warn INTEGER NOT NULL DEFAULT 80 CHECK (threshold_warn >= 1),
     threshold_over INTEGER NOT NULL DEFAULT 100 CHECK (threshold_over >= threshold_warn),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    period TEXT NOT NULL DEFAULT 'month' CHECK (period IN ('month', 'year'))
 ) STRICT;
 
 CREATE TABLE budget_targets (

@@ -55,6 +55,7 @@ type Budget struct {
 	ThresholdOver int64
 	CreatedAt     string
 	UpdatedAt     string
+	Period        string
 }
 
 type BudgetAmount struct {

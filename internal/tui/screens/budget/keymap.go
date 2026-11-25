@@ -8,6 +8,8 @@ type KeyMap struct {
 	Down      key.Binding
 	PrevMonth key.Binding
 	NextMonth key.Binding
+	NewBudget key.Binding
+	Edit      key.Binding
 	SetAmount key.Binding
 	Assign    key.Binding
 	Move      key.Binding
@@ -23,7 +25,9 @@ func DefaultKeyMap() KeyMap {
 		Down:      key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j/↓", "down")),
 		PrevMonth: key.NewBinding(key.WithKeys("h", "left"), key.WithHelp("h/←", "previous month")),
 		NextMonth: key.NewBinding(key.WithKeys("l", "right"), key.WithHelp("l/→", "next month")),
-		SetAmount: key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "set amount")),
+		NewBudget: key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new budget")),
+		Edit:      key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit budget")),
+		SetAmount: key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "set month amount")),
 		Assign:    key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "assign from pool")),
 		Move:      key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "move to envelope")),
 		CopyPrev:  key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "copy previous month")),
@@ -34,5 +38,5 @@ func DefaultKeyMap() KeyMap {
 
 // Bindings returns all keys as a slice for help generation and collision checks.
 func (k KeyMap) Bindings() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.PrevMonth, k.NextMonth, k.SetAmount, k.Assign, k.Move, k.CopyPrev, k.Explain, k.Back}
+	return []key.Binding{k.Up, k.Down, k.PrevMonth, k.NextMonth, k.NewBudget, k.Edit, k.SetAmount, k.Assign, k.Move, k.CopyPrev, k.Explain, k.Back}
 }

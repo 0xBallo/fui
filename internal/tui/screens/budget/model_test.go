@@ -59,9 +59,65 @@ func (h harness) budget(t *testing.T, name, category, amount string) {
 	}
 }
 
+// useCases adds the clock-derived Today the screen needs to the real budgeting service.
+type useCases struct {
+	*budgeting.Service
+	today domain.Date
+	lists *app.Service
+}
+
+func (u useCases) Categories(ctx context.Context) ([]string, error) {
+	cats, err := u.lists.ListCategories(ctx)
+	out := make([]string, len(cats))
+	for i, c := range cats {
+		out[i] = c.Name
+	}
+	return out, err
+}
+
+func (u useCases) Tags(ctx context.Context) ([]string, error) {
+	tags, err := u.lists.ListTags(ctx)
+	out := make([]string, len(tags))
+	for i, c := range tags {
+		out[i] = c.Name
+	}
+	return out, err
+}
+
+func (u useCases) TargetNames(ctx context.Context, targets []domain.BudgetTarget) (cats, tags []string, err error) {
+	allCats, err := u.lists.ListCategories(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	allTags, err := u.lists.ListTags(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, t := range targets {
+		for _, c := range allCats {
+			if t.CategoryID != 0 && c.ID == t.CategoryID {
+				cats = append(cats, c.Name)
+			}
+		}
+		for _, g := range allTags {
+			if t.TagID != 0 && g.ID == t.TagID {
+				tags = append(tags, g.Name)
+			}
+		}
+	}
+	return cats, tags, nil
+}
+
+func (u useCases) Today() (domain.Date, error) { return u.today, nil }
+
+func (h harness) uc() useCases {
+	d, _ := domain.FromTime(h.now)
+	return useCases{Service: h.svc, today: d, lists: h.fx.Service}
+}
+
 func newFixture(t *testing.T, h harness) scr.Screen {
 	t.Helper()
-	s := scr.Screen(budget.New(h.svc, domain.LocaleENUS, theme.Default()))
+	s := scr.Screen(budget.New(h.uc(), domain.LocaleENUS, theme.Default()))
 	s.SetSize(120, 30)
 	return s
 }
@@ -281,7 +337,7 @@ func TestBudgetCapWarningAndOverStates(t *testing.T) {
 	s = run(t, s, s.Init())
 
 	view := s.View()
-	if !strings.Contains(view, "‼") {
+	if !strings.Contains(view, "90% !") {
 		t.Fatalf("expected a warning tier, got:\n%s", view)
 	}
 	if !strings.Contains(view, "OVER") {
@@ -304,5 +360,78 @@ func TestBudgetAssignMoveIgnoredInCapMode(t *testing.T) {
 	s, _ = sendRunes(s, "m")
 	if s.InputActive() {
 		t.Fatal("expected move to be a no-op in cap mode")
+	}
+}
+
+func TestBudgetFlowSetAssignMoveDates(t *testing.T) {
+	h := newHarness(t, domain.BudgetEnvelope)
+	h.fx.Category(t, app.AddCategoryRequest{Name: "Groceries", Kind: "expense"})
+	h.fx.Category(t, app.AddCategoryRequest{Name: "Transport", Kind: "expense"})
+	h.budget(t, "Groceries", "Groceries", "0")
+	h.budget(t, "Transport", "Transport", "0")
+	h.fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "1000", OpenedOn: "2026-01-01"})
+
+	s := newFixture(t, h)
+	s = run(t, s, s.Init())
+
+	step := func(keys string, enters int) {
+		t.Helper()
+		var cmd tea.Cmd
+		s, _ = sendRunes(s, keys)
+		for range enters {
+			s, cmd = sendKey(s, tea.KeyEnter)
+		}
+		s = run(t, s, cmd)
+	}
+	nav := func(k string) {
+		t.Helper()
+		var cmd tea.Cmd
+		s, cmd = sendRunes(s, k)
+		s = run(t, s, cmd)
+	}
+	typeAssign := func(amount string) {
+		t.Helper()
+		s, _ = sendRunes(s, "a")
+		s, _ = sendRunes(s, amount)
+		var cmd tea.Cmd
+		s, cmd = sendKey(s, tea.KeyEnter)
+		s = run(t, s, cmd)
+	}
+
+	step("s", 0)
+	s, _ = sendRunes(s, "100")
+	var cmd tea.Cmd
+	s, cmd = sendKey(s, tea.KeyEnter)
+	s = run(t, s, cmd)
+
+	typeAssign("300") // June on screen, today is inside: dated today
+	nav("h")
+	typeAssign("200") // May: first day of the month shown
+	nav("l")
+	nav("l")
+	s, _ = sendRunes(s, "m") // July, from Groceries
+	s, _ = sendRunes(s, "Transport")
+	s, _ = sendKey(s, tea.KeyEnter)
+	s, _ = sendKey(s, tea.KeyEnter)
+	s, _ = sendRunes(s, "10")
+	s, cmd = sendKey(s, tea.KeyEnter)
+	run(t, s, cmd)
+
+	var got []string
+	err := h.fx.Store.Read(context.Background(), func(r app.Repos) error {
+		from, _ := domain.NewDate(2026, 1, 1)
+		to, _ := domain.NewDate(2026, 12, 31)
+		moves, err := r.Budgets().Moves(context.Background(), from, to)
+		for _, mv := range moves {
+			got = append(got, mv.Date.String())
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatalf("Moves: %v", err)
+	}
+	want := []string{"2026-05-01", "2026-06-15", "2026-07-01"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("move dates = %v, want %v", got, want)
 	}
 }

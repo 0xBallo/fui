@@ -32,27 +32,44 @@ decide where it goes before you spend it.
 ## Thresholds
 
 Each budget has a warning threshold (default 80%) and an over threshold
-(default 100%). They drive the Dashboard alerts.
+(default 100%), set with `n` or `e`. They drive the progress icons here and
+the Dashboard alerts; warn must be below over.
+
+A yearly budget is tagged `[year]` in its row; the detail line under the table
+shows its period and thresholds (for example `thresholds 80/100`), and for a
+yearly envelope the suggested monthly quota (its balance spread over the
+months left in the year).
+
+## Dating of moves
+
+`a` and `m` date the movement in the month on screen: today when today falls
+inside that month (or budget period, if your month starts on a day other than
+the 1st), otherwise the first day of the month shown. Browse to a past or
+future month first to plan or correct it.
 
 ## Progress colors and icons
 
-The bar color is a fixed visual tier. The icon and the OVER label keep the
-state readable without color.
+The bar color follows the budget's own thresholds. The icon and the OVER label
+keep the state readable without color.
 
-| Spent | Color  | Icon   |
-| ----- | ------ | ------ |
-| < 70% | green  | ✓      |
-| 70–89 | yellow | !      |
-| 90–99 | orange | ‼      |
-| ≥ 100 | red    | ✗ OVER |
+| Spent               | Color  | Icon   |
+| ------------------- | ------ | ------ |
+| below warn          | green  | ✓      |
+| warn up to over     | yellow | !      |
+| over or more        | red    | ✗ OVER |
+
+With the default 80/100 thresholds, 80–99% shows `!` and 100% or more shows
+`✗ OVER`.
 
 ## Keys on this screen
 
 - `h`/`l` (or arrows): previous / next month
-- `s`: set the amount of the selected budget
+- `n`: create a budget: name, categories and tags (pick from the list or type, `enter` adds, `backspace` on an empty field removes the last), period (`month` or `year`), default amount, carry-over, warn % and over %
+- `e`: edit the selected budget (name is fixed); an empty categories/tags field keeps the current targets
+- `s`: set the amount of the selected budget for the month on screen only (a month override; `n`/`e` change the default amount)
 - `a`: assign from the pool to an envelope (envelope mode)
 - `m`: move money to another envelope (envelope mode)
-- `c`: copy the previous month's budgets into this month
+- `c`: copy the budgets of the month before the one shown into it (yearly budgets are skipped)
 - `i`: open or close this explanation
 
 ## Same from the CLI
