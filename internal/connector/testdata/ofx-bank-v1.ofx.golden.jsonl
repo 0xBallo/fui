@@ -1,0 +1,5 @@
+{"type":"meta","protocol":"fui/1","connector":"ofx","version":"0.1.0","source":{"file":"ofx-bank-v1.ofx","sha256":"9d8286d0ae3f7b2e35aab14c8cb7e83b80f286ac45bd2081dc0afb81571faffe"}}
+{"type":"account","ref":"IT60X0542811101000000123456","name":"IT60X0542811101000000123456","currency":"EUR","kind":"checking","iban":"IT60X0542811101000000123456"}
+{"type":"transaction","account":"IT60X0542811101000000123456","id":"TRX-1","date":"2026-10-03","amount":-1250,"currency":"EUR","description":"Coffee bar - Milan branch","status":"booked","kind":"payment"}
+{"type":"transaction","account":"IT60X0542811101000000123456","id":"TRX-2","date":"2026-10-04","amount":102025,"currency":"EUR","description":"Salary","status":"booked","kind":"refund"}
+{"type":"end","transactions":2,"errors":0}

@@ -11,7 +11,7 @@ import (
 	"github.com/0xballo/fui/pkg/fuiproto"
 )
 
-func loadOFXFixture(t *testing.T, name string) []byte {
+func loadOFXFixture(t testing.TB, name string) []byte {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", name))
 	if err != nil {
@@ -164,48 +164,32 @@ func TestDecodeOFXBodyForSGML(t *testing.T) {
 }
 
 func FuzzOFX(f *testing.F) {
-	if seed, err := os.ReadFile(filepath.Join("testdata", "ofx-bank-v1.ofx")); err == nil {
-		f.Add(seed)
+	for _, name := range []string{"ofx-bank-v1.ofx", "ofx-card-v2.xml", "ofx-errors.ofx"} {
+		f.Add(loadOFXFixture(f, name))
 	}
-	if seed, err := os.ReadFile(filepath.Join("testdata", "ofx-card-v2.xml")); err == nil {
-		f.Add(seed)
-	}
-	f.Fuzz(func(_ *testing.T, data []byte) {
-		_ = parseOFXForFuzz(data)
-	})
-}
-
-// parseOFXForFuzz parses arbitrary bytes and validates the generated stream.
-func parseOFXForFuzz(data []byte) error {
-	stmts, err := parseOFX(data)
-	if err != nil {
-		return err
-	}
-	recs := make([]fuiproto.Record, 0, 4)
-	recs = append(recs, fuiproto.Record{Type: fuiproto.RecordTypeMeta, Meta: &fuiproto.MetaRecord{
-		Protocol: fuiproto.ProtocolFUI1, Connector: ofxConnector, Version: ofxVersion,
-		Source: fuiproto.SourceMeta{File: "fuzz.ofx", SHA256: strings.Repeat("0", 64)},
-	}})
-	txs := 0
-	for _, stmt := range stmts {
-		recs = append(recs, fuiproto.Record{Type: fuiproto.RecordTypeAccount, Account: &stmt.account})
-		for _, tx := range stmt.transactions {
-			txs++
-			recs = append(recs, fuiproto.Record{Type: fuiproto.RecordTypeTransaction, Transaction: &fuiproto.TransactionRecord{
-				Account: stmt.account.Ref, ID: tx.ID, Date: tx.Date.String(), Amount: tx.Amount, Currency: stmt.account.Currency,
-				Description: tx.Description, Status: fuiproto.TransactionStatusBooked, Kind: tx.Kind,
-			}})
-		}
-	}
-	recs = append(recs, fuiproto.Record{Type: fuiproto.RecordTypeEnd, End: &fuiproto.EndRecord{Transactions: txs, Errors: 0}})
-	_, err = fuiproto.ValidateStream(func(yield func(fuiproto.Record, error) bool) {
-		for _, rec := range recs {
-			if !yield(rec, nil) {
+	f.Add([]byte("<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>EUR<BANKACCTFROM><ACCTID>1</BANKACCTFROM>" +
+		"<BANKTRANLIST><STMTTRN><DTPOSTED>x<TRNAMT>1</STMTTRN></BANKTRANLIST><LEDGERBAL><BALAMT>x<DTASOF>y</LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>"))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		var recs []fuiproto.Record
+		for r, err := range ofxRecords(ctx(), data, "", "fuzz.ofx", strings.Repeat("0", 64)) {
+			if err != nil {
 				return
 			}
+			if r.Error != nil && r.Error.Line < 1 {
+				t.Fatalf("error record with line %d", r.Error.Line)
+			}
+			recs = append(recs, r)
+		}
+		if _, err := fuiproto.ValidateStream(func(yield func(fuiproto.Record, error) bool) {
+			for _, rec := range recs {
+				if !yield(rec, nil) {
+					return
+				}
+			}
+		}); err != nil {
+			t.Fatalf("invalid stream: %v", err)
 		}
 	})
-	return err
 }
 
 // decodeOFXBodyForTest returns the normalized OFX body for white-box tests.
@@ -215,4 +199,89 @@ func decodeOFXBodyForTest(data []byte) (string, error) {
 		return "", err
 	}
 	return normalizeOFX(text)
+}
+
+func ofxStream(t *testing.T, data []byte) (bal []fuiproto.BalanceRecord, errs []fuiproto.ErrorRecord, txs []fuiproto.TransactionRecord, end fuiproto.EndRecord) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "s.ofx")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	recs, err := collect(t, NewOFX(path, "").Records(ctx()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range recs {
+		switch {
+		case r.Balance != nil:
+			bal = append(bal, *r.Balance)
+		case r.Error != nil:
+			errs = append(errs, *r.Error)
+		case r.Transaction != nil:
+			txs = append(txs, *r.Transaction)
+		case r.End != nil:
+			end = *r.End
+		}
+	}
+	return bal, errs, txs, end
+}
+
+func TestOFXBadTransactionsAreErrorRecords(t *testing.T) {
+	_, errs, txs, end := ofxStream(t, loadOFXFixture(t, "ofx-errors.ofx"))
+	if len(txs) != 2 || txs[0].ID != "OK-1" || txs[1].ID != "OK-2" {
+		t.Fatalf("txs = %+v", txs)
+	}
+	if len(errs) != 2 || errs[0].Line != 30 || errs[1].Line != 37 {
+		t.Fatalf("errs = %+v, want lines 30 and 37", errs)
+	}
+	if end.Errors != 2 || end.Transactions != 2 {
+		t.Fatalf("end = %+v", end)
+	}
+}
+
+func TestOFXXMLErrorLine(t *testing.T) {
+	doc := "<?xml version=\"1.0\"?>\n<OFX>\n<BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>EUR</CURDEF>\n" +
+		"<BANKACCTFROM><ACCTID>A1</ACCTID></BANKACCTFROM><BANKTRANLIST>\n" +
+		"<STMTTRN><DTPOSTED>20260101</DTPOSTED><TRNAMT>1.00</TRNAMT><NAME>ok</NAME></STMTTRN>\n" +
+		"<STMTTRN><DTPOSTED>20260102</DTPOSTED><TRNAMT>zz</TRNAMT><NAME>bad</NAME></STMTTRN>\n" +
+		"</BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>\n"
+	_, errs, txs, _ := ofxStream(t, []byte(doc))
+	if len(txs) != 1 || len(errs) != 1 || errs[0].Line != 6 {
+		t.Fatalf("txs=%d errs=%+v, want 1 tx and an error on line 6", len(txs), errs)
+	}
+}
+
+func TestOFXLedgerBalance(t *testing.T) {
+	const head = "<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>EUR</CURDEF><BANKACCTFROM><ACCTID>A1</ACCTID></BANKACCTFROM>"
+	const tail = "</STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>"
+	tests := []struct {
+		name, ledger string
+		wantBal      []fuiproto.BalanceRecord
+		wantErrs     int
+	}{
+		{
+			"present", "<LEDGERBAL><BALAMT>-10.50</BALAMT><DTASOF>20261031120000</DTASOF></LEDGERBAL>",
+			[]fuiproto.BalanceRecord{{Account: "A1", Date: "2026-10-31", Amount: -1050}},
+			0,
+		},
+		{"absent", "", nil, 0},
+		{"bad amount", "<LEDGERBAL><BALAMT>x</BALAMT><DTASOF>20261031</DTASOF></LEDGERBAL>", nil, 1},
+		{"bad date", "<LEDGERBAL><BALAMT>1.00</BALAMT><DTASOF>nope</DTASOF></LEDGERBAL>", nil, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bal, errs, _, end := ofxStream(t, []byte(head+tt.ledger+tail))
+			if diff := cmp.Diff(tt.wantBal, bal); diff != "" {
+				t.Fatalf("balances (-want +got):\n%s", diff)
+			}
+			if len(errs) != tt.wantErrs || end.Errors != tt.wantErrs {
+				t.Fatalf("errs=%+v end=%+v", errs, end)
+			}
+			for _, e := range errs {
+				if e.Line != 1 {
+					t.Fatalf("line = %d", e.Line)
+				}
+			}
+		})
+	}
 }

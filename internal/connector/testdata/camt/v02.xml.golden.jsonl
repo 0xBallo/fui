@@ -1,0 +1,9 @@
+{"type":"meta","protocol":"fui/1","connector":"camt","version":"0.1.0","source":{"file":"v02.xml","sha256":"a89873e4e829eee97ab0d39f75306e79ee0ade679fee89b165cd5bf8daba2846"}}
+{"type":"account","ref":"DE89370400440532013000","name":"Synthetic Current","currency":"EUR","kind":"checking","iban":"DE89370400440532013000"}
+{"type":"balance","account":"DE89370400440532013000","date":"2026-01-31","amount":123456}
+{"type":"transaction","account":"DE89370400440532013000","id":"REF-0001","date":"2026-01-05","value_date":"2026-01-06","amount":250000,"currency":"EUR","description":"Salary January","payee":"Acme Payroll Ltd","counterparty_iban":"FR1420041010050500013M02606","status":"booked"}
+{"type":"transaction","account":"DE89370400440532013000","id":"REF-0002","date":"2026-01-12","amount":-4590,"currency":"EUR","description":"Card payment groceries 12/01","payee":"Corner Grocery","counterparty_iban":"IT60X0542811101000000123456","status":"booked"}
+{"type":"transaction","account":"DE89370400440532013000","id":"REF-0003","date":"2026-01-14","amount":4590,"currency":"EUR","description":"Reversal of card payment","status":"booked","kind":"refund","raw":{"reversal":true}}
+{"type":"account","ref":"CASH-ACC-7","name":"CASH-ACC-7","currency":"USD","kind":"checking"}
+{"type":"transaction","account":"CASH-ACC-7","id":"camt-7586f6caaf9f96e9","date":"2026-01-20","amount":-1000,"currency":"USD","description":"Monthly fee","status":"booked"}
+{"type":"end","transactions":4,"errors":0}

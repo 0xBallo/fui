@@ -268,18 +268,23 @@ func TestCAMTLatin1Document(t *testing.T) {
 }
 
 func FuzzCAMT(f *testing.F) {
-	for _, name := range []string{"v02.xml", "v08.xml"} {
+	for _, name := range []string{"v02.xml", "v08.xml", "batch-mismatch.xml"} {
 		data, err := os.ReadFile(filepath.Join("testdata", "camt", name))
 		if err != nil {
 			f.Fatal(err)
 		}
 		f.Add(data)
 	}
+	f.Add([]byte("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n<Document xmlns=\"urn:iso:std:iso:20022:tech:xsd:camt.053.001.02\"><BkToCstmrStmt><Stmt>" +
+		"<Acct><Id><IBAN>DE89370400440532013000</IBAN></Id><Ccy>EUR</Ccy></Acct>\n<Ntry><Amt Ccy=\"EUR\">x</Amt><NtryDtls><TxDtls/><TxDtls/></NtryDtls></Ntry></Stmt></BkToCstmrStmt></Document>"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		var recs []fuiproto.Record
 		for r, err := range camtRecords(ctx(), data, CAMTOptions{}, "f.xml", "sha") {
 			if err != nil {
 				return
+			}
+			if r.Error != nil && r.Error.Line < 1 {
+				t.Fatalf("error record with line %d", r.Error.Line)
 			}
 			recs = append(recs, r)
 		}
@@ -293,4 +298,55 @@ func FuzzCAMT(f *testing.F) {
 			t.Fatalf("invalid stream: %v", err)
 		}
 	})
+}
+
+func TestCAMTErrorLinesAndBatches(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "camt", "batch-mismatch.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	recs, err := collect(t, camtRecords(ctx(), data, CAMTOptions{}, "x", "y"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var descs []string
+	var errs []fuiproto.ErrorRecord
+	for _, r := range recs {
+		if r.Transaction != nil {
+			descs = append(descs, r.Transaction.ID+":"+r.Transaction.Description)
+		}
+		if r.Error != nil {
+			errs = append(errs, *r.Error)
+		}
+	}
+	// MATCH splits in two; MISMATCH stays one transaction with a warning; the broken entry is an error.
+	wantTx := []string{"MATCH#1:Part one", "MATCH#2:Part two", "MISMATCH:Part one Part two"}
+	if diff := cmp.Diff(wantTx, descs); diff != "" {
+		t.Fatalf("transactions (-want +got):\n%s", diff)
+	}
+	if len(errs) != 2 || errs[0].Line != 15 || errs[1].Line != 24 {
+		t.Fatalf("errors = %+v, want lines 15 and 24", errs)
+	}
+	if errs[0].Raw["severity"] != "warning" || errs[1].Raw["severity"] != nil {
+		t.Fatalf("severity = %v / %v", errs[0].Raw["severity"], errs[1].Raw["severity"])
+	}
+	if end := recs[len(recs)-1].End; end.Transactions != 3 || end.Errors != 2 {
+		t.Fatalf("end = %+v", end)
+	}
+}
+
+func TestCAMTErrorLineAfterCharsetSwitch(t *testing.T) {
+	doc := "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n<Document xmlns=\"urn:iso:std:iso:20022:tech:xsd:camt.053.001.02\"><BkToCstmrStmt><Stmt>\n" +
+		"<Acct><Id><IBAN>DE89370400440532013000</IBAN></Id><Ccy>EUR</Ccy></Acct>\n" +
+		"<Ntry><Amt Ccy=\"EUR\">x</Amt><CdtDbtInd>CRDT</CdtDbtInd><BookgDt><Dt>2026-01-01</Dt></BookgDt><AddtlNtryInf>Caf\xe9</AddtlNtryInf></Ntry>\n" +
+		"</Stmt></BkToCstmrStmt></Document>"
+	recs, err := collect(t, camtRecords(ctx(), []byte(doc), CAMTOptions{}, "x", "y"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range recs {
+		if r.Error != nil && r.Error.Line != 4 {
+			t.Fatalf("line = %d, want 4", r.Error.Line)
+		}
+	}
 }
