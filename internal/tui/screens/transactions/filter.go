@@ -144,32 +144,47 @@ func (m *Model) today() domain.Date {
 	return d
 }
 
+// submitFilter rebuilds the request from the form on top of the incoming one, so criteria the form
+// has no field for (Month, Year, Tags, Payees, Batch, Text, sort) and extra values of the
+// single-value fields survive an edit.
 func (m *Model) submitFilter() tea.Cmd {
-	m.req = app.ListTxRequest{
-		From: m.filterFrom.Value(), To: m.filterTo.Value(),
-		MinAmount: m.filterMin.Value(), MaxAmount: m.filterMax.Value(),
-		Text: m.req.Text, // the quick search field is independent of the filter form
+	prev := m.req
+	req := prev
+	req.From, req.To = m.filterFrom.Value(), m.filterTo.Value()
+	req.MinAmount, req.MaxAmount = m.filterMin.Value(), m.filterMax.Value()
+	if (req.From != "" && req.From != prev.From) || (req.To != "" && req.To != prev.To) {
+		// A new explicit range replaces the Month/Year convenience period, which excludes it.
+		req.Month, req.Year = "", 0
 	}
-	if v := m.filterAccount.Value(); v != "" {
-		m.req.Accounts = []string{v}
-	}
-	if v := m.filterCategory.Value(); v != "" {
-		m.req.Categories = []string{v}
-	}
-	if v := m.filterStatus.Value(); v != "" {
-		m.req.Statuses = []string{v}
-	}
-	if v := m.filterKind.Value(); v != "" {
-		m.req.Kinds = []string{v}
-	}
-	m.req.Uncategorized = m.filterUncategorized.Value() == "yes"
+	req.Accounts = formList(m.filterAccount.Value(), prev.Accounts)
+	req.Categories = formList(m.filterCategory.Value(), prev.Categories)
+	req.Statuses = formList(m.filterStatus.Value(), prev.Statuses)
+	req.Kinds = formList(m.filterKind.Value(), prev.Kinds)
+	req.Uncategorized = m.filterUncategorized.Value() == "yes"
 	switch m.filterSign.Value() {
 	case string(domain.TxSignIncome):
-		m.req.Sign = domain.TxSignIncome
+		req.Sign = domain.TxSignIncome
 	case string(domain.TxSignExpense):
-		m.req.Sign = domain.TxSignExpense
+		req.Sign = domain.TxSignExpense
+	default:
+		if prev.Sign != domain.TxSignAny {
+			req.Sign = ""
+		}
 	}
+	m.req = req
 	return m.load()
+}
+
+// formList returns the filter list a single-value form field stands for: unchanged when the field
+// still shows the first incoming value, empty when cleared, otherwise just the typed value.
+func formList(v string, prev []string) []string {
+	switch {
+	case v == "":
+		return nil
+	case len(prev) > 0 && prev[0] == v:
+		return prev
+	}
+	return []string{v}
 }
 
 func (m *Model) viewFilter() string {

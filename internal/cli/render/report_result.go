@@ -41,7 +41,7 @@ func writeResultData(w io.Writer, f Format, loc domain.Locale, color, chart bool
 	case reporting.NetWorthResult:
 		return WriteNetWorthReport(w, f, loc, color, d, chart)
 	case reporting.CompareReport:
-		return WriteCompareReport(w, f, loc, color, d)
+		return WriteCompareReport(w, f, loc, color, d, chart)
 	case reporting.GroupedResult:
 		return WriteGroupedReport(w, f, loc, color, d, chart)
 	default:
@@ -198,13 +198,26 @@ func WriteNetWorthReport(
 
 // WriteCompareReport renders the comparison of two periods: one row per category and a TOTAL row.
 func WriteCompareReport(
-	w io.Writer, f Format, loc domain.Locale, color bool, out reporting.CompareReport,
+	w io.Writer, f Format, loc domain.Locale, color bool, out reporting.CompareReport, chart bool,
 ) error {
 	if f == JSON {
 		return WriteJSON(w, out)
 	}
+	showChart := chart && f == Table
 	rows := Rows{Header: []string{"CATEGORY", "A", "B", "DELTA", "DELTA %"}, MoneyCols: []int{1, 2, 3}}
+	if showChart {
+		rows.Header = append(rows.Header, "CHART")
+	}
 	all := append(append([]reporting.CompareRowView{}, out.Rows...), out.Total)
+	// B bars are scaled to the largest A or B value, so a shorter bar than the row's A reads as a decrease.
+	var bars []string
+	if showChart {
+		values := make([]int64, 0, 2*len(out.Rows))
+		for _, r := range out.Rows {
+			values = append(values, r.A.Minor, r.B.Minor)
+		}
+		bars = barStrings(values)
+	}
 	for i, r := range all {
 		name := r.Category
 		if i == len(all)-1 {
@@ -219,6 +232,13 @@ func WriteCompareReport(
 			cells = append(cells, s)
 		}
 		cells = append(cells, permilleText(r.DeltaPermille))
+		if showChart {
+			bar := ""
+			if i < len(out.Rows) {
+				bar = bars[2*i+1]
+			}
+			cells = append(cells, bar)
+		}
 		rows.Body = append(rows.Body, cells)
 	}
 	return writeRows(w, f, color, rows)

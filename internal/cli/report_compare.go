@@ -69,5 +69,6 @@ func RunReportCompare(cmd *cobra.Command, deps *Deps) error {
 	if err != nil {
 		return err
 	}
-	return render.WriteCompareReport(deps.Stdout, rt.format, deps.Locale(), rt.color, out)
+	chart, _ := cmd.Flags().GetBool("chart")
+	return render.WriteCompareReport(deps.Stdout, rt.format, deps.Locale(), rt.color, out, chart)
 }
