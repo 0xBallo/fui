@@ -53,6 +53,15 @@ func mustDate(t *testing.T, s string) domain.Date {
 	return d
 }
 
+func mustPrice(t *testing.T, minor int64, currency domain.Currency) domain.Price {
+	t.Helper()
+	p, err := domain.NewPrice(minor, currency.Decimals(), currency)
+	if err != nil {
+		t.Fatalf("NewPrice(%d, %s): %v", minor, currency, err)
+	}
+	return p
+}
+
 func mustMoney(t *testing.T, minor int64, currency domain.Currency) domain.Money {
 	t.Helper()
 	m, err := domain.NewMoney(minor, currency)

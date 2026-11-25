@@ -2,7 +2,7 @@ CREATE TABLE accounts (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
     description TEXT NOT NULL DEFAULT '',
-    kind TEXT NOT NULL CHECK (kind IN ('cash', 'checking', 'credit_card', 'savings', 'investment', 'loan')),
+    kind TEXT NOT NULL CHECK (kind IN ('cash', 'checking', 'credit_card', 'savings', 'investment', 'loan', 'wallet')),
     currency TEXT NOT NULL CHECK (length(currency) = 3),
     opening_balance_minor INTEGER NOT NULL,
     opened_on TEXT NOT NULL CHECK (length(opened_on) = 10),
@@ -74,6 +74,7 @@ CREATE TABLE securities (
     kind TEXT NOT NULL CHECK (kind IN ('stock', 'etf', 'bond', 'fund', 'crypto')),
     currency TEXT NOT NULL CHECK (length(currency) = 3),
     quantity_scale INTEGER NOT NULL CHECK (quantity_scale >= 0 AND quantity_scale <= 8),
+    price_scale INTEGER NOT NULL DEFAULT 0 CHECK (price_scale BETWEEN 0 AND 8),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     CHECK (
