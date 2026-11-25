@@ -11,15 +11,30 @@ const (
 	AccountSavings    AccountKind = "savings"
 	AccountInvestment AccountKind = "investment"
 	AccountLoan       AccountKind = "loan"
+	AccountWallet     AccountKind = "wallet"
 )
 
 // Valid reports whether k is a known account kind.
 func (k AccountKind) Valid() bool {
 	switch k {
-	case AccountCash, AccountChecking, AccountCreditCard, AccountSavings, AccountInvestment, AccountLoan:
+	case AccountCash, AccountChecking, AccountCreditCard, AccountSavings, AccountInvestment, AccountLoan, AccountWallet:
 		return true
 	}
 	return false
+}
+
+// CheckOpAccount reports whether a security operation of kind sec may be
+// recorded on an account of kind acct: investment accounts hold any security,
+// wallets only crypto.
+func CheckOpAccount(acct AccountKind, sec SecurityKind) error {
+	switch {
+	case acct == AccountInvestment:
+		return nil
+	case acct == AccountWallet && sec == SecurityCrypto:
+		return nil
+	}
+	return newError(ErrInvalidValue, map[string]any{"account_kind": string(acct), "security_kind": string(sec)},
+		"%s securities cannot be held in a %s account", sec, acct)
 }
 
 // ParseAccountKind parses an account kind (case-insensitive).

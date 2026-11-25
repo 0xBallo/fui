@@ -106,8 +106,8 @@ func (q Quantity) rat() *big.Rat {
 
 // Value returns q × price as Money in the price currency, with a single
 // rounding (half away from zero) of the exact product.
-func (q Quantity) Value(price Money) (Money, error) {
-	v, err := roundRat(new(big.Rat).Mul(q.rat(), new(big.Rat).SetInt64(price.minor)))
+func (q Quantity) Value(price Price) (Money, error) {
+	v, err := roundRat(new(big.Rat).Mul(q.rat(), price.minorRat()))
 	if err != nil {
 		return Money{}, err
 	}
