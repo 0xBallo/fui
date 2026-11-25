@@ -152,7 +152,7 @@ func TestMigrateBudgetPeriodKeepsBudgets(t *testing.T) {
 
 // budgetPeriodMigration is the migration number of the budget period column; change it here if
 // the migration is renumbered.
-const budgetPeriodMigration = 16
+const budgetPeriodMigration = 17
 
 // TestResetWipesBudgets checks that Reset (with or without KeepSettings) never carries budgets,
 // their targets, overrides or envelope moves into the fresh archive.
