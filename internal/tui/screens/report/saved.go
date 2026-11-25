@@ -118,6 +118,9 @@ func (m *Model) submitSave() tea.Cmd {
 		Period: m.periodText, Account: m.accountText, Loan: m.loanText,
 		Limit: m.limitInt(), MinBalance: m.minBalText,
 	}
+	if g, ok := m.result.data.(reporting.GroupedResult); ok {
+		spec.GroupBy = g.GroupBy // makes the spec v2, so the saved report returns grouped rows again
+	}
 	kind := m.result.kind
 	return func() tea.Msg {
 		ctx := context.Background()

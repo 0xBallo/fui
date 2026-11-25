@@ -16,9 +16,9 @@ type kindInfo struct {
 
 // predefinedKinds are the ad-hoc reports this screen can run directly, in cycling order,
 // starting with the reports that need no params so the first load always has something to
-// show. They match the CLI's `fui report KIND` list plus forecast; spending and cash-flow (MVP
-// reports) can only be run as saved reports, since they need the reporting.Source the CLI itself
-// requires a saved report wrapper for.
+// show. They match the CLI's `fui report KIND` list plus forecast; spending and cash flow run
+// as grouped reports (category and month by default) and come last so the older kinds keep
+// their cycling position.
 func predefinedKinds() []kindInfo {
 	return []kindInfo{
 		{Kind: reporting.KindNetWorth, Label: "Net worth", NeedsPeriod: true},
@@ -28,5 +28,7 @@ func predefinedKinds() []kindInfo {
 		{Kind: reporting.KindBalance, Label: "Balance over time", NeedsAccount: true, NeedsPeriod: true},
 		{Kind: reporting.KindDebt, Label: "Remaining debt", NeedsLoan: true, NeedsPeriod: true},
 		{Kind: reporting.KindInterest, Label: "Interest paid", NeedsLoan: true, NeedsPeriod: true},
+		{Kind: reporting.KindSpending, Label: "Spending by category", NeedsPeriod: true},
+		{Kind: reporting.KindCashFlow, Label: "Cash flow", NeedsPeriod: true},
 	}
 }

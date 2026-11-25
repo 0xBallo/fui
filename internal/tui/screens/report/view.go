@@ -70,7 +70,7 @@ func (m *Model) formTitle() string {
 	case modeSaveForm:
 		return "Save report"
 	case modeExportForm:
-		return "Export transactions"
+		return "Export report"
 	case modeParamsForm, modeReport, modeSaved, modeConfirmRemove, modeCompare, modeSim:
 		return "Report params"
 	}

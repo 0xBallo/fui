@@ -3,8 +3,6 @@ package report_test
 import (
 	"context"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -135,6 +133,19 @@ type testUseCases struct {
 	analytics *reporting.Analytics
 	importer  *importing.Service
 	core      *app.Service
+	exporter  *screentest.FakeExporter
+}
+
+func (u testUseCases) Spending(ctx context.Context, req reporting.ReportRequest) (reporting.GroupedResult, error) {
+	return u.analytics.Spending(ctx, req)
+}
+
+func (u testUseCases) CashFlow(ctx context.Context, req reporting.ReportRequest) (reporting.GroupedResult, error) {
+	return u.analytics.CashFlow(ctx, req)
+}
+
+func (u testUseCases) ExportResult(w io.Writer, format string, data any) error {
+	return u.exporter.ExportResult(w, format, data)
 }
 
 func (u testUseCases) BalanceOverTime(ctx context.Context, req reporting.ReportRequest) (reporting.SeriesResult, error) {
@@ -228,7 +239,7 @@ func newHarness(t *testing.T) harness {
 		Locale: domain.LocaleENUS, BaseCurrency: eur, MonthStartDay: 1, Location: time.UTC, Modules: module.Default(),
 	})
 	importer := importing.New(fx.Store, clock, stubBackup{}, nil)
-	uc := testUseCases{analytics: analytics, importer: importer, core: fx.Service}
+	uc := testUseCases{analytics: analytics, importer: importer, core: fx.Service, exporter: &screentest.FakeExporter{}}
 	return harness{fx: fx, uc: uc, now: now, eur: eur}
 }
 
@@ -435,38 +446,6 @@ func TestReportSaveListRunDelete(t *testing.T) {
 	s = run(t, s, cmd)
 	if strings.Contains(s.View(), "my-networth") {
 		t.Fatalf("expected saved report removed, got:\n%s", s.View())
-	}
-}
-
-func TestReportExportTransactions(t *testing.T) {
-	h := newHarness(t)
-	h.fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "1000", OpenedOn: "2026-01-01"})
-	h.fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-50", Description: "Groceries run", Date: "2026-06-05", Status: "booked"})
-
-	s := newFixture(t, h)
-	s = run(t, s, s.Init())
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "export.csv")
-
-	s, cmd := sendRunes(s, "e")
-	s = run(t, s, cmd)
-	if !s.InputActive() {
-		t.Fatal("InputActive() = false with the export form open")
-	}
-	s, cmd = sendRunes(s, path)
-	s = run(t, s, cmd)
-	s, cmd = sendKey(s, tea.KeyEnter) // move to the format field
-	s = run(t, s, cmd)
-	s, cmd = sendKey(s, tea.KeyEnter) // submit with the default csv format
-	run(t, s, cmd)
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile(%q): %v", path, err)
-	}
-	if !strings.Contains(string(data), "Groceries run") {
-		t.Fatalf("expected exported CSV to contain the description, got:\n%s", data)
 	}
 }
 

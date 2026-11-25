@@ -29,6 +29,10 @@ type UseCases interface {
 	BudgetVsActual(ctx context.Context, req reporting.ReportRequest) (reporting.BudgetResult, error)
 	Forecast(ctx context.Context, req reporting.ForecastRequest) (reporting.ForecastResult, error)
 
+	// Spending and CashFlow run the grouped spending and cash-flow reports.
+	Spending(ctx context.Context, req reporting.ReportRequest) (reporting.GroupedResult, error)
+	CashFlow(ctx context.Context, req reporting.ReportRequest) (reporting.GroupedResult, error)
+
 	// List, Run, PlanSave, ApplySave, PlanRemove and ApplyRemove manage saved reports.
 	List(ctx context.Context) ([]app.SavedReport, error)
 	Run(ctx context.Context, ref string) (reporting.SavedResult, error)
@@ -46,4 +50,8 @@ type UseCases interface {
 
 	// Export writes the transactions matching req to w (internal/app/importing.Service.Export).
 	Export(ctx context.Context, req importing.ExportRequest, w io.Writer) (int, error)
+
+	// ExportResult writes a report result (the data of a reportResult) to w as "csv" or "json".
+	// It is a port so this package does not depend on the CLI renderers.
+	ExportResult(w io.Writer, format string, data any) error
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/0xballo/fui/internal/app/budgeting"
 	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/app/reporting"
+	"github.com/0xballo/fui/internal/cli/render"
 	"github.com/0xballo/fui/internal/domain"
 )
 
@@ -134,6 +135,90 @@ func (u reportUseCases) BudgetVsActual(ctx context.Context, r reporting.ReportRe
 
 func (u reportUseCases) Forecast(ctx context.Context, r reporting.ForecastRequest) (reporting.ForecastResult, error) {
 	return u.analytics().Forecast(ctx, r)
+}
+
+func (u reportUseCases) Spending(ctx context.Context, r reporting.ReportRequest) (reporting.GroupedResult, error) {
+	return u.analytics().Spending(ctx, r)
+}
+
+func (u reportUseCases) CashFlow(ctx context.Context, r reporting.ReportRequest) (reporting.GroupedResult, error) {
+	return u.analytics().CashFlow(ctx, r)
+}
+
+// ExportResult writes a report result as csv or json with the same renderers as `fui report`.
+func (u reportUseCases) ExportResult(w io.Writer, format string, data any) error {
+	f := render.CSV
+	switch format {
+	case "csv":
+	case "json":
+		f = render.JSON
+	default:
+		return fmt.Errorf("export report: unknown format %q", format)
+	}
+	loc := domain.LocaleENUS // machine formats do not use the locale
+	switch d := data.(type) {
+	case reporting.SeriesResult:
+		return render.WriteSeriesReport(w, f, loc, false, d, false)
+	case reporting.NetWorthResult:
+		if f == render.JSON {
+			return render.WriteJSON(w, d)
+		}
+		return render.WriteSeriesReport(w, f, loc, false, d.Series(), false)
+	case reporting.DebtResult:
+		return render.WriteDebtReport(w, f, loc, false, d, false)
+	case reporting.InterestResult:
+		return render.WriteInterestReport(w, f, loc, false, d, false)
+	case reporting.PayeesResult:
+		return render.WritePayeesReport(w, f, loc, false, d, false)
+	case reporting.BudgetResult:
+		return render.WriteBudgetReport(w, f, loc, false, d, false)
+	case reporting.ForecastResult:
+		return render.WriteForecast(w, f, loc, false, d, false)
+	case reporting.GroupedResult:
+		return writeGroupedResult(w, f, d)
+	}
+	return fmt.Errorf("export report: unsupported result %T", data)
+}
+
+// writeGroupedResult renders a spending or cash-flow result; the CSV has one row per group with
+// machine-readable amounts.
+func writeGroupedResult(w io.Writer, f render.Format, g reporting.GroupedResult) error {
+	if f == render.JSON {
+		return render.WriteJSON(w, g)
+	}
+	machine := func(a reporting.Amount) (string, error) {
+		cur, err := domain.ParseCurrency(a.Currency)
+		if err != nil {
+			return "", err
+		}
+		m, err := domain.NewMoney(a.Minor, cur)
+		if err != nil {
+			return "", err
+		}
+		return render.FormatMoneyMachine(m), nil
+	}
+	rows := render.Rows{Header: []string{"GROUP", "TOTAL", "INFLOW", "OUTFLOW"}, MoneyCols: []int{1, 2, 3}}
+	for _, r := range g.Rows {
+		cells := []string{r.Key}
+		for _, a := range []*reporting.Amount{&r.Total, r.Inflow, r.Outflow} {
+			if a == nil {
+				cells = append(cells, "")
+				continue
+			}
+			v, err := machine(*a)
+			if err != nil {
+				return err
+			}
+			cells = append(cells, v)
+		}
+		rows.Body = append(rows.Body, cells)
+	}
+	total, err := machine(g.Total)
+	if err != nil {
+		return err
+	}
+	rows.Body = append(rows.Body, []string{"TOTAL", total, "", ""})
+	return render.WriteCSV(w, rows)
 }
 
 func (u reportUseCases) List(ctx context.Context) ([]app.SavedReport, error) {
