@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/spf13/cobra"
 
@@ -14,21 +13,30 @@ import (
 // NewReportCompareCmd builds `fui report compare`, the standalone form of `fui report run compare`.
 func NewReportCompareCmd(deps *Deps) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "compare",
-		Short:   "Compare the spending of two periods",
-		Example: "  fui report compare --a last-month --b this-month --by category --json",
-		Args:    noArgs(),
-		RunE:    func(cmd *cobra.Command, _ []string) error { return RunReportCompare(cmd, deps) },
+		Use:   "compare",
+		Short: "Compare the spending of two periods",
+		Example: `  fui report compare --a last-month --b this-month --by category --json
+  fui report compare --a 2026-09 --b 2026-Q4 --category Food --chart`,
+		Args: noArgs(),
+		RunE: func(cmd *cobra.Command, _ []string) error { return RunReportCompare(cmd, deps) },
 	}
 	ReportCompareFlags(cmd)
+	reportChartFlag(cmd)
 	return cmd
 }
 
-// ReportCompareFlags registers the --a, --b and --by flags on cmd, for `fui report run`.
+// ReportCompareFlags registers the --a, --b, --by and transaction filter flags on cmd, for
+// `fui report run` and `fui report compare`.
 func ReportCompareFlags(cmd *cobra.Command) {
-	cmd.Flags().String("a", "", "first period, e.g. last-month (default last-month)")
-	cmd.Flags().String("b", "", "second period, e.g. this-month (default this-month)")
+	reportComparePeriodFlags(cmd)
 	cmd.Flags().String("by", "", "break the comparison down by category")
+	reportFilterFlags(cmd)
+}
+
+// reportComparePeriodFlags registers --a and --b, accepted by `report save` too.
+func reportComparePeriodFlags(cmd *cobra.Command) {
+	cmd.Flags().String("a", "", "first period: relative, YYYY-MM, YYYY-Qn or YYYY (default last-month)")
+	cmd.Flags().String("b", "", "second period: relative, YYYY-MM, YYYY-Qn or YYYY (default this-month)")
 }
 
 // RunReportCompare runs the compare report from the flags of cmd.
@@ -51,50 +59,15 @@ func RunReportCompare(cmd *cobra.Command, deps *Deps) error {
 			Details: map[string]any{"field": "by", "value": by},
 		}
 	}
-	out, err := analytics.ComparePeriods(cmd.Context(), reporting.CompareRequest{A: a, B: b, ByCategory: by == "category"})
+	filter, err := readReportFilter(cmd)
 	if err != nil {
 		return err
 	}
-	return writeCompare(deps, rt, out)
-}
-
-func writeCompare(deps *Deps, rt runtimeFlags, out reporting.CompareReport) error {
-	if rt.format == render.JSON {
-		return render.WriteJSON(deps.Stdout, out)
+	out, err := analytics.ComparePeriods(cmd.Context(), reporting.CompareRequest{
+		A: a, B: b, ByCategory: by == "category", Filter: filter,
+	})
+	if err != nil {
+		return err
 	}
-	rows := render.Rows{Header: []string{"CATEGORY", "A", "B", "DELTA", "DELTA %"}, MoneyCols: []int{1, 2, 3}}
-	all := append(append([]reporting.CompareRowView{}, out.Rows...), out.Total)
-	for i, r := range all {
-		name := r.Category
-		if i == len(all)-1 {
-			name = "TOTAL"
-		}
-		cells := []string{name}
-		for _, amt := range []reporting.Amount{r.A, r.B, r.Delta} {
-			s, err := formatAmount(amt, rt.format, deps.Locale())
-			if err != nil {
-				return err
-			}
-			cells = append(cells, s)
-		}
-		cells = append(cells, permilleText(r.DeltaPermille))
-		rows.Body = append(rows.Body, cells)
-	}
-	if rt.format == render.CSV {
-		return render.WriteCSV(deps.Stdout, rows)
-	}
-	return render.WriteTable(deps.Stdout, rows, rt.color)
-}
-
-// permilleText renders a permille change as a percentage with one decimal; "-" when undefined.
-func permilleText(p *int64) string {
-	if p == nil {
-		return "-"
-	}
-	n := *p
-	sign := ""
-	if n < 0 {
-		sign, n = "-", -n
-	}
-	return sign + strconv.FormatInt(n/10, 10) + "." + strconv.FormatInt(n%10, 10) + "%"
+	return render.WriteCompareReport(deps.Stdout, rt.format, deps.Locale(), rt.color, out)
 }

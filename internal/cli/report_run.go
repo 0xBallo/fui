@@ -19,16 +19,23 @@ func runAnalyticsReportByKind(cmd *cobra.Command, deps *Deps, kind string) error
 	if err != nil {
 		return err
 	}
-	period, err := reportPeriodValue(cmd, deps.Config.MonthStartDay)
+	period, err := reportPeriodValue(cmd, deps)
+	if err != nil {
+		return err
+	}
+	filter, err := readReportFilter(cmd)
+	if err != nil {
+		return err
+	}
+	group, gran, err := reportGrouping(cmd, kind)
 	if err != nil {
 		return err
 	}
 	chart, _ := cmd.Flags().GetBool("chart")
-	account, _ := cmd.Flags().GetStringArray("account")
 	loan, _ := cmd.Flags().GetString("loan")
 	limit, _ := cmd.Flags().GetInt("limit")
 	req := reporting.ReportRequest{
-		Period: period, Account: firstValue(account), Loan: loan, Limit: limit,
+		Period: period, Loan: loan, Limit: limit, Filter: filter, GroupBy: group, Granularity: gran,
 	}
 	return executeAnalyticsReport(cmd, deps, rt, analytics, kind, req, chart)
 }
@@ -50,7 +57,7 @@ func executeAnalyticsReport(
 		}
 		return render.WriteBudgetReport(deps.Stdout, rt.format, deps.Locale(), rt.color, out, chart)
 	case "balance":
-		if req.Account == "" {
+		if len(req.Filter.Accounts) == 0 {
 			return missingField("account")
 		}
 		out, err := analytics.BalanceOverTime(cmd.Context(), req)
@@ -73,12 +80,8 @@ func executeAnalyticsReport(
 			return err
 		}
 		return render.WriteInterestReport(deps.Stdout, rt.format, deps.Locale(), rt.color, out, chart)
-	case "networth":
-		out, err := analytics.NetWorthReport(cmd.Context(), req)
-		if err != nil {
-			return err
-		}
-		return render.WriteSeriesReport(deps.Stdout, rt.format, deps.Locale(), rt.color, out.Series(), chart)
+	case "networth", "spending", "cash-flow":
+		return executeSeriesReport(cmd, deps, rt, analytics, kind, req, chart)
 	case "top-payees":
 		out, err := analytics.TopPayees(cmd.Context(), req)
 		if err != nil {
@@ -94,18 +97,39 @@ func executeAnalyticsReport(
 	}
 }
 
+// executeSeriesReport runs the reports built over the transaction rows or net worth series.
+func executeSeriesReport(
+	cmd *cobra.Command,
+	deps *Deps,
+	rt runtimeFlags,
+	analytics *reporting.Analytics,
+	kind string,
+	req reporting.ReportRequest,
+	chart bool,
+) error {
+	if kind == "networth" {
+		out, err := analytics.NetWorthReport(cmd.Context(), req)
+		if err != nil {
+			return err
+		}
+		return render.WriteNetWorthReport(deps.Stdout, rt.format, deps.Locale(), rt.color, out, chart)
+	}
+	run := analytics.Spending
+	if kind == "cash-flow" {
+		run = analytics.CashFlow
+	}
+	out, err := run(cmd.Context(), req)
+	if err != nil {
+		return err
+	}
+	return render.WriteGroupedReport(deps.Stdout, rt.format, deps.Locale(), rt.color, out, chart)
+}
+
 func requireAnalytics(deps *Deps) (*reporting.Analytics, error) {
 	if deps == nil || deps.Reporting.Analytics == nil {
 		return nil, fmt.Errorf("fui: analytics service is not configured")
 	}
 	return deps.Reporting.Analytics, nil
-}
-
-func firstValue(values []string) string {
-	if len(values) == 0 {
-		return ""
-	}
-	return values[0]
 }
 
 func missingField(name string) error {
