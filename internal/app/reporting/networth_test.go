@@ -230,6 +230,38 @@ func TestNetWorthReportDropsAccountsOfDisabledModules(t *testing.T) {
 	}
 }
 
+func TestNetWorthReportDropsWalletWithoutCrypto(t *testing.T) {
+	tests := []struct {
+		name string
+		mods []module.ID
+		want int64
+	}{
+		{"crypto off", nil, 160_000},
+		{"crypto on", []module.ID{module.Investments, module.Crypto}, 160_000 + 30_000},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newFx(t, tt.mods...)
+			err := f.store.WithTx(context.Background(), func(r app.Repos) error {
+				_, err := r.Accounts().Insert(context.Background(), domain.Account{
+					Name: "Wallet", Kind: domain.AccountWallet, Currency: eur(), OpeningBalance: money(30_000), OpenedOn: date("2025-12-01"),
+				})
+				return err
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			p, err := f.svc.NetWorthAt(context.Background(), date("2026-03-01"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if p.Total.Minor != tt.want {
+				t.Fatalf("total = %d, want %d", p.Total.Minor, tt.want)
+			}
+		})
+	}
+}
+
 func TestNetWorthReportGranularity(t *testing.T) {
 	f := newFx(t)
 	period := must(domain.NewPeriod(date("2026-03-02"), date("2026-03-31")))

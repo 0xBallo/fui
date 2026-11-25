@@ -20,6 +20,8 @@ func TestAccountKindEnabled(t *testing.T) {
 	}{
 		{"investment off", core, domain.AccountInvestment, false},
 		{"investment on", withInvestments, domain.AccountInvestment, true},
+		{"wallet off", core, domain.AccountWallet, false},
+		{"wallet on", mustModules(t, module.Core, module.Investments, module.Crypto), domain.AccountWallet, true},
 		{"checking off", core, domain.AccountChecking, true},
 		{"loan off", core, domain.AccountLoan, true},
 	}
