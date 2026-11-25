@@ -328,8 +328,11 @@ func TestPlanSecurityOpsModuleGate(t *testing.T) {
 		}},
 	)
 	plan := e.plan(t, src, createAccounts)
-	if len(plan.SecurityOps) != 0 {
-		t.Fatalf("security ops = %+v, want none when investments is off", plan.SecurityOps)
+	if len(plan.SecurityOps) != 1 || plan.SecurityOps[0].Module != module.Investments {
+		t.Fatalf("security ops = %+v, want one tagged with investments", plan.SecurityOps)
+	}
+	if len(plan.ModuleRecords) != 1 || plan.ModuleRecords[0].Module != module.Investments || plan.ModuleRecords[0].Count != 1 {
+		t.Fatalf("module records = %+v", plan.ModuleRecords)
 	}
 	if len(plan.Warnings) != 1 || plan.Warnings[0].Line == 0 {
 		t.Fatalf("warnings = %+v, want one line warning", plan.Warnings)
