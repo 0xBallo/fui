@@ -1,9 +1,15 @@
 package cli_test
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/0xballo/fui/internal/app/importing"
+	"github.com/0xballo/fui/internal/config"
+	"github.com/0xballo/fui/internal/module"
+	"github.com/0xballo/fui/pkg/fuiproto"
 )
 
 // TestImportFUIDryRunShowsSummaryAndLeavesStoreUnchanged covers the ".fui.jsonl defaults to the
@@ -179,4 +185,110 @@ func importBatchID(t *testing.T, jsonOut string) int64 {
 		t.Fatalf("parse batch_id from %q: %v", jsonOut, err)
 	}
 	return id
+}
+
+func transferStream(t *testing.T) string {
+	t.Helper()
+	out := fuiTx("a", "t1", "2026-11-01", -5000, "to B")
+	out.Transaction.Kind = fuiproto.TransactionKindTransfer
+	in := fuiTx("b", "t2", "2026-11-02", 5000, "from A")
+	in.Transaction.Kind = fuiproto.TransactionKindTransfer
+	op := fuiproto.Record{Type: fuiproto.RecordTypeSecurityOp, SecurityOp: &fuiproto.SecurityOpRecord{
+		Account: "a", Date: "2026-11-03", Kind: fuiproto.SecurityOpKindBuy, Quantity: 1, UnitPrice: 100,
+		Security: fuiproto.SecurityMeta{Name: "ACME", Ticker: "ACME", Currency: "EUR", Kind: "stock"},
+	}}
+	return writeFUIFile(t, t.TempDir(), "s.fui.jsonl", fuiStream("fui", "s.fui.jsonl", "sha-t",
+		fuiAccount("a", "A", "EUR"), fuiAccount("b", "B", "EUR"), out, in, op)...)
+}
+
+func TestImportPreviewListsProposalsAndModuleRecords(t *testing.T) {
+	h := newHarness(t)
+	h.cfg.Modules.Enabled = []module.ID{module.Core}
+	file := transferStream(t)
+	out, _ := h.mustRun("import", file, "--create-accounts", "--dry-run")
+	for _, want := range []string{"transfer proposal: #0", "module investments is disabled", "warning: line"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("preview = %q, want %q", out, want)
+		}
+	}
+}
+
+func TestImportNonInteractiveSkipsTransfersWithWarning(t *testing.T) {
+	h := newHarness(t)
+	_, stderr := h.mustRun("import", transferStream(t), "--create-accounts", "--yes")
+	if !strings.Contains(stderr, "transfer proposal(s) skipped") {
+		t.Errorf("stderr = %q, want a skipped-transfers warning", stderr)
+	}
+}
+
+func TestImportAcceptTransfersAndEnableModulesAll(t *testing.T) {
+	h := newHarness(t)
+	h.cfg.Modules.Enabled = []module.ID{module.Core}
+	out, _ := h.mustRun("import", transferStream(t), "--create-accounts", "--yes", "--json",
+		"--accept-transfers", "--enable-modules", "all")
+	if !strings.Contains(out, `"transfers":1`) {
+		t.Errorf("result = %q, want one transfer", out)
+	}
+	if enabled, _ := h.cfg.ModulesEnabled(); !enabled.Has(module.Investments) {
+		t.Errorf("investments not enabled after --enable-modules all: %v", h.cfg.Modules.Enabled)
+	}
+}
+
+func TestImportInteractivePromptsPerProposalAndModule(t *testing.T) {
+	h := newHarness(t)
+	h.term = true
+	h.cfg.Modules.Enabled = []module.ID{module.Core}
+	// transfer: yes; module: second option (enable).
+	h.stdin.WriteString("y\n2\n")
+	out, _ := h.mustRun("import", transferStream(t), "--create-accounts", "--yes")
+	if !strings.Contains(out, "transfers") || !strings.Contains(out, "1") {
+		t.Errorf("result = %q", out)
+	}
+	if enabled, _ := h.cfg.ModulesEnabled(); !enabled.Has(module.Investments) {
+		t.Errorf("investments not enabled by the prompt: %v\n%s", h.cfg.Modules.Enabled, out)
+	}
+}
+
+type fakeDetector struct{}
+
+func (fakeDetector) DetectCSV(context.Context, string) (importing.CSVSuggestion, error) {
+	return importing.CSVSuggestion{
+		Profile: config.CSVProfile{
+			DateColumn: "Date", DescriptionColumn: "Desc", AmountColumn: "Amt", Delimiter: ",",
+			DateFormat: "DD/MM/YYYY", DecimalSeparator: ".", SkipRows: 1,
+		},
+		HasHeader: true, Warnings: []string{"check dates"},
+		Columns: []importing.ColumnGuess{{Header: "Date", Role: "date", Confidence: 90}},
+	}, nil
+}
+
+func TestImportDetectShowsAndSavesProfile(t *testing.T) {
+	h := newHarness(t)
+	h.importing = h.importing.WithCSVDetector(fakeDetector{})
+	out, _ := h.mustRun("import", "detect", "x.csv", "--save", "mybank")
+	for _, want := range []string{"date_column", "skip_rows", "warning: check dates", "Saved as import.profiles.mybank"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("detect output = %q, want %q", out, want)
+		}
+	}
+	if got := h.cfg.Import.Profiles["mybank"].DateColumn; got != "Date" {
+		t.Errorf("saved date_column = %q, want Date", got)
+	}
+	csvOut, _ := h.mustRun("import", "detect", "x.csv", "--csv")
+	if !strings.Contains(csvOut, "FIELD,VALUE") {
+		t.Errorf("csv output = %q", csvOut)
+	}
+	if _, _, code := h.run("import", "detect", "x.csv", "--save", "p2", "--dry-run"); code != 0 {
+		t.Errorf("dry-run exit = %d", code)
+	}
+	if _, ok := h.cfg.Import.Profiles["p2"]; ok {
+		t.Error("--dry-run saved the profile")
+	}
+}
+
+func TestImportDetectWithoutDetectorFails(t *testing.T) {
+	h := newHarness(t)
+	if _, _, code := h.run("import", "detect", "x.csv"); code == 0 {
+		t.Error("detect without a detector succeeded")
+	}
 }
