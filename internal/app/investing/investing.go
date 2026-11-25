@@ -249,7 +249,7 @@ func (s *Service) PlanSetPrice(ctx context.Context, req SetPriceRequest) (SetPri
 		if err := s.gate(sec.Kind); err != nil {
 			return err
 		}
-		price, err := domain.ParseAmount(req.Price, s.cfg.Locale, sec.Currency)
+		price, err := domain.ParsePrice(req.Price, sec.Currency, sec.PriceScale, s.cfg.Locale)
 		if err != nil {
 			return fmt.Errorf("price: %w", err)
 		}
@@ -269,7 +269,7 @@ func (s *Service) PlanSetPrice(ctx context.Context, req SetPriceRequest) (SetPri
 		}
 		out = SetPricePlan{Plan: app.Plan{Changes: []app.Change{{
 			Op: op, Entity: EntitySecurityPrice, Summary: fmt.Sprintf("%s price of %s on %s", op, sec.Name, d),
-			Fields: moneyFields(map[string]any{"security": sec.Name, "date": d.String()}, "price", price),
+			Fields: priceFields(map[string]any{"security": sec.Name, "date": d.String()}, "price", price),
 		}}}, Price: domain.SecurityPrice{Security: sec.ID, Date: d, Price: price}}
 		return nil
 	})
@@ -282,6 +282,13 @@ func (s *Service) ApplySetPrice(ctx context.Context, p SetPricePlan) error {
 		return err
 	}
 	return s.write(ctx, func(r app.Repos) error { return r.Securities().UpsertPrice(ctx, p.Price) })
+}
+
+func priceFields(f map[string]any, prefix string, p domain.Price) map[string]any {
+	f[prefix] = p.Minor()
+	f[prefix+"_scale"] = p.Scale()
+	f[prefix+"_currency"] = p.Currency().Code()
+	return f
 }
 
 func moneyFields(f map[string]any, prefix string, m domain.Money) map[string]any {
@@ -362,7 +369,7 @@ func (s *Service) buildOp(ctx context.Context, r app.Repos, req OpRequest, d dom
 	if err != nil {
 		return OpPlan{}, fmt.Errorf("quantity: %w", err)
 	}
-	price, err := domain.ParseAmount(req.Price, s.cfg.Locale, sec.Currency)
+	price, err := domain.ParsePrice(req.Price, sec.Currency, sec.PriceScale, s.cfg.Locale)
 	if err != nil {
 		return OpPlan{}, fmt.Errorf("price: %w", err)
 	}
@@ -382,7 +389,7 @@ func (s *Service) buildOp(ctx context.Context, r app.Repos, req OpRequest, d dom
 	change := app.Change{
 		Op: app.OpCreate, Entity: EntitySecurityOp,
 		Summary: fmt.Sprintf("%s %s %s of %s", op.Kind, qty, sec.Name, d),
-		Fields: moneyFields(map[string]any{
+		Fields: priceFields(map[string]any{
 			"kind": string(op.Kind), "date": d.String(), "account": acct.Name, "security": sec.Name,
 			"quantity": qty.String(),
 		}, "unit_price", price),

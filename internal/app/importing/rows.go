@@ -214,7 +214,12 @@ func parseSecurityOp(rec *fuiproto.SecurityOpRecord, accountID domain.AccountID,
 	if err != nil {
 		return domain.SecurityOp{}, fmt.Errorf("quantity: %w", err)
 	}
-	price, err := domain.NewMoney(rec.UnitPrice, sec.Currency)
+	priceMoney, err := domain.NewMoney(rec.UnitPrice, sec.Currency)
+	if err != nil {
+		return domain.SecurityOp{}, fmt.Errorf("unit price: %w", err)
+	}
+	// Records carry the price in minor units of the currency; rescale exactly to the security's precision.
+	price, err := domain.ParsePrice(domain.FormatMachine(priceMoney), sec.Currency, sec.PriceScale, domain.LocaleENUS)
 	if err != nil {
 		return domain.SecurityOp{}, fmt.Errorf("unit price: %w", err)
 	}

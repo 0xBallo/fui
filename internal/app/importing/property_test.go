@@ -181,7 +181,7 @@ func TestPropertyFUIExportRoundTrips(t *testing.T) {
 			}
 			_, err = r.Securities().InsertOp(context.Background(), domain.SecurityOp{
 				Account: accts[0].ID, Security: sec.ID, Date: date("2026-11-01"),
-				Kind: domain.OpBuy, Quantity: must(domain.NewQuantity(1000000, 6)), UnitPrice: money(100), Fees: money(1),
+				Kind: domain.OpBuy, Quantity: must(domain.NewQuantity(1000000, 6)), UnitPrice: price(100), Fees: money(1),
 			})
 			return err
 		})

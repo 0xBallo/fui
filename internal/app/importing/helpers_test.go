@@ -237,3 +237,5 @@ var lastID = regexp.MustCompile(`LastID:map\[[^\]]*\]`)
 
 // snapshot is the memstore dump without the ID counters, which an undo cannot rewind.
 func snapshot(s *memstore.Store) string { return lastID.ReplaceAllString(s.Snapshot(), "") }
+
+func price(minor int64) domain.Price { return must(domain.NewPrice(minor, 2, eur())) }

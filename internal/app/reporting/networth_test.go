@@ -50,11 +50,11 @@ func seedWealth(t *testing.T, f *fx) {
 		}
 		qty := must(domain.NewQuantity(1000, 2))
 		if _, err := r.Securities().InsertOp(ctx, domain.SecurityOp{
-			Date: date("2026-01-10"), Account: f.main.ID, Security: sec.ID, Kind: domain.OpBuy, Quantity: qty, UnitPrice: money(4_000), Fees: money(0),
+			Date: date("2026-01-10"), Account: f.main.ID, Security: sec.ID, Kind: domain.OpBuy, Quantity: qty, UnitPrice: price(4_000), Fees: money(0),
 		}); err != nil {
 			return err
 		}
-		return r.Securities().UpsertPrice(ctx, domain.SecurityPrice{Security: sec.ID, Date: date("2026-02-01"), Price: money(5_000)})
+		return r.Securities().UpsertPrice(ctx, domain.SecurityPrice{Security: sec.ID, Date: date("2026-02-01"), Price: price(5_000)})
 	})
 	if err != nil {
 		t.Fatal(err)

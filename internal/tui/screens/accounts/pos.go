@@ -102,7 +102,7 @@ func (m *Model) setPositions(rows []positionViewRow) {
 		pos := row.line.Position
 		price, value, pnl := "-", "-", "-"
 		if pos.HasPrice {
-			price = domain.FormatAmount(pos.LastPrice, m.loc)
+			price = pos.LastPrice.String()
 			value = domain.FormatAmount(pos.MarketValue, m.loc)
 			pnl = domain.FormatAmount(pos.Unrealized, m.loc)
 		}
