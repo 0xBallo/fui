@@ -1,0 +1,23 @@
+# Per-account cash-flow simulation (G09): repeatable --account in run and save.
+exec fui init --currency EUR
+exec fui module enable simulations
+exec fui account add Checking --kind checking --currency EUR --opening-balance 1000
+exec fui account add Savings --kind savings --currency EUR --opening-balance 500
+
+exec fui simulate cashflow --months 3 --account Checking --account Savings --one-off 2026-02-01:-100 --json
+stdout '"accounts":\["Checking","Savings"\]'
+stdout '"account":"Checking"'
+stdout '"account":"Savings"'
+
+exec fui simulate cashflow --months 3 --account Checking
+stdout 'MONTH END'
+stdout 'Checking'
+
+exec fui simulate cashflow --months 3 --account Checking --csv
+stdout 'ACCOUNT,MONTH END,BASE,SCENARIO,DELTA'
+
+exec fui simulate save checking-only cashflow --months 3 --account Checking
+exec fui simulate list
+stdout 'checking-only'
+
+! exec fui simulate cashflow --account Nope

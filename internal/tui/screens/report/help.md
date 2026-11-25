@@ -45,7 +45,11 @@ granularity, and drills down with them.
 
 With the `analytics` module on, `c` compares two periods side by side and `t` toggles the
 breakdown by category. With the `simulations` module on, `m` opens what-if scenarios
-(investment, savings plan, cash flow); they never change your transactions.
+(investment, savings plan, cash flow); they never change your transactions. A cash-flow
+scenario takes events (`date:amount` one-offs and monthly changes, a stop-income date, a
+`date:capital:rate:years` loan; separate several with `;`) and an optional comma separated list
+of accounts for a per-account view. In the saved simulations list (`v`), `d` deletes the selected
+one after a confirmation.
 
 ## Keys
 

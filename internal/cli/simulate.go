@@ -52,7 +52,8 @@ var simulateExamples = map[string]string{
 	simulating.KindPAC: "  fui simulate pac --monthly 200 --years 20 --rate 4,5\n" +
 		"  fui simulate pac --quarterly 600 --initial 1000 --years 10 --rate 5 --tax 26 --inflation 2",
 	simulating.KindCashFlow: "  fui simulate cashflow --months 12 --one-off 2027-03-01:-5000\n" +
-		"  fui simulate cashflow --stop-income 2027-01-01 --loan 2027-02-01:20000:4,5:5",
+		"  fui simulate cashflow --stop-income 2027-01-01 --loan 2027-02-01:20000:4,5:5\n" +
+		"  fui simulate cashflow --months 6 --account Checking --account Savings --json",
 }
 
 var simulateShorts = map[string]string{
@@ -105,7 +106,8 @@ func newSimulateSaveCmd(deps *Deps, svc *simulating.Service) *cobra.Command {
 		Use:   "save NAME KIND",
 		Short: "Save a simulation scenario (KIND: investment, pac or cashflow)",
 		Example: "  fui simulate save retirement pac --monthly 200 --years 20 --rate 4,5\n" +
-			"  fui simulate save sabbatical cashflow --stop-income 2027-01-01",
+			"  fui simulate save sabbatical cashflow --stop-income 2027-01-01\n" +
+			"  fui simulate save checking-only cashflow --account Checking --months 6",
 		Args: exactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rt, err := runtimeOf(cmd, deps)
@@ -249,6 +251,7 @@ func registerSimulateFlags(cmd *cobra.Command, kind string) {
 		f.StringArray("change", nil, "monthly change from a date `DATE:AMOUNT` (e.g. a raise); repeatable")
 		f.StringArray("stop-income", nil, "stop all income from `DATE`; repeatable")
 		f.StringArray("loan", nil, "new loan `DATE:AMOUNT:RATE:YEARS`; repeatable")
+		f.StringArray("account", nil, "restrict to this account (name or ID) and show a per-account series; repeatable")
 		return
 	}
 	if f.Lookup("years") == nil {
@@ -352,6 +355,12 @@ func (p simFlagParser) pac(in simulating.InvestmentParams) (simulating.PACParams
 func (p simFlagParser) cashFlow() (simulating.CashFlowParams, error) {
 	var out simulating.CashFlowParams
 	out.Months, _ = p.cmd.Flags().GetInt("months")
+	accounts, _ := p.cmd.Flags().GetStringArray("account")
+	for _, a := range accounts {
+		if a = strings.TrimSpace(a); a != "" {
+			out.Accounts = append(out.Accounts, a)
+		}
+	}
 	specs := []struct {
 		flag, kind string
 		fields     int
