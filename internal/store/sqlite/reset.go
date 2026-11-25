@@ -22,7 +22,7 @@ func (s *Store) Reset(ctx context.Context, opts app.ResetOptions) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	tempPath, err := s.buildFresh(ctx, opts)
+	tempPath, warnings, err := s.buildFresh(ctx, opts)
 	if err != nil {
 		return err
 	}
@@ -53,6 +53,11 @@ func (s *Store) swapLocked(ctx context.Context, tempPath string, reason backup.R
 	if err := s.reopenLocked(); err != nil {
 		return fmt.Errorf("%s: reopen database: %w", op, err)
 	}
+	if opts.OnWarning != nil {
+		for _, w := range warnings {
+			opts.OnWarning(w)
+		}
+	}
 	return nil
 }
 
@@ -65,30 +70,31 @@ func (s *Store) reopenAfter(cause error) error {
 }
 
 // buildFresh creates the new archive as a closed, sidecar-free temp file in the archive directory.
-func (s *Store) buildFresh(ctx context.Context, opts app.ResetOptions) (string, error) {
+func (s *Store) buildFresh(ctx context.Context, opts app.ResetOptions) (string, []string, error) {
 	f, err := os.CreateTemp(filepath.Dir(s.path), ".fui-reset-*.db")
 	if err != nil {
-		return "", fmt.Errorf("reset: create temp file: %w", err)
+		return "", nil, fmt.Errorf("reset: create temp file: %w", err)
 	}
 	tempPath := f.Name()
 	// Open creates the file itself: a pre-existing one would count as an old archive to migrate and
 	// trigger a needless "migrate" backup.
 	if err := errors.Join(f.Close(), os.Remove(tempPath)); err != nil {
-		return "", fmt.Errorf("reset: prepare temp file: %w", err)
+		return "", nil, fmt.Errorf("reset: prepare temp file: %w", err)
 	}
-	if err := s.populateFresh(ctx, tempPath, opts); err != nil {
+	warnings, err := s.populateFresh(ctx, tempPath, opts)
+	if err != nil {
 		_ = os.Remove(tempPath)
-		return "", err
+		return "", nil, err
 	}
-	return tempPath, nil
+	return tempPath, warnings, nil
 }
 
-func (s *Store) populateFresh(ctx context.Context, tempPath string, opts app.ResetOptions) (err error) {
+func (s *Store) populateFresh(ctx context.Context, tempPath string, opts app.ResetOptions) (warnings []string, err error) {
 	fresh, err := Open(ctx, Options{
 		Path: tempPath, BackupDir: s.backupDir, BackupKeep: s.backupKeep, Clock: s.clock,
 	})
 	if err != nil {
-		return fmt.Errorf("reset: open fresh archive: %w", err)
+		return nil, fmt.Errorf("reset: open fresh archive: %w", err)
 	}
 	defer func() {
 		if cerr := fresh.Close(); cerr != nil && err == nil {
@@ -100,63 +106,80 @@ func (s *Store) populateFresh(ctx context.Context, tempPath string, opts app.Res
 	var cats []domain.Category
 	if opts.KeepSettings {
 		if err := s.readSettings(ctx, &kept); err != nil {
-			return err
+			return nil, err
 		}
 		cats = kept.categories
 	} else {
 		cats = domain.DefaultCategories()
 	}
-	return fresh.WithTx(ctx, func(r app.Repos) error {
-		if err := insertCategories(ctx, r.Categories(), cats); err != nil {
+	remap := newIDRemap()
+	err = fresh.WithTx(ctx, func(r app.Repos) error {
+		if err := insertCategories(ctx, r.Categories(), cats, remap); err != nil {
 			return err
 		}
-		if err := insertTags(ctx, r.Tags(), kept.tags); err != nil {
+		if err := insertTags(ctx, r.Tags(), kept.tags, remap); err != nil {
 			return err
 		}
-		if err := insertPayees(ctx, r.Payees(), kept.payees); err != nil {
+		if err := insertPayees(ctx, r.Payees(), kept.payees, remap); err != nil {
 			return err
 		}
-		if err := insertRules(ctx, r.Rules(), kept.rules); err != nil {
+		if warnings, err = insertRules(ctx, r.Rules(), kept.rules, remap); err != nil {
 			return err
 		}
 		return insertSavedReports(ctx, r.SavedReports(), kept.savedReports)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return warnings, fresh.insertPendingRefs(ctx, kept.pendingRefs)
 }
 
-func insertCategories(ctx context.Context, repo app.CategoryRepo, cats []domain.Category) error {
+func insertCategories(ctx context.Context, repo app.CategoryRepo, cats []domain.Category, remap idRemap) error {
 	for _, c := range cats {
-		if _, err := repo.Insert(ctx, domain.Category{Name: c.Name, Kind: c.Kind}); err != nil {
+		n, err := repo.Insert(ctx, domain.Category{Name: c.Name, Kind: c.Kind})
+		if err != nil {
 			return fmt.Errorf("reset: create category %q: %w", c.Name, err)
 		}
+		remap.categories[c.ID] = n.ID
 	}
 	return nil
 }
 
-func insertTags(ctx context.Context, repo app.TagRepo, tags []domain.Tag) error {
+func insertTags(ctx context.Context, repo app.TagRepo, tags []domain.Tag, remap idRemap) error {
 	for _, tag := range tags {
-		if _, err := repo.Insert(ctx, domain.Tag{Name: tag.Name}); err != nil {
+		n, err := repo.Insert(ctx, domain.Tag{Name: tag.Name})
+		if err != nil {
 			return fmt.Errorf("reset: create tag %q: %w", tag.Name, err)
 		}
+		remap.tags[tag.ID] = n.ID
 	}
 	return nil
 }
 
-func insertPayees(ctx context.Context, repo app.PayeeRepo, payees []domain.Payee) error {
+func insertPayees(ctx context.Context, repo app.PayeeRepo, payees []domain.Payee, remap idRemap) error {
 	for _, p := range payees {
-		if _, err := repo.Insert(ctx, domain.Payee{Name: p.Name, Aliases: p.Aliases}); err != nil {
+		n, err := repo.Insert(ctx, domain.Payee{Name: p.Name, Aliases: p.Aliases})
+		if err != nil {
 			return fmt.Errorf("reset: create payee %q: %w", p.Name, err)
 		}
+		remap.payees[p.ID] = n.ID
 	}
 	return nil
 }
 
-func insertRules(ctx context.Context, repo app.RuleRepo, rules []domain.Rule) error {
+func insertRules(ctx context.Context, repo app.RuleRepo, rules []domain.Rule, remap idRemap) ([]string, error) {
+	var warnings []string
 	for _, rule := range rules {
-		if _, err := repo.Insert(ctx, rule); err != nil {
-			return fmt.Errorf("reset: create rule %q: %w", rule.Name, err)
+		mapped, warns, ok := remap.remapRule(rule)
+		warnings = append(warnings, warns...)
+		if !ok {
+			continue
+		}
+		if _, err := repo.Insert(ctx, mapped); err != nil {
+			return nil, fmt.Errorf("reset: create rule %q: %w", rule.Name, err)
 		}
 	}
-	return nil
+	return warnings, nil
 }
 
 func insertSavedReports(ctx context.Context, repo app.SavedReportRepo, reports []app.SavedReport) error {
@@ -175,6 +198,7 @@ type keptSettings struct {
 	payees       []domain.Payee
 	rules        []domain.Rule
 	savedReports []app.SavedReport
+	pendingRefs  []pendingRef
 }
 
 // readSettings lists the settings without taking s.mu (Reset already holds it).
@@ -199,6 +223,9 @@ func (s *Store) readSettings(ctx context.Context, out *keptSettings) error {
 	}
 	if out.savedReports, err = r.SavedReports().List(ctx); err != nil {
 		return fmt.Errorf("reset: list saved reports: %w", err)
+	}
+	if out.pendingRefs, err = s.readPendingRefs(ctx); err != nil {
+		return err
 	}
 	return nil
 }

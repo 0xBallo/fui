@@ -172,3 +172,38 @@ func TestApplyResetWithoutResetter(t *testing.T) {
 		t.Fatal("ApplyReset succeeded without a Resetter")
 	}
 }
+
+// warnBackup is a Resetter that reports warnings like the SQLite store does.
+type warnBackup struct{ spyBackup }
+
+func (*warnBackup) Reset(_ context.Context, o app.ResetOptions) error {
+	o.OnWarning("rule \"R\": dropped condition on account 1 (accounts are not kept)")
+	return nil
+}
+
+func TestResetKeepSettingsWarnings(t *testing.T) {
+	e := resetEnv(t)
+	seedReset(t, e)
+	ctx := context.Background()
+	wantNoErr(t, e.store.WithTx(ctx, func(r app.Repos) error {
+		_, err := r.Rules().Insert(ctx, domain.Rule{
+			Name: "R", Enabled: true,
+			Conditions: domain.RuleConditions{AccountIDs: []domain.AccountID{1}},
+			Actions:    domain.RuleActions{PayeeID: 1},
+		})
+		return err
+	}))
+	cfg := app.Config{Locale: domain.LocaleENUS, Location: time.UTC, BaseCurrency: currency(t, "EUR")}
+	svc := app.New(e.store, fixedClock{time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)}, &warnBackup{}, cfg)
+
+	plan, err := svc.PlanReset(ctx, app.ResetRequest{KeepSettings: true})
+	wantNoErr(t, err)
+	if len(plan.Notices) != 1 || !strings.Contains(plan.Notices[0], "1 rule account conditions") {
+		t.Errorf("Notices = %v, want one account-condition notice", plan.Notices)
+	}
+	res, err := svc.ApplyReset(ctx, plan)
+	wantNoErr(t, err)
+	if len(res.Warnings) != 1 {
+		t.Errorf("Warnings = %v, want 1", res.Warnings)
+	}
+}

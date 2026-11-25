@@ -145,6 +145,14 @@ CREATE TABLE connector_account_refs (
     UNIQUE (connector, ref)
 ) STRICT;
 
+CREATE TABLE connector_ref_pending (
+    id INTEGER PRIMARY KEY,
+    connector TEXT NOT NULL,
+    ref TEXT NOT NULL,
+    account_name TEXT NOT NULL COLLATE NOCASE,
+    UNIQUE (connector, ref)
+) STRICT;
+
 CREATE TABLE tags (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,

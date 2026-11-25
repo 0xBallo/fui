@@ -138,6 +138,13 @@ table|connector_account_refs|connector_account_refs|CREATE TABLE connector_accou
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     UNIQUE (connector, ref)
 ) STRICT
+table|connector_ref_pending|connector_ref_pending|CREATE TABLE connector_ref_pending (
+    id INTEGER PRIMARY KEY,
+    connector TEXT NOT NULL,
+    ref TEXT NOT NULL,
+    account_name TEXT NOT NULL COLLATE NOCASE,
+    UNIQUE (connector, ref)
+) STRICT
 table|dismissed_insights|dismissed_insights|CREATE TABLE dismissed_insights (
     key TEXT PRIMARY KEY,
     kind TEXT NOT NULL CHECK (kind IN ('anomaly', 'subscription', 'price_change', 'trend')),

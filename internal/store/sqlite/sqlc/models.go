@@ -100,6 +100,13 @@ type ConnectorAccountRef struct {
 	UpdatedAt string
 }
 
+type ConnectorRefPending struct {
+	ID          int64
+	Connector   string
+	Ref         string
+	AccountName string
+}
+
 type DismissedInsight struct {
 	Key         string
 	Kind        string

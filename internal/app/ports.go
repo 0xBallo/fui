@@ -24,6 +24,9 @@ type Backuper interface {
 type ResetOptions struct {
 	// KeepSettings keeps the categories, tags and payees (and any other settings that exist); everything else is deleted.
 	KeepSettings bool
+	// OnWarning, when set, receives a message for every kept setting the reset had to drop (for
+	// instance a rule condition on an account, which a keep-settings reset deletes).
+	OnWarning func(string)
 }
 
 // Resetter rebuilds the archive as a fresh one. The Backuper given to New must also implement it

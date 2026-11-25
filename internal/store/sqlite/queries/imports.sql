@@ -36,3 +36,15 @@ VALUES (@connector, @ref, @account_id)
 ON CONFLICT (connector, ref) DO UPDATE SET
     account_id = excluded.account_id,
     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');
+
+-- name: GetPendingConnectorRefAccount :one
+SELECT a.id
+FROM connector_ref_pending p
+JOIN accounts a ON a.name = p.account_name
+WHERE p.connector = @connector
+    AND p.ref = @ref;
+
+-- name: DeletePendingConnectorRef :exec
+DELETE FROM connector_ref_pending
+WHERE connector = @connector
+    AND ref = @ref;

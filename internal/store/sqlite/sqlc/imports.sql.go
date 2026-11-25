@@ -22,6 +22,22 @@ func (q *Queries) DeleteImportBatch(ctx context.Context, id int64) (int64, error
 	return result.RowsAffected()
 }
 
+const deletePendingConnectorRef = `-- name: DeletePendingConnectorRef :exec
+DELETE FROM connector_ref_pending
+WHERE connector = ?1
+    AND ref = ?2
+`
+
+type DeletePendingConnectorRefParams struct {
+	Connector string
+	Ref       string
+}
+
+func (q *Queries) DeletePendingConnectorRef(ctx context.Context, arg DeletePendingConnectorRefParams) error {
+	_, err := q.db.ExecContext(ctx, deletePendingConnectorRef, arg.Connector, arg.Ref)
+	return err
+}
+
 const getConnectorAccountRef = `-- name: GetConnectorAccountRef :one
 SELECT account_id
 FROM connector_account_refs
@@ -60,6 +76,26 @@ func (q *Queries) GetImportBatch(ctx context.Context, id int64) (ImportBatch, er
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getPendingConnectorRefAccount = `-- name: GetPendingConnectorRefAccount :one
+SELECT a.id
+FROM connector_ref_pending p
+JOIN accounts a ON a.name = p.account_name
+WHERE p.connector = ?1
+    AND p.ref = ?2
+`
+
+type GetPendingConnectorRefAccountParams struct {
+	Connector string
+	Ref       string
+}
+
+func (q *Queries) GetPendingConnectorRefAccount(ctx context.Context, arg GetPendingConnectorRefAccountParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getPendingConnectorRefAccount, arg.Connector, arg.Ref)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const importBatchBySHA256 = `-- name: ImportBatchBySHA256 :one
