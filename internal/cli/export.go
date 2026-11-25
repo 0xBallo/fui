@@ -2,8 +2,10 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -85,10 +87,30 @@ func runDump(ctx context.Context, deps *Deps, svc *importing.Service, rt runtime
 	if err := os.MkdirAll(output, 0o750); err != nil {
 		return fmt.Errorf("create output directory: %w", err)
 	}
-	if err := svc.Dump(ctx, importing.DumpFormat(format), dumpFile(output)); err != nil {
+	config, err := readConfigText(deps)
+	if err != nil {
+		return err
+	}
+	req := importing.DumpRequest{Format: importing.DumpFormat(format), Config: config}
+	if err := svc.DumpAll(ctx, req, dumpFile(output)); err != nil {
 		return err
 	}
 	return writeExportConfirmation(deps, rt, 0, output)
+}
+
+// readConfigText returns the raw content of config.toml, or "" when the file does not exist.
+func readConfigText(deps *Deps) (string, error) {
+	if deps.Config == nil || deps.Config.ConfigFile == "" {
+		return "", nil
+	}
+	data, err := os.ReadFile(deps.Config.ConfigFile)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read config file: %w", err)
+	}
+	return string(data), nil
 }
 
 // dumpFile creates the output file of one dumped entity inside dir.
