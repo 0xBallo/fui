@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"time"
 
 	"github.com/0xballo/fui/internal/domain"
@@ -18,6 +19,25 @@ const (
 	OpKindTxRemove = "tx.rm"
 	OpKindTransfer = "transfer"
 	OpKindSplit    = "split"
+
+	OpKindCategorize   = "tx.categorize"
+	OpKindTag          = "tx.tag"
+	OpKindUntag        = "tx.untag"
+	OpKindRulesApply   = "rules.apply"
+	OpKindRecurConfirm = "recurring.confirm"
+	OpKindLoanConfirm  = "loan.confirm"
+)
+
+// UndoField names a transaction field a journal entry may own: an entry with a mask only compares
+// and restores those fields, so later edits of the other fields survive an undo.
+type UndoField string
+
+// Fields that can appear in an undo mask.
+const (
+	UndoFieldCategory UndoField = "category"
+	UndoFieldTags     UndoField = "tags"
+	UndoFieldStatus   UndoField = "status"
+	UndoFieldPayee    UndoField = "payee"
 )
 
 // OpEntry is one row of the undo journal. Payload is the JSON snapshot needed to revert it.
@@ -74,12 +94,17 @@ type txState struct {
 
 // undoPayload holds the affected transactions before and after the operation: Before is empty
 // for an add, After is empty for a removal. Group is the transfer group involved, if any.
+// Mask lists the fields the entry owns (empty: all), NewGroups the transfer groups the write
+// created and CreatedPayee the payee it created implicitly (0: none).
 type undoPayload struct {
-	Group       int64
-	FeeMinor    int64
-	FeeCurrency string
-	Before      []txState
-	After       []txState
+	Group        int64
+	NewGroups    []int64
+	Mask         []string
+	CreatedPayee int64
+	FeeMinor     int64
+	FeeCurrency  string
+	Before       []txState
+	After        []txState
 }
 
 func dateStr(d domain.Date) string {
@@ -208,6 +233,8 @@ func findState(states []txState, id int64) (txState, bool) {
 type UndoPlan struct {
 	Plan
 	Entry OpEntry
+	// Warnings lists references cleared because the row they pointed to no longer exists.
+	Warnings []string
 }
 
 func undoStale(id int64, why string) error {
@@ -230,7 +257,7 @@ func checkUndo(ctx context.Context, r Repos, p undoPayload) error {
 			return newError(domain.ErrReconciled, map[string]any{"id": want.ID},
 				"transaction %d is reconciled: cannot undo", want.ID)
 		}
-		if !reflect.DeepEqual(cur[0], want) {
+		if !sameState(cur[0], want, p.Mask) {
 			return undoStale(want.ID, "changed")
 		}
 	}
@@ -245,6 +272,81 @@ func checkUndo(ctx context.Context, r Repos, p undoPayload) error {
 		}
 	}
 	return nil
+}
+
+func hasField(mask []string, f UndoField) bool {
+	return len(mask) == 0 || slices.Contains(mask, string(f))
+}
+
+// sameState compares a and b on the masked fields only; an empty mask compares everything.
+func sameState(a, b txState, mask []string) bool {
+	if len(mask) == 0 {
+		return reflect.DeepEqual(a, b)
+	}
+	return (!hasField(mask, UndoFieldCategory) || a.Category == b.Category) &&
+		(!hasField(mask, UndoFieldTags) || slices.Equal(a.Tags, b.Tags)) &&
+		(!hasField(mask, UndoFieldStatus) || a.Status == b.Status) &&
+		(!hasField(mask, UndoFieldPayee) || a.Payee == b.Payee)
+}
+
+// overlay copies the masked fields of src onto dst.
+func overlay(dst *txState, src txState, mask []string) {
+	if hasField(mask, UndoFieldCategory) {
+		dst.Category = src.Category
+	}
+	if hasField(mask, UndoFieldTags) {
+		dst.Tags = src.Tags
+	}
+	if hasField(mask, UndoFieldStatus) {
+		dst.Status = src.Status
+	}
+	if hasField(mask, UndoFieldPayee) {
+		dst.Payee = src.Payee
+	}
+}
+
+// restoreStates returns the states revert writes back, with references to rows that no longer
+// exist cleared, and a warning for each cleared reference.
+func restoreStates(ctx context.Context, r Repos, p undoPayload) ([]txState, []string, error) {
+	var out []txState
+	var warns []string
+	for _, old := range p.Before {
+		st := old
+		if _, ok := findState(p.After, old.ID); ok && len(p.Mask) > 0 {
+			cur, err := snapshot(ctx, r, domain.TransactionID(old.ID))
+			if err != nil {
+				return nil, nil, err
+			}
+			st = cur[0]
+			overlay(&st, old, p.Mask)
+		}
+		checks := []struct {
+			what string
+			ref  *int64
+			get  func() error
+		}{
+			{"payee", &st.Payee, func() error { _, err := r.Payees().Get(ctx, domain.PayeeID(st.Payee)); return err }},
+			{"import batch", &st.Batch, func() error { _, err := r.Imports().Batch(ctx, domain.ImportBatchID(st.Batch)); return err }},
+			{"recurrence", &st.Recurrence, func() error {
+				_, err := r.Recurrences().Get(ctx, RecurrenceID(st.Recurrence))
+				return err
+			}},
+		}
+		for _, c := range checks {
+			if *c.ref == 0 {
+				continue
+			}
+			err := c.get()
+			if errors.Is(err, domain.ErrNotFound) {
+				warns = append(warns, fmt.Sprintf("transaction %d: %s %d no longer exists, reference cleared", st.ID, c.what, *c.ref))
+				*c.ref = 0
+			} else if err != nil {
+				return nil, nil, fmt.Errorf("check %s %d: %w", c.what, *c.ref, err)
+			}
+		}
+		out = append(out, st)
+	}
+	return out, warns, nil
 }
 
 func decodeUndo(e OpEntry) (undoPayload, error) {
@@ -272,7 +374,11 @@ func (s *Service) PlanUndo(ctx context.Context) (UndoPlan, error) {
 		if err := checkUndo(ctx, r, p); err != nil {
 			return err
 		}
-		out = UndoPlan{Entry: e}
+		_, warns, err := restoreStates(ctx, r, p)
+		if err != nil {
+			return err
+		}
+		out = UndoPlan{Entry: e, Warnings: warns}
 		for _, st := range p.After {
 			op := OpDelete
 			if _, ok := findState(p.Before, st.ID); ok {
@@ -316,14 +422,18 @@ func (s *Service) ApplyUndo(ctx context.Context, plan UndoPlan) error {
 		if err := checkUndo(ctx, r, p); err != nil {
 			return err
 		}
-		if err := revert(ctx, r, p); err != nil {
+		states, _, err := restoreStates(ctx, r, p)
+		if err != nil {
+			return err
+		}
+		if err := revert(ctx, r, p, states); err != nil {
 			return fmt.Errorf("undo %s: %w", e.Kind, err)
 		}
 		return r.OpLog().MarkUndone(ctx, e.ID, s.clock.Now())
 	})
 }
 
-func revert(ctx context.Context, r Repos, p undoPayload) error {
+func revert(ctx context.Context, r Repos, p undoPayload, states []txState) error {
 	for _, st := range p.After {
 		if _, ok := findState(p.Before, st.ID); ok {
 			continue
@@ -337,25 +447,32 @@ func revert(ctx context.Context, r Repos, p undoPayload) error {
 			return fmt.Errorf("delete transfer %d: %w", p.Group, err)
 		}
 	}
-	if p.Group != 0 && len(p.After) == 0 {
-		var fee domain.Money
-		if p.FeeCurrency != "" {
-			cur, err := domain.ParseCurrency(p.FeeCurrency)
-			if err != nil {
-				return err
-			}
-			if fee, err = domain.NewMoney(p.FeeMinor, cur); err != nil {
-				return err
-			}
-		}
-		if err := r.OpLog().RestoreTransferGroup(ctx, domain.TransferGroupID(p.Group), fee); err != nil {
-			return fmt.Errorf("restore transfer %d: %w", p.Group, err)
+	for _, g := range p.NewGroups {
+		if err := r.Transfers().Delete(ctx, domain.TransferGroupID(g)); err != nil {
+			return fmt.Errorf("delete transfer %d: %w", g, err)
 		}
 	}
-	for _, st := range p.Before {
+	if p.Group != 0 && len(p.After) == 0 {
+		if err := restoreGroup(ctx, r, p); err != nil {
+			return err
+		}
+	}
+	for _, st := range states {
 		if err := restoreTx(ctx, r, st, p.After); err != nil {
 			return err
 		}
+	}
+	return dropCreatedPayee(ctx, r, p.CreatedPayee)
+}
+
+// dropCreatedPayee deletes the payee a reverted write created; one still used by other rows stays.
+func dropCreatedPayee(ctx context.Context, r Repos, id int64) error {
+	if id == 0 {
+		return nil
+	}
+	err := r.Payees().Delete(ctx, domain.PayeeID(id))
+	if err != nil && !errors.Is(err, ErrInUse) && !errors.Is(err, domain.ErrNotFound) {
+		return fmt.Errorf("delete payee %d: %w", id, err)
 	}
 	return nil
 }
@@ -385,6 +502,92 @@ func restoreTx(ctx context.Context, r Repos, st txState, after []txState) error 
 	}
 	if err := r.Splits().ReplaceSplits(ctx, t.ID, rows); err != nil {
 		return fmt.Errorf("restore splits of %d: %w", st.ID, err)
+	}
+	return nil
+}
+
+// Journal records a write made by code outside the transaction add/edit/rm/transfer/split use
+// cases, such as categorize, tag or rules: BeginJournal before the write, Commit after it.
+type Journal struct {
+	ids    []domain.TransactionID
+	before []txState
+	groups []int64
+}
+
+// BeginJournal snapshots the state of those ids that exist, before the write.
+func BeginJournal(ctx context.Context, r Repos, ids ...domain.TransactionID) (*Journal, error) {
+	j := &Journal{}
+	for _, id := range ids {
+		if slices.Contains(j.ids, id) {
+			continue
+		}
+		st, err := snapshot(ctx, r, id)
+		if errors.Is(err, domain.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		j.ids = append(j.ids, id)
+		j.before = append(j.before, st...)
+	}
+	return j, nil
+}
+
+// Track adds rows created by the write: they appear only in the After state and are deleted on undo.
+func (j *Journal) Track(ids ...domain.TransactionID) {
+	for _, id := range ids {
+		if !slices.Contains(j.ids, id) {
+			j.ids = append(j.ids, id)
+		}
+	}
+}
+
+// TrackGroup registers a transfer group created by the write; undo deletes it.
+func (j *Journal) TrackGroup(g domain.TransferGroupID) {
+	j.groups = append(j.groups, int64(g))
+}
+
+// Commit snapshots the After state of the begun and tracked rows and appends the journal entry. A
+// non-empty mask restricts the entry to those fields.
+func (j *Journal) Commit(ctx context.Context, r Repos, clock Clock, kind string, mask ...UndoField) error {
+	p := undoPayload{Before: j.before, NewGroups: j.groups}
+	for _, f := range mask {
+		p.Mask = append(p.Mask, string(f))
+	}
+	for _, id := range j.ids {
+		st, err := snapshot(ctx, r, id)
+		if errors.Is(err, domain.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		p.After = append(p.After, st...)
+	}
+	b, err := json.Marshal(p)
+	if err != nil {
+		return fmt.Errorf("journal %s: %w", kind, err)
+	}
+	if _, err := r.OpLog().Append(ctx, OpEntry{Kind: kind, Payload: string(b), CreatedAt: clock.Now()}); err != nil {
+		return fmt.Errorf("journal %s: %w", kind, err)
+	}
+	return nil
+}
+
+func restoreGroup(ctx context.Context, r Repos, p undoPayload) error {
+	var fee domain.Money
+	if p.FeeCurrency != "" {
+		cur, err := domain.ParseCurrency(p.FeeCurrency)
+		if err != nil {
+			return err
+		}
+		if fee, err = domain.NewMoney(p.FeeMinor, cur); err != nil {
+			return err
+		}
+	}
+	if err := r.OpLog().RestoreTransferGroup(ctx, domain.TransferGroupID(p.Group), fee); err != nil {
+		return fmt.Errorf("restore transfer %d: %w", p.Group, err)
 	}
 	return nil
 }
