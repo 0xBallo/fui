@@ -1,0 +1,44 @@
+# Full dump (dump.json) and restore of it (G07): round trip, confirmation, dry-run, invalid input.
+exec fui init --preset expense --currency EUR
+exec fui account add Checking --kind checking --currency EUR --opening-balance 1000
+exec fui account add Savings --kind savings --currency EUR --opening-balance 500
+exec fui add -- -12,50 'Amazon order' -c Groceries -a Checking --date 2026-01-10
+exec fui add -- -3 Coffee -a Checking --date 2026-01-11
+exec fui budget set Groceries 400 --month 2026-01
+
+exec fui export --all --format json --output dump1
+exists dump1/dump.json
+exists dump1/accounts.json
+
+# without --yes and without a terminal the restore is refused
+! exec fui restore dump1/dump.json --no-input
+stderr 'confirmation'
+
+# --dry-run shows the plan and writes nothing
+exec fui export --all --format json --output before
+exec fui restore dump1/dump.json --dry-run
+stdout 'dump'
+exec fui export --all --format json --output after
+cmp before/dump.json after/dump.json
+
+# an invalid dump fails as invalid input and leaves the archive intact
+exec fui add -- -1 Extra -a Checking --date 2026-01-12
+exec fui export --all --format json --output mid
+! exec fui restore bad.json --yes
+stderr 'not a FUI dump'
+exec fui export --all --format json --output mid2
+cmp mid/dump.json mid2/dump.json
+! exec fui restore truncated.json --yes
+exec fui export --all --format json --output mid3
+cmp mid/dump.json mid3/dump.json
+
+# restore with --yes brings the archive back to the dump; a new export is identical
+exec fui restore dump1/dump.json --yes
+stdout 'Restored from'
+exec fui export --all --format json --output dump2
+cmp dump1/dump.json dump2/dump.json
+
+-- bad.json --
+{"format":"nope"}
+-- truncated.json --
+{"format":"fui-dump","tables":{

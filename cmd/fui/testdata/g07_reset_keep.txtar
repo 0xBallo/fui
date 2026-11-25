@@ -1,0 +1,34 @@
+# reset --keep-settings keeps categories/tags/payees/rules and warns about dropped account conditions (G07).
+exec fui init --preset expense --currency EUR
+exec fui account add Checking --kind checking --currency EUR --opening-balance 100
+exec fui category add Custom --kind expense
+exec fui tag add outing
+exec fui payee add Coop
+exec fui rule add by-text --contains coop --category Custom
+exec fui rule add by-account --contains shop --account Checking --category Custom
+exec fui add -- -5 Coop -a Checking --date 2026-01-10
+
+! exec fui reset --keep-settings --no-input
+stderr 'confirmation'
+
+exec fui reset --keep-settings --yes
+stdout 'Archive reset'
+stderr 'warning: rule "by-account"'
+
+exec fui account list --json
+! stdout 'Checking'
+exec fui category list
+stdout 'Custom'
+exec fui tag list
+stdout 'outing'
+exec fui payee list
+stdout 'Coop'
+exec fui rule list
+stdout 'by-text'
+
+# JSON output carries the warnings array
+exec fui account add Checking --kind checking --currency EUR
+exec fui rule add by-account2 --contains shop --account Checking --category Custom
+exec fui reset --keep-settings --yes --json
+stdout '"warnings":\['
+stdout 'by-account2'

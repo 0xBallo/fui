@@ -15,6 +15,7 @@ const OpKeep Op = "keep"
 const (
 	entityTag   = "tag"
 	entityPayee = "payee"
+	entityRule  = "rule"
 )
 
 // ResetRequest says what the reset keeps.
@@ -37,6 +38,8 @@ type ResetResult struct {
 	Initialized bool
 	// Created counts the categories init created (only when Initialized).
 	Created int
+	// Warnings lists the kept settings the reset had to drop, such as rule conditions on accounts.
+	Warnings []string
 }
 
 type resetData struct {
@@ -47,6 +50,7 @@ type resetData struct {
 	payees   []domain.Payee
 	fx       []domain.FXRate
 	batches  []ImportBatch
+	rules    []domain.Rule
 }
 
 // readResetData lists everything a reset counts.
@@ -77,6 +81,9 @@ func (s *Service) readResetData(ctx context.Context) (resetData, error) {
 		}
 		if d.batches, err = r.Imports().Batches(ctx); err != nil {
 			return fmt.Errorf("list import batches: %w", err)
+		}
+		if d.rules, err = r.Rules().List(ctx); err != nil {
+			return fmt.Errorf("list rules: %w", err)
 		}
 		return nil
 	})
@@ -110,6 +117,11 @@ func (s *Service) PlanReset(ctx context.Context, req ResetRequest) (ResetPlan, e
 		plan.add(OpKeep, EntityCategory, "categories", len(cats))
 		plan.add(OpKeep, entityTag, "tags", len(tags))
 		plan.add(OpKeep, entityPayee, "payees", len(payees))
+		plan.add(OpKeep, entityRule, "rules", len(d.rules))
+		if n := accountConditions(d.rules); n > 0 {
+			plan.Notices = append(plan.Notices,
+				fmt.Sprintf("%d rule account conditions will be dropped (accounts are deleted)", n))
+		}
 	} else {
 		plan.add(OpDelete, EntityCategory, "categories", len(cats))
 		plan.add(OpDelete, entityTag, "tags", len(tags))
@@ -122,6 +134,15 @@ func (s *Service) PlanReset(ctx context.Context, req ResetRequest) (ResetPlan, e
 		})
 	}
 	return plan, nil
+}
+
+// accountConditions counts the account ids the rules filter on; a reset deletes the accounts.
+func accountConditions(rules []domain.Rule) int {
+	n := 0
+	for _, r := range rules {
+		n += len(r.Conditions.AccountIDs)
+	}
+	return n
 }
 
 func (p *ResetPlan) add(op Op, entity, label string, n int) {
@@ -149,8 +170,10 @@ func (s *Service) ApplyReset(ctx context.Context, p ResetPlan) (ResetResult, err
 	if !ok {
 		return ResetResult{}, errors.New("reset: the archive adapter does not support reset")
 	}
-	if err := rs.Reset(ctx, ResetOptions{KeepSettings: p.KeepSettings}); err != nil {
+	var res ResetResult
+	opts := ResetOptions{KeepSettings: p.KeepSettings, OnWarning: func(w string) { res.Warnings = append(res.Warnings, w) }}
+	if err := rs.Reset(ctx, opts); err != nil {
 		return ResetResult{}, fmt.Errorf("reset: %w", err)
 	}
-	return ResetResult{}, nil
+	return res, nil
 }
