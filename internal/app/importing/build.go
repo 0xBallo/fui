@@ -124,19 +124,12 @@ func (b *builder) build(ctx context.Context, plan *ImportPlan) error {
 	}
 	var balances []fuiproto.BalanceRecord
 	for _, rec := range b.st.result.Records {
-		switch {
-		case rec.Transaction != nil:
-			if err := b.addRow(ctx, rec.Transaction); err != nil {
-				return err
-			}
-		case rec.Error != nil:
-			plan.Errors = append(plan.Errors, RowError{Line: rec.Error.Line, Message: "source: " + rec.Error.Message})
-		case rec.Balance != nil:
+		if rec.Balance != nil {
 			balances = append(balances, *rec.Balance)
-		case rec.SecurityOp != nil:
-			if err := b.addSecurityOp(ctx, rec.SecurityOp); err != nil {
-				return err
-			}
+			continue
+		}
+		if err := b.addRecord(ctx, rec); err != nil {
+			return err
 		}
 	}
 	for _, e := range b.st.result.RowErrors {
@@ -158,6 +151,74 @@ func (b *builder) build(ctx context.Context, plan *ImportPlan) error {
 	}
 	b.checkBalances()
 	return b.checkAlreadyImported(ctx)
+}
+
+// addRecord plans one transaction, security operation, loan or source error record.
+func (b *builder) addRecord(ctx context.Context, rec fuiproto.Record) error {
+	switch {
+	case rec.Transaction != nil:
+		return b.addRow(ctx, rec.Transaction)
+	case rec.Error != nil:
+		b.plan.Errors = append(b.plan.Errors, RowError{Line: rec.Error.Line, Message: "source: " + rec.Error.Message})
+	case rec.SecurityOp != nil:
+		return b.securityOp(ctx, rec.SecurityOp)
+	case rec.Schedule != nil:
+		b.loanRecord("schedule", b.st.sched[rec.Schedule])
+	case rec.Installment != nil:
+		b.loanRecord("installment", b.st.inst[rec.Installment])
+	}
+	return nil
+}
+
+// securityOp plans a security operation. When investments is disabled the operation is still
+// built, tagged with the module, so that applying with that module enabled can import it.
+func (b *builder) securityOp(ctx context.Context, rec *fuiproto.SecurityOpRecord) error {
+	if b.req.Modules.Has(module.Investments) {
+		return b.addSecurityOp(ctx, rec)
+	}
+	line := b.st.sec[rec]
+	with, _, err := module.Enable(b.req.Modules, module.Investments)
+	if err != nil {
+		return fmt.Errorf("enable %s: %w", module.Investments, err)
+	}
+	enabled, n := b.req.Modules, len(b.plan.SecurityOps)
+	b.req.Modules = with
+	err = b.addSecurityOp(ctx, rec)
+	b.req.Modules = enabled
+	if err != nil {
+		return err
+	}
+	for i := n; i < len(b.plan.SecurityOps); i++ {
+		b.plan.SecurityOps[i].Module = module.Investments
+	}
+	b.noteModuleRecord(module.Investments, "security_op", line)
+	b.warn(line, "security_op needs module %s: enable it or the record is skipped", module.Investments)
+	return nil
+}
+
+// loanRecord notes a loan schedule or installment: they are detected here and imported by the
+// loans module, so enabled or not they are never written by the import.
+func (b *builder) loanRecord(kind string, line int) {
+	if b.req.Modules.Has(module.Loans) {
+		b.warn(line, "%s not imported: loan records are not supported yet", kind)
+		return
+	}
+	b.noteModuleRecord(module.Loans, kind, line)
+	b.warn(line, "%s needs module %s: enable it or the record is skipped", kind, module.Loans)
+}
+
+func (b *builder) noteModuleRecord(id module.ID, kind string, line int) {
+	i := slices.IndexFunc(b.plan.ModuleRecords, func(m ModuleRecords) bool { return m.Module == id })
+	if i < 0 {
+		b.plan.ModuleRecords = append(b.plan.ModuleRecords, ModuleRecords{Module: id})
+		i = len(b.plan.ModuleRecords) - 1
+	}
+	m := &b.plan.ModuleRecords[i]
+	m.Count++
+	m.Lines = append(m.Lines, line)
+	if !slices.Contains(m.Kinds, kind) {
+		m.Kinds = append(m.Kinds, kind)
+	}
 }
 
 // loadLookups indexes the existing categories, payees and tags by name, so that addRow can tell

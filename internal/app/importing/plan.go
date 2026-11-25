@@ -5,6 +5,7 @@ import (
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 )
 
 // EntityImportBatch is the Change.Entity of the batch an import creates.
@@ -79,6 +80,18 @@ type SecurityOpPlanRow struct {
 	Op         domain.SecurityOp
 	CashTx     string // stream transaction id in SecurityOpRecord.cash_tx
 	Include    bool
+	// Module is set when the record belongs to a module that is not enabled: it is imported
+	// only if ApplyOptions.EnableModules names it, and skipped with a warning otherwise.
+	Module module.ID
+}
+
+// ModuleRecords lists the records of one module that is not enabled, so that the user can
+// enable the module or skip them. Schedules and installments are only detected, never imported.
+type ModuleRecords struct {
+	Module module.ID
+	Count  int
+	Kinds  []string // record types, in stream order of first appearance
+	Lines  []int
 }
 
 // TransferProposal suggests linking an incoming leg to another movement as a transfer. It is
@@ -121,6 +134,7 @@ type ImportPlan struct {
 	Errors          []RowError
 	Warnings        []RowWarning
 	Transfers       []TransferProposal
+	ModuleRecords   []ModuleRecords
 	Discrepancies   []BalanceDiscrepancy
 	// Stderr is what the connector wrote on stderr, for --verbose.
 	Stderr string
@@ -157,6 +171,15 @@ func (p *ImportPlan) SetInclude(i int, include bool) error {
 	}
 	p.Rows[i].Include = include
 	p.refresh()
+	return nil
+}
+
+// SetAcceptTransfer accepts or rejects the transfer proposal i; an accepted one is linked on apply.
+func (p *ImportPlan) SetAcceptTransfer(i int, accept bool) error {
+	if i < 0 || i >= len(p.Transfers) {
+		return fmt.Errorf("transfer proposal %d: %w", i, domain.ErrNotFound)
+	}
+	p.Transfers[i].Accept = accept
 	return nil
 }
 
@@ -236,7 +259,7 @@ func (p *ImportPlan) appendEntityCreates(changes []app.Change) []app.Change {
 func (p *ImportPlan) includedSecurityOps() int {
 	n := 0
 	for _, row := range p.SecurityOps {
-		if row.Include {
+		if row.Include && row.Module == "" {
 			n++
 		}
 	}

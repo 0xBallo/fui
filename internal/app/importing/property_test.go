@@ -302,3 +302,19 @@ func (e env) view(t tb) []string {
 	slices.Sort(out)
 	return out
 }
+
+func TestPropertyRejectingAllTransfersChangesNothing(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		src, _ := drawStream(t, false)
+		plain, rejected := newEnv(nil), newEnv(nil)
+		must(plain.svc.ApplyImport(context.Background(), plain.plan(t, src, createAccounts)))
+		plan := rejected.plan(t, src, createAccounts)
+		for i := range plan.Transfers {
+			must(0, plan.SetAcceptTransfer(i, false))
+		}
+		must(rejected.svc.ApplyImportWith(context.Background(), plan, importing.ApplyOptions{}))
+		if a, b := snapshot(plain.store), snapshot(rejected.store); a != b {
+			t.Fatalf("rejecting every proposal differs from ApplyImport\n%s\n%s", a, b)
+		}
+	})
+}
