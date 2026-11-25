@@ -661,13 +661,21 @@ func (s *Service) PlanCategorizeTx(ctx context.Context, req CategorizeTxRequest)
 // ApplyCategorizeTx stores every transaction of the plan in a single transaction, taking one
 // backup first since it is a bulk change.
 func (s *Service) ApplyCategorizeTx(ctx context.Context, p CategorizeTxPlan) error {
+	ids := make([]domain.TransactionID, len(p.Txs))
+	for i, t := range p.Txs {
+		ids[i] = t.ID
+	}
 	return s.apply(ctx, p.Bulk, func(r Repos) error {
+		j, err := BeginJournal(ctx, r, ids...)
+		if err != nil {
+			return err
+		}
 		for _, t := range p.Txs {
 			if err := r.Transactions().Update(ctx, t); err != nil {
 				return fmt.Errorf("update transaction %d: %w", t.ID, err)
 			}
 		}
-		return nil
+		return j.Commit(ctx, r, s.clock, OpKindCategorize, UndoFieldCategory)
 	})
 }
 

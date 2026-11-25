@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 
@@ -346,5 +347,64 @@ func TestTestSkipsMissingInputs(t *testing.T) {
 	got, err = e.svc.Test(ctx, rules.TestRequest{Text: "Bar Roma"})
 	if err != nil || got.CategoryRule != "outflow-main" || !slices.Equal(got.NotEvaluated, []string{"account", "amount"}) {
 		t.Fatalf("text only = %+v, %v", got, err)
+	}
+}
+
+type fixedClock struct{ t time.Time }
+
+func (c fixedClock) Now() time.Time { return c.t }
+
+func TestApplyJournalsOneUndoableEntry(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)
+	e := newEnv(t)
+	e.svc = e.svc.WithClock(fixedClock{now})
+	e.add(t, rules.AddRequest{
+		Name: "bar", Priority: 1, Conditions: rules.ConditionsSpec{DescriptionContains: "bar"},
+		Actions: rules.ActionsSpec{Category: "food", Payee: "shop", Tags: []string{"weekly"}},
+	})
+	a := e.tx(t, "Bar Roma", -300, nil)
+	b := e.tx(t, "Bar Milano", -300, func(x *domain.Transaction) { x.CategoryID = e.other.ID })
+	e.tx(t, "Cinema", -300, nil)
+	beforeA, beforeTagsA := e.get(t, a.ID)
+	beforeB, beforeTagsB := e.get(t, b.ID)
+
+	p, err := e.svc.PlanApply(ctx, rules.ApplyRequest{Filter: filter(t, domain.TxFilterSpec{})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.ApplyApply(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	// An apply with nothing to do must not add an entry on top of the real one.
+	empty, err := e.svc.PlanApply(ctx, rules.ApplyRequest{Filter: filter(t, domain.TxFilterSpec{})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.ApplyApply(ctx, empty); err != nil {
+		t.Fatal(err)
+	}
+
+	core := app.New(e.store, fixedClock{now}, e.backup, app.Config{Locale: domain.LocaleENUS, Location: time.UTC})
+	up, err := core.PlanUndo(ctx)
+	if err != nil {
+		t.Fatalf("PlanUndo: %v", err)
+	}
+	if err := core.ApplyUndo(ctx, up); err != nil {
+		t.Fatalf("ApplyUndo: %v", err)
+	}
+	for _, c := range []struct {
+		id   domain.TransactionID
+		want domain.Transaction
+		tags []domain.Tag
+	}{{a.ID, beforeA, beforeTagsA}, {b.ID, beforeB, beforeTagsB}} {
+		got, tags := e.get(t, c.id)
+		if got.CategoryID != c.want.CategoryID || got.PayeeID != c.want.PayeeID {
+			t.Fatalf("transaction %d = category %d payee %d, want %d/%d",
+				c.id, got.CategoryID, got.PayeeID, c.want.CategoryID, c.want.PayeeID)
+		}
+		if len(tags) != len(c.tags) {
+			t.Fatalf("transaction %d tags = %v, want %v", c.id, tags, c.tags)
+		}
 	}
 }
