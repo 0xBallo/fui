@@ -54,6 +54,7 @@ func completionRegistrations(deps *Deps) []completionRegistration {
 		registrations,
 		reportAndRuleCompletions(completeAccount, completeCategory, completeTag, completePayee, completeSavedReport)...,
 	)
+	registrations = append(registrations, moduleCompletions(deps, completeAccount)...)
 	return registrations
 }
 

@@ -46,7 +46,7 @@ func configureModuleCommands(root *cobra.Command, deps *Deps) error {
 
 func moduleGate(deps *Deps) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, _ []string) error {
-		if cmd == cmd.Root() {
+		if cmd == cmd.Root() || isCobraInternalCommand(cmd) {
 			return nil
 		}
 		enabled, err := enabledModulesFromDeps(deps)

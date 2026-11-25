@@ -17,7 +17,9 @@ type ReconcileDTO struct {
 	Difference       int64            `json:"difference"`
 	CanClose         bool             `json:"can_close"`
 	Unreconciled     []TransactionDTO `json:"unreconciled"`
-	Plan             PlanDTO          `json:"plan"`
+	// Ticked is the number of ticked transactions; present only in tick mode.
+	Ticked *int    `json:"ticked,omitempty"`
+	Plan   PlanDTO `json:"plan"`
 }
 
 func reconcileDTO(plan app.ReconcilePlan, rows []app.TxView) ReconcileDTO {
@@ -30,6 +32,10 @@ func reconcileDTO(plan app.ReconcilePlan, rows []app.TxView) ReconcileDTO {
 		CanClose:         plan.Difference.IsZero(),
 		Unreconciled:     make([]TransactionDTO, len(rows)),
 		Plan:             planDTO(plan.Plan),
+	}
+	if plan.Ticking {
+		n := len(plan.Ticked)
+		out.Ticked = &n
 	}
 	for i, r := range rows {
 		out.Unreconciled[i] = transactionDTO(r)
@@ -63,6 +69,11 @@ func WriteReconcile(w io.Writer, f Format, loc domain.Locale, color bool, plan a
 	}
 	if err := WriteTable(w, reconcileSummaryRows(plan, loc), color); err != nil {
 		return err
+	}
+	if plan.Ticking {
+		if _, err := fmt.Fprintf(w, "Ticked transactions: %d\n", len(plan.Ticked)); err != nil {
+			return fmt.Errorf("write ticked count: %w", err)
+		}
 	}
 	if _, err := fmt.Fprintf(w, "Unreconciled transactions: %d\n", len(rows)); err != nil {
 		return fmt.Errorf("write unreconciled count: %w", err)
