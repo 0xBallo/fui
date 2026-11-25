@@ -2,6 +2,7 @@ package importing
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -94,14 +95,38 @@ type dismissedInsightDump struct {
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 
-// Dump writes every entity of the archive, one file per entity, in the given format: accounts,
-// categories, transactions, transfers, fx_rates, import_batches, saved_simulations and
-// dismissed_insights. Amounts are minor units.
+// DumpRequest asks for a full dump. Config is the raw text of config.toml, or empty.
+type DumpRequest struct {
+	Format DumpFormat
+	Config string
+}
+
+// typedTables is the set of tables the typed per-entity files already cover, by table name.
+var typedTables = map[string]bool{
+	"accounts": true, "categories": true, "transactions": true, "transfer_groups": true, "fx_rates": true,
+	"import_batches": true, "saved_simulations": true, "dismissed_insights": true,
+}
+
+// Dump writes every entity of the archive without a config: see DumpAll.
 func (s *Service) Dump(ctx context.Context, format DumpFormat, create DumpFile) error {
+	return s.DumpAll(ctx, DumpRequest{Format: format}, create)
+}
+
+// DumpAll writes every entity of the archive, one file per entity, in the given format: accounts,
+// categories, transactions, transfers, fx_rates, import_batches, saved_simulations and
+// dismissed_insights. Amounts are minor units. On top of those it writes the restorable dump:
+// for JSON the single document dump.json (with the config embedded), for CSV one file per
+// remaining table plus config.toml when the config is not empty.
+func (s *Service) DumpAll(ctx context.Context, req DumpRequest, create DumpFile) error {
+	format := req.Format
 	if format != DumpJSON && format != DumpCSV {
 		return newError(domain.ErrInvalidValue, map[string]any{"field": "format"}, "unknown dump format %q", format)
 	}
-	return s.store.Read(ctx, func(r app.Repos) error {
+	dumper, ok := s.backup.(app.ArchiveDumper)
+	if !ok {
+		return errors.New("dump: the archive adapter does not support a full dump")
+	}
+	err := s.store.Read(ctx, func(r app.Repos) error {
 		steps := []func() error{
 			func() error { return dumpAccounts(ctx, r, format, create) },
 			func() error { return dumpCategories(ctx, r, format, create) },
@@ -118,6 +143,65 @@ func (s *Service) Dump(ctx context.Context, format DumpFormat, create DumpFile) 
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	d, err := dumper.DumpArchive(ctx)
+	if err != nil {
+		return fmt.Errorf("dump archive: %w", err)
+	}
+	if format == DumpJSON {
+		return writeFile(create, DumpFileName, func(w io.Writer) error { return EncodeDump(w, d, req.Config) })
+	}
+	for _, t := range d.Tables {
+		if typedTables[t.Name] {
+			continue
+		}
+		if err := writeFile(create, t.Name+".csv", func(w io.Writer) error { return writeCSVRows(w, tableRows(t)) }); err != nil {
+			return err
+		}
+	}
+	if req.Config != "" {
+		return writeFile(create, "config.toml", func(w io.Writer) error {
+			if _, err := io.WriteString(w, req.Config); err != nil {
+				return fmt.Errorf("write config: %w", err)
+			}
+			return nil
+		})
+	}
+	return nil
+}
+
+// tableRows renders a table as CSV records: the header, then NULL as an empty cell.
+func tableRows(t app.TableDump) [][]string {
+	rows := make([][]string, 0, len(t.Rows)+1)
+	rows = append(rows, t.Columns)
+	for _, row := range t.Rows {
+		rec := make([]string, len(row))
+		for i, c := range row {
+			switch v := c.(type) {
+			case int64:
+				rec[i] = itoa(v)
+			case string:
+				rec[i] = v
+			}
+		}
+		rows = append(rows, rec)
+	}
+	return rows
+}
+
+func writeFile(create DumpFile, name string, write func(io.Writer) error) (err error) {
+	f, err := create(name)
+	if err != nil {
+		return fmt.Errorf("create %s: %w", name, err)
+	}
+	defer func() {
+		if cerr := f.Close(); err == nil && cerr != nil {
+			err = fmt.Errorf("close %s: %w", name, cerr)
+		}
+	}()
+	return write(f)
 }
 
 // writeEntity writes items as a JSON array or as CSV rows under header.
