@@ -164,7 +164,7 @@ func (b *builder) loanVersion(g *loanGroup, cur domain.Currency) (lending.Import
 	}
 	v := lending.ImportedVersion{ValidFrom: from, Rate: rate, RateType: domain.RateType(g.rec.RateType)}
 	for _, in := range g.insts {
-		inst, err := installment(*in, cur)
+		inst, err := InstallmentFromRecord(*in, cur)
 		if err != nil {
 			b.warn(b.st.inst[in], "schedule skipped: installment: %v", err)
 			return lending.ImportedVersion{}, false
@@ -172,32 +172,6 @@ func (b *builder) loanVersion(g *loanGroup, cur domain.Currency) (lending.Import
 		v.Installments = append(v.Installments, inst)
 	}
 	return v, true
-}
-
-func installment(in fuiproto.InstallmentRecord, cur domain.Currency) (domain.Installment, error) {
-	due, err := domain.ParseDate(in.DueDate)
-	if err != nil {
-		return domain.Installment{}, fmt.Errorf("due_date: %w", err)
-	}
-	out := domain.Installment{Due: due}
-	for _, f := range []struct {
-		name string
-		v    int64
-		dst  *domain.Money
-	}{
-		{"principal", in.Principal, &out.Principal},
-		{"interest", in.Interest, &out.Interest},
-		{"fees", in.Fees, &out.Fees},
-		{"remaining", in.Remaining, &out.Remaining},
-	} {
-		if f.v < 0 {
-			return domain.Installment{}, fmt.Errorf("%s must not be negative", f.name)
-		}
-		if *f.dst, err = domain.NewMoney(f.v, cur); err != nil {
-			return domain.Installment{}, fmt.Errorf("%s: %w", f.name, err)
-		}
-	}
-	return out, nil
 }
 
 // versionStored reports whether the loan already has a version at v.ValidFrom with the same
