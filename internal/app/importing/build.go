@@ -179,16 +179,21 @@ func (b *builder) addRecord(ctx context.Context, rec fuiproto.Record) error {
 	return nil
 }
 
-// securityOp plans a security operation. When investments is disabled the operation is still
-// built, tagged with the module, so that applying with that module enabled can import it.
+// securityOp plans a security operation. When the module it needs is disabled (investments, plus
+// crypto for crypto securities) the operation is still built, tagged with the module, so that
+// applying with that module enabled can import it.
 func (b *builder) securityOp(ctx context.Context, rec *fuiproto.SecurityOpRecord) error {
-	if b.req.Modules.Has(module.Investments) {
+	need := module.Investments
+	if rec.Security.Kind == fuiproto.SecurityKindCrypto && !b.req.Modules.Has(module.Crypto) {
+		need = module.Crypto // depends on investments, so enabling it covers both
+	}
+	if b.req.Modules.Has(need) {
 		return b.addSecurityOp(ctx, rec)
 	}
 	line := b.st.sec[rec]
-	with, _, err := module.Enable(b.req.Modules, module.Investments)
+	with, _, err := module.Enable(b.req.Modules, need)
 	if err != nil {
-		return fmt.Errorf("enable %s: %w", module.Investments, err)
+		return fmt.Errorf("enable %s: %w", need, err)
 	}
 	enabled, n := b.req.Modules, len(b.plan.SecurityOps)
 	b.req.Modules = with
@@ -198,10 +203,10 @@ func (b *builder) securityOp(ctx context.Context, rec *fuiproto.SecurityOpRecord
 		return err
 	}
 	for i := n; i < len(b.plan.SecurityOps); i++ {
-		b.plan.SecurityOps[i].Module = module.Investments
+		b.plan.SecurityOps[i].Module = need
 	}
-	b.noteModuleRecord(module.Investments, "security_op", line)
-	b.warn(line, "security_op needs module %s: enable it or the record is skipped", module.Investments)
+	b.noteModuleRecord(need, "security_op", line)
+	b.warn(line, "security_op needs module %s: enable it or the record is skipped", need)
 	return nil
 }
 

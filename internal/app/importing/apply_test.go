@@ -133,3 +133,56 @@ func contains(ids []module.ID, id module.ID) bool {
 	}
 	return false
 }
+
+func cryptoOpRec() fuiproto.Record {
+	rec := secOpRec("c")
+	rec.SecurityOp.Security = fuiproto.SecurityMeta{
+		Name: "Bitcoin", Ticker: "BTC", Kind: fuiproto.SecurityKindCrypto, Currency: "EUR", QuantityScale: 8,
+	}
+	return rec
+}
+
+func TestCryptoOpNeedsCryptoModule(t *testing.T) {
+	src := stream("fui", "", account("r1", "Broker", "EUR"), txRec("r1", "c", "2026-10-01", -100, "buy"), cryptoOpRec())
+	inv := must(module.Validate([]module.ID{module.Core, module.Investments}))
+	both := must(module.Validate([]module.ID{module.Core, module.Investments, module.Crypto}))
+
+	t.Run("crypto off is tagged and skipped", func(t *testing.T) {
+		e := newEnv(nil)
+		plan := e.plan(t, src, createAccounts, withModules(inv))
+		want := []importing.ModuleRecords{{Module: module.Crypto, Count: 1, Kinds: []string{"security_op"}, Lines: []int{4}}}
+		if diff := cmp.Diff(want, plan.ModuleRecords); diff != "" {
+			t.Fatalf("module records (-want +got):\n%s", diff)
+		}
+		res := must(e.svc.ApplyImport(context.Background(), plan))
+		if res.SecurityOps != 0 || res.Securities != 0 || len(res.Warnings) != 1 {
+			t.Fatalf("result = %+v", res)
+		}
+	})
+	t.Run("investments off asks for crypto", func(t *testing.T) {
+		plan := newEnv(nil).plan(t, src, createAccounts)
+		if len(plan.ModuleRecords) != 1 || plan.ModuleRecords[0].Module != module.Crypto {
+			t.Fatalf("module records = %+v", plan.ModuleRecords)
+		}
+	})
+	t.Run("enabling crypto imports it", func(t *testing.T) {
+		e := newEnv(nil)
+		plan := e.plan(t, src, createAccounts, withModules(inv))
+		res := must(e.svc.ApplyImportWith(context.Background(), plan, importing.ApplyOptions{
+			EnableModules: []module.ID{module.Crypto}, Modules: inv, ModuleWriter: &fakeModuleWriter{},
+		}))
+		if res.SecurityOps != 1 || res.Securities != 1 {
+			t.Fatalf("result = %+v", res)
+		}
+	})
+	t.Run("crypto on imports directly", func(t *testing.T) {
+		e := newEnv(nil)
+		plan := e.plan(t, src, createAccounts, withModules(both))
+		if len(plan.ModuleRecords) != 0 {
+			t.Fatalf("module records = %+v", plan.ModuleRecords)
+		}
+		if res := must(e.svc.ApplyImport(context.Background(), plan)); res.SecurityOps != 1 {
+			t.Fatalf("result = %+v", res)
+		}
+	})
+}
