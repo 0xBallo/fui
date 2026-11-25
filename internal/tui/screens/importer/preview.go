@@ -12,6 +12,7 @@ import (
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 	"github.com/0xballo/fui/internal/tui/components"
 	"github.com/0xballo/fui/internal/tui/screens"
 )
@@ -33,6 +34,9 @@ func previewColumns() []components.Column {
 func (m *Model) openPreview() {
 	m.table.SetRows(m.previewRows())
 	m.table.SetCursor(0)
+	m.details, m.detailCursor = false, 0
+	m.enableModules = map[module.ID]bool{}
+	m.detailLines = m.buildDetails()
 	m.mode = modePreview
 }
 
@@ -69,6 +73,16 @@ func incMark(include bool) string {
 }
 
 func (m *Model) handlePreviewKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+	if key.Matches(msg, m.km.Details) {
+		m.details = !m.details
+		return m, nil
+	}
+	if key.Matches(msg, m.km.Modules) {
+		return m.openModules()
+	}
+	if m.details {
+		return m.handleDetailsKey(msg)
+	}
 	switch {
 	case key.Matches(msg, m.km.Up):
 		m.table.MoveUp(1)
@@ -134,11 +148,17 @@ func (m *Model) viewPreview() string {
 	if len(m.plan.Discrepancies) > 0 {
 		out += "\n" + m.th.Warning.Render(fmt.Sprintf("%d balance discrepancy(ies)", len(m.plan.Discrepancies)))
 	}
-	out += "\n\n" + m.table.View()
-	if detail := m.rowDetail(); detail != "" {
-		out += "\n" + detail
+	out += "\n" + m.th.Base.Render(m.detailSummary())
+	if m.details {
+		out += "\n\n" + m.viewDetails()
+		out += "\n\n" + m.th.Muted.Render("j/k move · t accept transfer · m modules · tab rows · enter confirm · esc rows")
+	} else {
+		out += "\n\n" + m.table.View()
+		if detail := m.rowDetail(); detail != "" {
+			out += "\n" + detail
+		}
+		out += "\n\n" + m.th.Muted.Render("space/i include · tab details · m modules · enter confirm · esc new import")
 	}
-	out += "\n\n" + m.th.Muted.Render("space/i include/exclude · enter confirm · esc new import")
 	if m.notice != "" {
 		out += "\n" + m.th.Warning.Render(m.notice)
 	}

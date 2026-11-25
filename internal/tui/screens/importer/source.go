@@ -42,6 +42,8 @@ func (m *Model) handleSourceKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	case "esc":
 		m.mode = modeIdle
 		return m, nil
+	case m.km.MapCSV.Keys()[0]:
+		return m.detectCSV()
 	case "shift+tab":
 		m.sourceForm.Prev()
 		return m, nil
@@ -98,6 +100,7 @@ type planLoadedMsg struct{ plan importing.ImportPlan }
 
 func (m *Model) planImport() tea.Cmd {
 	req := m.req
+	req.Modules = m.modules
 	return func() tea.Msg {
 		plan, err := m.uc.PlanImport(context.Background(), req)
 		if err != nil {
@@ -119,7 +122,7 @@ func (m *Model) handlePlanLoaded(msg planLoadedMsg) (screens.Screen, tea.Cmd) {
 
 func (m *Model) viewSource() string {
 	out := m.th.Title.Render("Import") + "\n\n" + m.sourceForm.View()
-	out += "\n\n" + m.th.Muted.Render("enter next/plan · tab/shift+tab move between fields · esc cancel")
+	out += "\n\n" + m.th.Muted.Render("enter next/plan · tab/shift+tab move · ctrl+p map csv columns · esc cancel")
 	if m.notice != "" {
 		out += "\n" + m.th.Warning.Render(m.notice)
 	}

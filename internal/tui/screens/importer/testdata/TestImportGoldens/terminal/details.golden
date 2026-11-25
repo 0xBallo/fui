@@ -1,0 +1,20 @@
+[1;38;2;255;0;255mImport preview[0m
+[38;2;128;128;128m──────────────[0m
+[38;2;255;255;255mconnector=fui source=rich.fui.jsonl[0m
+[38;2;255;255;255mnew=3 duplicate=0 doubtful=0 errors=1 included=3[0m
+[38;2;255;255;255mwarnings=1 transfers=1/1 mismatches=1 modules=1[0m
+
+  [1;38;2;255;255;255mErrors (1)[0m
+  [1;38;2;255;0;0mline 9: source: bad date[0m
+  [1;38;2;255;255;255mWarnings (1)[0m
+  [38;2;255;255;0mline 9: security_op needs module investments: enable it or the record is skipped[0m
+  [1;38;2;255;255;255mTransfer proposals (1)[0m
+> [38;2;255;255;255m[x] line 4 to B <-> line 5 (amount_date)[0m
+  [1;38;2;255;255;255mBalance mismatches (1)[0m
+  [38;2;255;255;0mAccount A 06/04/2026: statement 1.23, computed -53.00[0m
+  [38;2;255;255;255m  fix: fui reconcile 'Account A' --date 2026-06-04 --balance 1.23[0m
+  [1;38;2;255;255;255mDisabled-module records (1)[0m
+  [38;2;255;255;255minvestments: 1 record(s) [security_op] lines 9[0m
+  [1;38;2;255;255;255mNew categories (1)[0m
+
+[38;2;192;192;192mj/k move · t accept transfer · m modules · tab rows · enter confirm · esc rows[0m
