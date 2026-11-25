@@ -233,7 +233,7 @@ func (i *Insights) detect(ctx context.Context) ([]found, error) {
 	var ins []domain.Insight
 	for _, run := range []func() ([]domain.Insight, error){
 		func() ([]domain.Insight, error) { return domain.DetectAnomalies(i.cfg, cur, txs) },
-		func() ([]domain.Insight, error) { return domain.DetectSubscriptions(i.cfg, txs) },
+		func() ([]domain.Insight, error) { return domain.DetectSubscriptions(i.cfg, txs, nil) },
 		func() ([]domain.Insight, error) { return domain.DetectTrends(i.cfg, cur, txs) },
 	} {
 		got, err := run()
