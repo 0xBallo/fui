@@ -1,0 +1,38 @@
+{
+  "a": "2026-02-01..2026-02-28",
+  "b": "2026-03-01..2026-03-31",
+  "rows": [
+    {
+      "category": "Food",
+      "a": {
+        "minor": 3000,
+        "currency": "EUR"
+      },
+      "b": {
+        "minor": 2000,
+        "currency": "EUR"
+      },
+      "delta": {
+        "minor": -1000,
+        "currency": "EUR"
+      },
+      "delta_permille": -333
+    }
+  ],
+  "total": {
+    "category": "",
+    "a": {
+      "minor": 3000,
+      "currency": "EUR"
+    },
+    "b": {
+      "minor": 2000,
+      "currency": "EUR"
+    },
+    "delta": {
+      "minor": -1000,
+      "currency": "EUR"
+    },
+    "delta_permille": -333
+  }
+}

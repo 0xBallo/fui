@@ -8,7 +8,12 @@ import (
 	"github.com/0xballo/fui/internal/domain"
 )
 
-var lastNMonths = regexp.MustCompile(`^last-([0-9]+)-months$`)
+var (
+	lastNMonths = regexp.MustCompile(`^last-([0-9]+)-months$`)
+	absMonth    = regexp.MustCompile(`^([0-9]{4})-([0-9]{2})$`)
+	absQuarter  = regexp.MustCompile(`^([0-9]{4})-[Qq]([0-9])$`)
+	absYear     = regexp.MustCompile(`^[0-9]{4}$`)
+)
 
 // ValidRelativePeriod reports whether in is a period ResolveRelative understands.
 func ValidRelativePeriod(in string) bool {
@@ -83,4 +88,75 @@ func yearPeriod(year int) (domain.Period, error) {
 		return domain.Period{}, err
 	}
 	return domain.NewPeriod(from, to)
+}
+
+// ValidPeriodSpec reports whether in is a period ResolvePeriodSpec understands: a relative
+// period, YYYY-MM, YYYY-Qn (n 1..4) or YYYY.
+func ValidPeriodSpec(in string) bool {
+	if ValidRelativePeriod(in) {
+		return true
+	}
+	_, err := resolveAbsolute(in, 1)
+	return err == nil
+}
+
+// ResolvePeriodSpec resolves a relative period (see ResolveRelative) or an absolute one: YYYY-MM
+// is the accounting month containing the first day of that month (so it honours startDay),
+// YYYY-Qn is a calendar quarter and YYYY a calendar year.
+func ResolvePeriodSpec(in string, today domain.Date, startDay int) (domain.Period, error) {
+	if ValidRelativePeriod(in) {
+		return ResolveRelative(in, today, startDay)
+	}
+	return resolveAbsolute(in, startDay)
+}
+
+func resolveAbsolute(in string, startDay int) (domain.Period, error) {
+	bad := &domain.Error{
+		Code: domain.CodeInvalidValue, Message: fmt.Sprintf("unknown period %q (expected a relative period, YYYY-MM, YYYY-Qn or YYYY)", in),
+		Details: map[string]any{"field": "period", "value": in},
+	}
+	if absYear.MatchString(in) {
+		y, _ := strconv.Atoi(in)
+		p, err := yearPeriod(y)
+		if err != nil {
+			return domain.Period{}, bad
+		}
+		return p, nil
+	}
+	if m := absMonth.FindStringSubmatch(in); m != nil {
+		y, _ := strconv.Atoi(m[1])
+		mo, _ := strconv.Atoi(m[2])
+		first, err := domain.NewDate(y, mo, 1)
+		if err != nil {
+			return domain.Period{}, bad
+		}
+		return domain.MonthPeriod(first, startDay)
+	}
+	if m := absQuarter.FindStringSubmatch(in); m != nil {
+		y, _ := strconv.Atoi(m[1])
+		q, _ := strconv.Atoi(m[2])
+		if q < 1 || q > 4 {
+			return domain.Period{}, bad
+		}
+		from, err := domain.NewDate(y, 3*q-2, 1)
+		if err != nil {
+			return domain.Period{}, bad
+		}
+		last, err := lastOfMonth(y, 3*q)
+		if err != nil {
+			return domain.Period{}, bad
+		}
+		return domain.NewPeriod(from, last)
+	}
+	return domain.Period{}, bad
+}
+
+// lastOfMonth is the last day of month m of year y.
+func lastOfMonth(y, m int) (domain.Date, error) {
+	for day := 31; day >= 28; day-- {
+		if d, err := domain.NewDate(y, m, day); err == nil {
+			return d, nil
+		}
+	}
+	return domain.Date{}, fmt.Errorf("last day of %d-%02d: %w", y, m, domain.ErrInvalidValue)
 }
