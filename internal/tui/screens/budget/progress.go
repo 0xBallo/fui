@@ -13,17 +13,16 @@ import (
 // barWidth is the number of filled/empty blocks drawn in a progress bar.
 const barWidth = 10
 
-// tier maps a percentage to its visual tier icon and style using the budget's own thresholds:
-// green below warn, yellow from warn, red from over. The icon keeps the state readable without
-// color; OVER stays as text.
-func tier(th theme.Theme, percent int, t domain.BudgetThresholds) (string, lipgloss.Style) {
-	if t == (domain.BudgetThresholds{}) {
-		t = domain.DefaultBudgetThresholds
-	}
+// tier maps a percentage to its visual tier icon and style: green below 70, yellow 70-89, orange
+// 90-99, red from 100. The tiers are fixed and visual only (the budget's own thresholds drive
+// alerts and status elsewhere). The icon keeps the state readable without color; OVER stays as text.
+func tier(th theme.Theme, percent int) (string, lipgloss.Style) {
 	switch {
-	case percent >= t.Over:
+	case percent >= 100:
 		return "✗ OVER", th.Error
-	case percent >= t.Warn:
+	case percent >= 90:
+		return "‼", th.Caution
+	case percent >= 70:
 		return "!", th.Warning
 	default:
 		return "✓", th.Positive
@@ -32,11 +31,11 @@ func tier(th theme.Theme, percent int, t domain.BudgetThresholds) (string, lipgl
 
 // progressBar renders a percent (fill clamped to 0..100) as blocks, the percentage and the tier
 // icon, colored by tier but never relying on color alone.
-func progressBar(th theme.Theme, percent int, t domain.BudgetThresholds) string {
+func progressBar(th theme.Theme, percent int) string {
 	p := min(max(percent, 0), 100)
 	filled := (p * barWidth) / 100
 	bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
-	icon, style := tier(th, percent, t)
+	icon, style := tier(th, percent)
 	return fmt.Sprintf("%s %3d%% %s", style.Render(bar), percent, icon)
 }
 

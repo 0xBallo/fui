@@ -106,12 +106,38 @@ Pairs were chosen to keep owned paths disjoint (§5).
 
 | Epic | TL | Branch | PR | Status |
 | --- | --- | --- | --- | --- |
-| G01 | — | `feat/g01-budget` | — | queued |
-| G02 | — | `feat/g02-import` | — | queued |
-| G03 | — | `feat/g03-loan-import` | — | queued |
-| G04 | — | `feat/g04-tx-recur` | — | queued |
-| G05 | — | `feat/g05-undo` | — | queued |
-| G06 | — | `feat/g06-reports` | — | queued |
-| G07 | — | `feat/g07-dump` | — | queued |
-| G08 | — | `feat/g08-invest` | — | queued |
-| G09 | — | `feat/g09-insight-sim` | — | queued |
+| G01 | TL | `feat/g01-budget` | #69 | merged |
+| G02 | TL | `feat/g02-import` | #68 | merged |
+| G03 | TL | `feat/g03-loan-import` | #71 | merged |
+| G04 | TL | `feat/g04-tx-recur` | #70 | merged |
+| G05 | TL | `feat/g05-undo` | #73 | merged |
+| G06 | TL | `feat/g06-reports` | #72 | merged |
+| G07 | TL | `feat/g07-dump` | #76 | merged |
+| G08 | TL | `feat/g08-invest` | #74 | merged |
+| G09 | TL | `feat/g09-insight-sim` | #75 | merged |
+| G10 | TL | `feat/g10-integration` | #77 | in review |
+
+## 8. Remaining known gaps (after v0.5)
+
+Declared by the epic PRs and not fixed later. Fixed in review and therefore not listed: rule `hint_*` conditions,
+budget edit form prefill, `report compare --chart`, TUI report filters, import account-kind rule, shared event parser.
+
+- Import: `BalanceMismatches` is not recomputed on `SetInclude`; CSVs without header get "column N" names plus a
+  warning; date-time cells are not detected; the mapper form does not scroll for very wide CSVs.
+- Budget: copy skips yearly budgets; yearly cap/envelope values are "as of the shown month".
+- Recurrences and loans: loan pending rows in the TUI support confirm only; other screens' async messages do not
+  implement `screens.Targeted`; unsaved tick toggles in the Accounts reconcile view are discarded on `esc`.
+- Loans through import/export: loans without a stored schedule are not exported; imported versions are validated
+  only against the version in force at `valid_from`.
+- Undo: implicitly created payees/tags are not removed; importer auto-confirmations (loan installments,
+  recurrence matching) are undone with `import undo`; the interest category created by a loan confirm stays;
+  `tx categorize` has no CLI command (covered by app tests only); recurring and loan confirm are covered by table
+  tests, not by the rapid property.
+- Reports: saved v1 spending/cash-flow keep the old result shape; spending counts outflows only (refunds not netted);
+  the transactions filter form drops month/year/tag/payee when edited after a drill-down.
+- Investments: the account-kind rule for `invest` operations is enforced in plans, not in importing nor in
+  `ApplyOp`; `kpi networth` asset lines are in each asset's own currency (totals are base-converted); a security's
+  price scale is immutable once created.
+- Simulations: the per-account CSV is long-form (`ACCOUNT,MONTH END,BASE,SCENARIO,DELTA`).
+- Coverage: `cmd/fui` (~60%) and `internal/cli/render` (9-31%) are below 80% at package level; they are exercised
+  through `internal/cli` and testscript e2e, and the total stays above 80%.

@@ -337,7 +337,7 @@ func TestBudgetCapWarningAndOverStates(t *testing.T) {
 	s = run(t, s, s.Init())
 
 	view := s.View()
-	if !strings.Contains(view, "90% !") {
+	if !strings.Contains(view, "90% ‼") {
 		t.Fatalf("expected a warning tier, got:\n%s", view)
 	}
 	if !strings.Contains(view, "OVER") {

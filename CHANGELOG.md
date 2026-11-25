@@ -7,6 +7,49 @@ All notable changes to FUI are listed here, newest first. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Budget: annual periods with a suggested monthly quota, per-budget warning/over thresholds, `budget set` that
+  creates the budget (`--category`, `--tag`, `--period`, `--warn`, `--over`, `--no-carry`), `budget copy --from`,
+  and TUI forms to create and edit budgets.
+- Import: complete preview (warnings, new categories/tags/payees, transfer proposals, balance mismatches, records
+  of disabled modules), `import detect`, `--accept-transfers`, `--enable-modules`, CSV column mapper in the TUI, and
+  original amount/currency and raw source data kept on transactions.
+- Loans through import and export (`schedule` and `installment` records) with matching of pending installments.
+- Recurrences and loan installments are registered as pending automatically at startup; `recurring edit/rm`,
+  `tx` payee and tag options (`add`, `tx edit --payee/--tag/--untag`) and per-transaction reconciliation
+  (`reconcile --tick/--untick`, `space` in the TUI).
+- Undo covers every transaction write (categorize, tag/untag, rules apply, recurring and loan confirm) and is
+  available in the TUI with `u`.
+- Reports: shared filters, `--group-by` and `--granularity`, drill-down and filter form in the TUI, saved report
+  parameters, period comparison with `YYYY-MM`, `YYYY-Qn`, `YYYY` and relative periods (`report save NAME compare`);
+  forecast `--horizon Nd|Nw|Nm`, `--granularity` and `forecast.min_balance`.
+- Investments and assets: `wallet` account kind, 8-digit security price precision, `security edit/rm`,
+  `invest list/edit/rm/coupon`, `position list --by-security`, `asset show/edit/rm/value rm/link/unlink`.
+- Insights, simulations and connectors: insight FX handling, known recurrences, `simulate cashflow --account`,
+  OFX and CAMT.053 `error` and `balance` records.
+- `fui export --all` full dump (`dump.json`, every table plus config) and `fui restore FILE.json [--with-config]` to
+  rebuild the archive from it.
+- ADR 0020 records the product decisions of the v0.5 gap closure.
+
+### Changed
+
+- Investment accounts (investments module off) and wallet accounts (crypto module off) are excluded from net worth,
+  runway, reports and the Dashboard.
+- Budget carry-over is on by default for new budgets; existing budgets keep their setting.
+- Report `enter` drills into a row and `r` runs it; spending counts outflows only.
+- `reset --keep-settings` keeps connector associations too (re-linked by account name at the next import).
+- Functional and technical specifications updated (versions 1.4 and 1.5); ADR 0016 now covers every transaction
+  write.
+- Widiba "Rimborso Titoli" stays a transaction of kind `investment`.
+
+### Fixed
+
+- TUI budget progress bars use the fixed tiers again (green below 70%, yellow 70-89%, orange 90-99% with `‼`,
+  red from 100% with `✗ OVER`); per-budget thresholds drive alerts and the CLI.
+- Flaky tests: the compare report teatest waits longer and the 10,000-row import timing takes the best of three
+  runs.
+
 ## [0.4.0] - 2026-11-18
 
 ### Added
