@@ -88,6 +88,12 @@ func TestRoundTripEncodeDecode(t *testing.T) {
 				ValidFrom: "2026-01-01",
 				Rate:      150,
 				RateType:  RateTypeFixed,
+				// optional loan metadata must survive the round trip
+				DebitAccount: "acc-eur",
+				Kind:         LoanKindMortgage,
+				Principal:    1000000,
+				DisbursedOn:  "2025-01-01",
+				TermMonths:   120,
 			},
 		},
 		{

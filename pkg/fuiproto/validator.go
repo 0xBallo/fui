@@ -393,6 +393,25 @@ func validateSchedule(record ScheduleRecord, account AccountRecord) string {
 	if account.Kind != AccountKindLoan {
 		return fmt.Sprintf("schedule account kind must be %q", AccountKindLoan)
 	}
+	return validateScheduleLoan(record)
+}
+
+// validateScheduleLoan checks the optional loan metadata; zero values mean absent.
+func validateScheduleLoan(record ScheduleRecord) string {
+	if record.Kind != "" && record.Kind != LoanKindMortgage && record.Kind != LoanKindLoan {
+		return fmt.Sprintf("invalid loan kind %q", record.Kind)
+	}
+	if record.Principal < 0 {
+		return "schedule principal must be > 0"
+	}
+	if record.DisbursedOn != "" {
+		if err := ValidateDate(record.DisbursedOn); err != nil {
+			return "disbursed_on: " + err.Error()
+		}
+	}
+	if record.TermMonths < 0 {
+		return "schedule term_months must be >= 1"
+	}
 	return ""
 }
 
