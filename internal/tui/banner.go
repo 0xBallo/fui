@@ -14,7 +14,7 @@ import (
 
 const (
 	// bannerRows is the height of the ASCII-art header.
-	bannerRows = 3
+	bannerRows = 7
 	// bannerMinHeight is the smallest terminal height that gets the full banner; below it the
 	// title shrinks to one line in the tab bar.
 	bannerMinHeight = 30
@@ -23,11 +23,16 @@ const (
 	authorURL  = "https://github.com/0xBallo"
 )
 
-// bannerLogo is the hand-drawn "FinanceUI" logo, three rows of half-block glyphs, 35 columns wide.
+// bannerLogo is the hand-drawn "FINANCEUI" logo, seven rows of full-block glyphs with a light-shade
+// shadow, 52 columns wide.
 var bannerLogo = [bannerRows]string{
-	"█▀▀ ▄ █▀▄ ▄▀▄ █▀▄ █▀▀ █▀▀ █ █ ▀█▀",
-	"█▀▀ █ █ █ █▀█ █ █ █   █▀▀ █ █  █ ",
-	"▀   ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀▀▀ ▀▀▀ ▀▀▀ ▀▀▀",
+	"█████ ███ █   █  ███  █   █  ███  █████ █   █ ███   ",
+	"█░░░░░ █░░██  █░█ ░░█ ██  █░█ ░░░ █░░░░░█░  █░ █░░  ",
+	"████░░░█░░█░█ █░█████░█░█ █░█░ ░░░████░░█░░ █░░█░░░ ",
+	"█░░░░  █░░█░░██░█░░░█░█░░██░█░░   █░░░░ █░░ █░░█░░  ",
+	"█░░░░░███░█░░ █░█░░░█░█░░ █░░███  █████░ ███ ░███░  ",
+	" ░░    ░░░ ░░  ░░░░  ░░░░  ░░ ░░░  ░░░░░  ░░░ ░░░░  ",
+	"  ░     ░░░ ░   ░ ░   ░ ░   ░  ░░░  ░░░░░  ░░░  ░░░ ",
 }
 
 var versionRE = regexp.MustCompile(`^v(\d+)\.(\d+)(\..*)?$`)

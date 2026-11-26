@@ -54,8 +54,8 @@ func TestBannerSnapshots(t *testing.T) {
 
 func TestBannerRows(t *testing.T) {
 	banner := plainView(bannerRoot(t, "v0.3.0", 120, 40))
-	if lines := strings.Split(banner, "\n"); len(lines) != 40 || !strings.Contains(lines[2], "by 0xBallo") {
-		t.Fatalf("banner must keep the height and put the byline on row 3, got %d lines:\n%s", len(lines), banner)
+	if lines := strings.Split(banner, "\n"); len(lines) != 40 || !strings.Contains(lines[6], "by 0xBallo") {
+		t.Fatalf("banner must keep the height and put the byline on row 7, got %d lines:\n%s", len(lines), banner)
 	}
 	compact := plainView(bannerRoot(t, "v0.3.0", 140, 29))
 	if !strings.Contains(strings.Split(compact, "\n")[1], "FinanceUI v0.3 by 0xBallo") {
@@ -65,12 +65,12 @@ func TestBannerRows(t *testing.T) {
 
 func TestBannerTabClick(t *testing.T) {
 	m := bannerRoot(t, "v0.3.0", 120, 40)
-	// Rows 0-2 are the banner: a click there does nothing; rows 3-5 are the tab bar.
+	// Rows 0-6 are the banner: a click there does nothing; rows 7-9 are the tab bar.
 	m, _ = click(m, tea.MouseLeft, 20, 1)
 	if !strings.Contains(plainView(m), "1 Dashboard") || strings.Contains(plainView(m), "Description") {
 		t.Fatalf("a click on the banner must not switch tabs:\n%s", plainView(m))
 	}
-	m, cmd := click(m, tea.MouseLeft, 20, 4)
+	m, cmd := click(m, tea.MouseLeft, 20, 8)
 	m = run(t, m, cmd)
 	if !strings.Contains(plainView(m), "2 Transactions") || !strings.Contains(plainView(m), "Description") {
 		t.Fatalf("a click on the tab bar must open Transactions:\n%s", plainView(m))

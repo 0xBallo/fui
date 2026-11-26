@@ -267,7 +267,8 @@ func TestRootMouse(t *testing.T) {
 	m = run(t, m, m.Init())
 
 	// At 100 columns each tab is "N Name" plus padding and borders; "1 Dashboard" spans 0-14.
-	m, cmd := click(m, tea.MouseLeft, 20, 4)
+	// The 7-row banner is shown at height 30, so the tab bar starts at row 7.
+	m, cmd := click(m, tea.MouseLeft, 20, 8)
 	m = run(t, m, cmd)
 	if !strings.Contains(plainView(m), "Description") {
 		t.Fatalf("expected a click on tab 2 to open Transactions, got:\n%s", plainView(m))
