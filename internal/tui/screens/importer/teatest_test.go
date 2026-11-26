@@ -3,13 +3,14 @@ package importer_test
 import (
 	"bytes"
 	"context"
+	"sync"
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
-	"github.com/charmbracelet/x/exp/teatest"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -21,6 +22,10 @@ import (
 type screenModel struct {
 	scr           screens.Screen
 	width, height int
+
+	// mu guards last, the plain text of the latest frame, read by waitFor from the test goroutine.
+	mu   sync.Mutex
+	last string
 }
 
 func (m *screenModel) Init() tea.Cmd {
@@ -37,7 +42,20 @@ func (m *screenModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *screenModel) View() string { return m.scr.View() }
+func (m *screenModel) View() tea.View {
+	v := m.scr.View()
+	m.mu.Lock()
+	m.last = ansi.Strip(v)
+	m.mu.Unlock()
+	return tea.NewView(v)
+}
+
+// lastView returns the plain text of the latest rendered frame.
+func (m *screenModel) lastView() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.last
+}
 
 func snapshot(t *testing.T, model tea.Model, ready, wait string, act func(*teatest.TestModel)) {
 	t.Helper()
@@ -63,11 +81,11 @@ func snapshot(t *testing.T, model tea.Model, ready, wait string, act func(*teate
 	// Snapshot the final view, not the output stream: the renderer coalesces frames on a timer,
 	// so which intermediate frames reach the stream varies run to run.
 	final := tm.FinalModel(t, teatest.WithFinalTimeout(3*time.Second))
-	golden.RequireEqual(t, []byte(ansi.Strip(final.View())))
+	golden.RequireEqual(t, []byte(ansi.Strip(final.View().Content)))
 }
 
-func typeRunes(tm *teatest.TestModel, s string) {
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)})
+func typeRunes(tm interface{ Send(tea.Msg) }, s string) {
+	tm.Send(tea.KeyPressMsg{Code: []rune(s)[0], Text: s})
 }
 
 func TestImportPreviewSnapshot(t *testing.T) {
@@ -82,13 +100,13 @@ func TestImportPreviewSnapshot(t *testing.T) {
 	model := &screenModel{scr: scr, width: 100, height: 30}
 	snapshot(t, model, "> csv", "Map unmapped accounts", func(tm *teatest.TestModel) {
 		typeRunes(tm, "fui")
-		tm.Send(tea.KeyMsg{Type: tea.KeyEnter}) // accept the "fui" suggestion
-		tm.Send(tea.KeyMsg{Type: tea.KeyEnter}) // move to the file field
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter}) // accept the "fui" suggestion
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter}) // move to the file field
 		typeRunes(tm, "statement.fui.jsonl")
-		tm.Send(tea.KeyMsg{Type: tea.KeyEnter}) // move to the CSV profile field
-		tm.Send(tea.KeyMsg{Type: tea.KeyEnter}) // move to the account ref field
-		tm.Send(tea.KeyMsg{Type: tea.KeyEnter}) // move to the since field
-		tm.Send(tea.KeyMsg{Type: tea.KeyEnter}) // submit, planning the import
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter}) // move to the CSV profile field
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter}) // move to the account ref field
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter}) // move to the since field
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter}) // submit, planning the import
 	})
 }
 
@@ -129,16 +147,16 @@ func TestImportConfirmDialogSnapshot(t *testing.T) {
 	typeRunes(tm, "n") // open the source form from the idle page
 	waitForText("> csv")
 	typeRunes(tm, "fui")
-	tm.Send(tea.KeyMsg{Type: tea.KeyEnter}) // accept the "fui" suggestion
-	tm.Send(tea.KeyMsg{Type: tea.KeyEnter}) // move to the file field
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter}) // accept the "fui" suggestion
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter}) // move to the file field
 	typeRunes(tm, "statement.fui.jsonl")
-	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
-	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
-	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
-	tm.Send(tea.KeyMsg{Type: tea.KeyEnter}) // submit, planning the import onto the preview
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter}) // submit, planning the import onto the preview
 
 	waitForText("Import preview")
-	tm.Send(tea.KeyMsg{Type: tea.KeyEnter}) // open the confirm dialog
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter}) // open the confirm dialog
 
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		return bytes.Contains(b, []byte("Confirm import"))
@@ -150,5 +168,5 @@ func TestImportConfirmDialogSnapshot(t *testing.T) {
 	// Snapshot the final view, not the output stream: the renderer coalesces frames on a timer,
 	// so which intermediate frames reach the stream varies run to run.
 	final := tm.FinalModel(t, teatest.WithFinalTimeout(3*time.Second))
-	golden.RequireEqual(t, []byte(ansi.Strip(final.View())))
+	golden.RequireEqual(t, []byte(ansi.Strip(final.View().Content)))
 }

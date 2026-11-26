@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
-	"github.com/charmbracelet/x/exp/teatest"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -37,7 +37,7 @@ func (m *screenModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *screenModel) View() string { return m.scr.View() }
+func (m *screenModel) View() tea.View { return tea.NewView(m.scr.View()) }
 
 func snapshot(t *testing.T, model tea.Model, ready, wait string, act func(*teatest.TestModel)) {
 	t.Helper()
@@ -59,7 +59,7 @@ func snapshot(t *testing.T, model tea.Model, ready, wait string, act func(*teate
 	// Snapshot the final view, not the output stream: the renderer coalesces frames on a timer,
 	// so which intermediate frames reach the stream varies run to run.
 	final := tm.FinalModel(t, teatest.WithFinalTimeout(3*time.Second))
-	golden.RequireEqual(t, []byte(ansi.Strip(final.View())))
+	golden.RequireEqual(t, []byte(ansi.Strip(final.View().Content)))
 }
 
 func TestAccountsReconcileSnapshot(t *testing.T) {
@@ -70,11 +70,11 @@ func TestAccountsReconcileSnapshot(t *testing.T) {
 	scr := screens.Screen(accounts.New(fx.Service, domain.LocaleENUS, theme.Default()))
 	model := &screenModel{scr: scr, width: 100, height: 30}
 	snapshot(t, model, "Checking", "Reconcile preview", func(tm *teatest.TestModel) {
-		tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
-		tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("9")})
-		tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("0")})
-		tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
-		tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
+		tm.Send(tea.KeyPressMsg{Code: 'r', Text: "r"})
+		tm.Send(tea.KeyPressMsg{Code: '9', Text: "9"})
+		tm.Send(tea.KeyPressMsg{Code: '0', Text: "0"})
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
 	})
 }
 
@@ -87,14 +87,14 @@ func TestAccountsReconcileTickSnapshot(t *testing.T) {
 	scr := screens.Screen(accounts.New(fx.Service, domain.LocaleENUS, theme.Default()))
 	model := &screenModel{scr: scr, width: 100, height: 30}
 	snapshot(t, model, "Checking", "Difference: -5.00", func(tm *teatest.TestModel) {
-		tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
-		tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("8")})
-		tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("5")})
-		tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
-		tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
+		tm.Send(tea.KeyPressMsg{Code: 'r', Text: "r"})
+		tm.Send(tea.KeyPressMsg{Code: '8', Text: "8"})
+		tm.Send(tea.KeyPressMsg{Code: '5', Text: "5"})
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+		tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
 		teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 			return bytes.Contains(b, []byte("Reconcile preview"))
 		}, teatest.WithDuration(3*time.Second))
-		tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" ")})
+		tm.Send(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
 	})
 }

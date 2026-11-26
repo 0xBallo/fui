@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
-	"github.com/charmbracelet/x/exp/teatest"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/reporting"
@@ -205,7 +205,7 @@ func (m *teaScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *teaScreen) View() string { return m.scr.View() }
+func (m *teaScreen) View() tea.View { return tea.NewView(m.scr.View()) }
 
 func TestInsightAlertsTeatest(t *testing.T) {
 	ins := &stubInsights{items: sampleInsights()}

@@ -1,16 +1,16 @@
-╭─────────╮╭──────────────╮╭────────╮╭──────╮╭───────╮╭──────╮╭────────╮        
-│Dashboard││2 Transactions││Accounts││Budget││Reports││Import││Settings│        
-┴─────────┴┘              └┴────────┴┴──────┴┴───────┴┴──────┴┴────────┴────────
+[m╭─────────╮[m[m╭──────────────╮[m[m╭────────╮[m[m╭──────╮[m[m╭───────╮[m[m╭──────╮[m[m╭────────╮[m        
+[m│[m[mDashboard[m[m│[m[m│[m[1;4;4m2[m[4m [m[1;4;4mT[m[1;4;4mr[m[1;4;4ma[m[1;4;4mn[m[1;4;4ms[m[1;4;4ma[m[1;4;4mc[m[1;4;4mt[m[1;4;4mi[m[1;4;4mo[m[1;4;4mn[m[1;4;4ms[m[m│[m[m│[m[mAccounts[m[m│[m[m│[m[2mBudget[m[m│[m[m│[m[2mReports[m[m│[m[m│[m[2mImport[m[m│[m[m│[m[2mSettings[m[m│[m        
+[m┴─────────┴[m[m┘              └[m[m┴────────┴[m[m┴──────┴[m[m┴───────┴[m[m┴──────┴[m[m┴────────┴[m[m────────[m
 
-From: 2026-06-01 ×  To: 2026-06-30 ×  Category: Groceries ×                     
+[1mFrom: 2026-06-01 ×[m  [mTo: 2026-06-30 ×[m  [mCategory: Groceries ×[m                     
                                                                                 
-IN +0.00 · OUT −42.50 · 1 tx                                                    
-╭──────────┬────────────────┬─────────┬──────────────┬──────────┬──────────────╮
-│Date      │Account         │Descript…│Category      │Status    │        Amount│
-├──────────┼────────────────┼─────────┼──────────────┼──────────┼──────────────┤
-│06/10/2026│Checking        │Supermar…│Groceries     │booked    │        -42.50│
-╰──────────┴────────────────┴─────────┴──────────────┴──────────┴──────────────╯
-1 transaction   -42.50 EUR                                                      
+[1mIN +0.00 · OUT −42.50 · 1 tx[m                                                    
+[m╭[m[m──────────[m[m┬[m[m────────────────[m[m┬[m[m─────────[m[m┬[m[m──────────────[m[m┬[m[m──────────[m[m┬[m[m──────────────[m[m╮[m
+[m│[m[1mDate[m      [m│[m[1mAccount[m         [m│[m[1mDescript…[m[m│[m[1mCategory[m      [m│[m[1mStatus[m    [m│[m        [1mAmount[m[m│[m
+[m├[m[m──────────[m[m┼[m[m────────────────[m[m┼[m[m─────────[m[m┼[m[m──────────────[m[m┼[m[m──────────[m[m┼[m[m──────────────[m[m┤[m
+[m│[m[1m06/10/2026[m[m│[m[1mChecking[m[m        [m[m│[m[1mSupermar…[m[m│[m[1mGroceries[m[m     [m[m│[m[1mbooked[m[m    [m[m│[m[m        [m[1m-42.50[m[m│[m
+[m╰[m[m──────────[m[m┴[m[m────────────────[m[m┴[m[m─────────[m[m┴[m[m──────────────[m[m┴[m[m──────────[m[m┴[m[m──────────────[m[m╯[m
+[m1 transaction   -42.50 EUR[m                                                      
                                                                                 
                                                                                 
                                                                                 
@@ -21,4 +21,4 @@ IN +0.00 · OUT −42.50 · 1 tx
                                                                                 
                                                                                 
 
-a add · e/enter edit · d delete · f filter · / search · space select · s split …
+[1ma[m [madd[m[m · [m[1me/enter[m [medit[m[m · [m[1md[m [mdelete[m[m · [m[1mf[m [mfilter[m[m · [m[1m/[m [msearch[m[m · [m[1mspace[m [mselect[m[m · [m[1ms[m [msplit[m [m…[m

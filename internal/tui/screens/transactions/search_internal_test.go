@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -61,7 +61,7 @@ func TestSearchDebounceOnlyQueriesFinalText(t *testing.T) {
 	m.openSearch()
 	var ticks []tea.Cmd
 	for _, r := range "Coffee" {
-		screen, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		screen, cmd := m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = screen.(*Model)
 		ticks = append(ticks, cmd)
 	}
@@ -93,7 +93,7 @@ func TestSearchResultSetsReqTextForLoadMore(t *testing.T) {
 	m = drain(m, m.Init())
 
 	m.openSearch()
-	screen, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("Coffee")})
+	screen, cmd := m.Update(tea.KeyPressMsg{Code: 'C', Text: "Coffee"})
 	m = screen.(*Model)
 	m = drain(m, cmd)
 

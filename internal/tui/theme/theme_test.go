@@ -2,12 +2,11 @@ package theme_test
 
 import (
 	"fmt"
+	"image/color"
 	"math"
 	"reflect"
 	"strconv"
 	"testing"
-
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/0xballo/fui/internal/tui/theme"
 )
@@ -35,18 +34,14 @@ func TestDefault(t *testing.T) {
 }
 
 // TestEveryThemeDefinesEveryToken fails if a token was added to Tokens without mapping it in
-// every flavor: every field must be a non-empty lipgloss.Color.
+// every flavor: every field must be a non-empty color.Color.
 func TestEveryThemeDefinesEveryToken(t *testing.T) {
 	for name, th := range allThemes(t) {
 		t.Run(name, func(t *testing.T) {
 			v := reflect.ValueOf(th.Tokens)
 			for i := 0; i < v.NumField(); i++ {
 				field := v.Type().Field(i)
-				color, ok := v.Field(i).Interface().(lipgloss.Color)
-				if !ok {
-					t.Fatalf("token %s is not a lipgloss.Color", field.Name)
-				}
-				if color == "" {
+				if v.Field(i).IsNil() {
 					t.Errorf("theme %q: token %s is undefined", name, field.Name)
 				}
 			}
@@ -70,7 +65,7 @@ func TestContrastWCAG(t *testing.T) {
 			base := th.Tokens.Base
 			tokens := reflect.ValueOf(th.Tokens)
 			for _, field := range textTokens {
-				fg := tokens.FieldByName(field).Interface().(lipgloss.Color)
+				fg := tokens.FieldByName(field).Interface().(color.Color)
 				ratio := contrastRatio(base, fg)
 				if ratio < minRatio {
 					t.Errorf("theme %q: token %s contrast with Base = %.2f, want >= %.1f", name, field, ratio, minRatio)
@@ -81,7 +76,7 @@ func TestContrastWCAG(t *testing.T) {
 }
 
 // contrastRatio computes the WCAG contrast ratio between two hex lipgloss colors.
-func contrastRatio(a, b lipgloss.Color) float64 {
+func contrastRatio(a, b color.Color) float64 {
 	la, lb := luminance(a), luminance(b)
 	if la < lb {
 		la, lb = lb, la
@@ -89,9 +84,9 @@ func contrastRatio(a, b lipgloss.Color) float64 {
 	return (la + 0.05) / (lb + 0.05)
 }
 
-// luminance computes the WCAG relative luminance of a "#RRGGBB" lipgloss.Color.
-func luminance(c lipgloss.Color) float64 {
-	hex := string(c)
+// luminance computes the WCAG relative luminance of a "#RRGGBB" color.Color.
+func luminance(c color.Color) float64 {
+	hex := hexOf(c)
 	r := hexChannel(hex[1:3])
 	g := hexChannel(hex[3:5])
 	b := hexChannel(hex[5:7])
@@ -120,7 +115,7 @@ func TestFlowStyle(t *testing.T) {
 		name    string
 		flow    theme.Flow
 		pending bool
-		want    lipgloss.Color
+		want    color.Color
 	}{
 		{"income", theme.FlowIncome, false, tk.Income},
 		{"income pending", theme.FlowIncome, true, tk.IncomeSoft},
@@ -137,4 +132,10 @@ func TestFlowStyle(t *testing.T) {
 			}
 		})
 	}
+}
+
+// hexOf formats c as "#rrggbb".
+func hexOf(c color.Color) string {
+	r, g, b, _ := c.RGBA()
+	return fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)
 }

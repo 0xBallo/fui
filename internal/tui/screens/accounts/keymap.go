@@ -1,6 +1,6 @@
 package accounts
 
-import "github.com/charmbracelet/bubbles/key"
+import "charm.land/bubbles/v2/key"
 
 // KeyMap defines the keyboard shortcuts of the accounts screen.
 type KeyMap struct {
@@ -35,7 +35,7 @@ func DefaultKeyMap() KeyMap {
 		Reconcile: key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reconcile")),
 		Price:     key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "set price")),
 		Switch:    key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch section")),
-		Tick:      key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "tick (reconcile)")),
+		Tick:      key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "tick (reconcile)")),
 		Security:  key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "add security")),
 		Op:        key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "add operation")),
 		Ops:       key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "operations")),

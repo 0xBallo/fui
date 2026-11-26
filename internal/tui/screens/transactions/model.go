@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -277,7 +277,7 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	case splitLoadedMsg:
 		m.openSplitEditor(msg)
 		return m, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
 	return m, nil
@@ -294,7 +294,7 @@ func (m *Model) trimWindow() {
 	m.table.SetCursor(m.table.Cursor() - drop)
 }
 
-func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch m.mode {
 	case modeForm:
 		return m.handleFormKey(msg)
@@ -316,7 +316,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	return m.handleListKey(msg)
 }
 
-func (m *Model) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleListKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	if handled, cmd := m.handleNavKey(msg); handled {
 		return m, cmd
 	}
@@ -355,7 +355,7 @@ func (m *Model) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 
 // handleNavKey handles cursor movement in the table, reporting whether msg matched one of the
 // navigation bindings.
-func (m *Model) handleNavKey(msg tea.KeyMsg) (bool, tea.Cmd) {
+func (m *Model) handleNavKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.km.Up):
 		m.table.MoveUp(1)
@@ -422,7 +422,7 @@ func (m *Model) selectedTx() *app.TxView {
 	return nil
 }
 
-func (m *Model) handleConfirmKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleConfirmKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	yes, no := m.confirm.HandleKey(msg)
 	purpose := m.confirmPurpose
 	switch {

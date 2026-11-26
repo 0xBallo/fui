@@ -6,13 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
-	"github.com/muesli/termenv"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/investing"
@@ -58,7 +57,7 @@ func newOpsEnv(t *testing.T, crypto bool) *opsEnv {
 	return &opsEnv{fx: fx, inv: inv, scr: run(t, scr, scr.Init())}
 }
 
-func (e *opsEnv) key(t *testing.T, k tea.KeyType) {
+func (e *opsEnv) key(t *testing.T, k rune) {
 	t.Helper()
 	var cmd tea.Cmd
 	e.scr, cmd = sendKey(e.scr, k)
@@ -107,7 +106,7 @@ func (e *opsEnv) addOp(t *testing.T, kind, qty, price, fees, cash string) {
 	t.Helper()
 	e.runes(t, "o")
 	e.field(t, kind, 1)
-	if strings.Contains(e.scr.View(), "Security: VWCE ETF") {
+	if strings.Contains(ansi.Strip(e.scr.View()), "Security: VWCE ETF") {
 		e.field(t, "", 0) // prefilled from the selected position
 	} else {
 		e.field(t, "VWCE ETF", 0)
@@ -351,9 +350,6 @@ func TestAccountsInvestingHelpHiddenWithoutUseCases(t *testing.T) {
 // TestAccountsInvestingGoldens pins the 80x24 views: identical text across themes, no escapes
 // under NO_COLOR.
 func TestAccountsInvestingGoldens(t *testing.T) {
-	prev := lipgloss.ColorProfile()
-	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
-
 	steps := map[string]func(*testing.T, *opsEnv){
 		"SecurityForm": func(t *testing.T, e *opsEnv) { e.runes(t, "n") },
 		"OpForm":       func(t *testing.T, e *opsEnv) { e.runes(t, "o") },
@@ -379,7 +375,6 @@ func TestAccountsInvestingGoldens(t *testing.T) {
 				step(t, e)
 				return e.scr.View()
 			}
-			lipgloss.SetColorProfile(termenv.TrueColor)
 			var first string
 			for _, n := range themes {
 				plain := ansi.Strip(render(theme.Resolve(theme.Config{Theme: n}, nil)))
@@ -391,10 +386,9 @@ func TestAccountsInvestingGoldens(t *testing.T) {
 			}
 			golden.RequireEqual(t, []byte(first))
 
-			lipgloss.SetColorProfile(termenv.Ascii)
-			v := render(theme.Default())
-			if strings.Contains(v, "\x1b") || ansi.Strip(v) != first {
-				t.Errorf("NO_COLOR view differs or has escapes:\n%s", v)
+			v := screentest.Downsample(render(theme.Default()), colorprofile.Ascii)
+			if screentest.HasColor(v) || ansi.Strip(v) != first {
+				t.Errorf("NO_COLOR view differs or has colors:\n%s", v)
 			}
 		})
 	}

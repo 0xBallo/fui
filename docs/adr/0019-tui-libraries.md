@@ -1,6 +1,6 @@
 # ADR 0019: TUI libraries for the revamp, staying on Bubble Tea v1
 
-* Status: Accepted
+* Status: Superseded by [ADR 0021](0021-bubble-tea-v2.md)
 * Date: 2026-11-18
 
 ## Context and Problem Statement

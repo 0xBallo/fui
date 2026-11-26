@@ -1,7 +1,7 @@
 package report
 
 import (
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/0xballo/fui/internal/tui/components"

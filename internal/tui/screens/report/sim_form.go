@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app/simulating"
 	"github.com/0xballo/fui/internal/domain"
@@ -81,7 +81,7 @@ func (m *Model) openSimForm() {
 	m.sim.form.Focus()
 }
 
-func (m *Model) handleSimFormKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleSimFormKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	f := &m.sim.form
 	switch msg.String() {
 	case "esc":

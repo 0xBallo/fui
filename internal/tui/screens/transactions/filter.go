@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
-	"github.com/charmbracelet/bubbles/key"
+	"charm.land/bubbles/v2/key"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -79,7 +79,7 @@ func (m *Model) ApplyFilter(req app.ListTxRequest) tea.Cmd {
 	return m.load()
 }
 
-func (m *Model) handleFilterKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleFilterKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	if m.picker.IsOpen() {
 		m.picker, _ = m.picker.Update(msg)
 		if v, ok := m.picker.Picked(); ok && m.pickTarget != nil {
@@ -283,7 +283,7 @@ func (m *Model) chipsView() string {
 
 // handleChipKey handles the chip-focus and chip-removal bindings in list mode, reporting whether
 // msg matched one of them.
-func (m *Model) handleChipKey(msg tea.KeyMsg) (bool, tea.Cmd) {
+func (m *Model) handleChipKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.km.PrevChip):
 		m.moveChipFocus(-1)
@@ -394,7 +394,7 @@ func (m *Model) openCategorize() {
 	m.categorizeField.Focus()
 }
 
-func (m *Model) handleCategorizeKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleCategorizeKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.mode = modeList

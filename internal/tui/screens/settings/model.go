@@ -6,9 +6,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/module"
@@ -223,7 +223,7 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		name := msg.theme
 		return m, tea.Batch(m.notify(fmt.Sprintf("theme saved: %s", name)),
 			func() tea.Msg { return ThemeChangedMsg{Theme: name} })
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
 	return m.updateSub(msg)
@@ -252,7 +252,7 @@ func emitModulesChanged(enabled module.Set) tea.Cmd {
 	return func() tea.Msg { return ModulesChangedMsg{Enabled: enabled} }
 }
 
-func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	if m.mode == modeConfirm {
 		return m.handleConfirmKey(msg)
 	}
@@ -298,7 +298,7 @@ func (m *Model) restoreTheme() tea.Cmd {
 	return func() tea.Msg { return ThemePreviewMsg{Theme: saved} }
 }
 
-func (m *Model) handleConfirmKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleConfirmKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	yes, no := m.confirm.HandleKey(msg)
 	switch {
 	case yes:

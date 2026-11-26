@@ -5,8 +5,8 @@ import (
 	"sync"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -68,20 +68,20 @@ func TestReconciledDeleteNeedsConfirmTwice(t *testing.T) {
 	m.SetSize(100, 30)
 	scr := run(t, screens.Screen(m), m.Init())
 
-	scr, _ = scr.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	scr, _ = scr.Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
 	got := scr.(*Model)
 	if got.mode != modeConfirm || got.confirmPurpose != confirmDelete {
 		t.Fatalf("expected the initial delete confirm, got mode=%v purpose=%v", got.mode, got.confirmPurpose)
 	}
 
-	scr, cmd := scr.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	scr, cmd := scr.Update(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	scr = run(t, scr, cmd)
 	got = scr.(*Model)
 	if got.mode != modeConfirm || got.confirmPurpose != confirmDeleteReconciled {
 		t.Fatalf("expected a second confirm for the reconciled transaction, got mode=%v purpose=%v", got.mode, got.confirmPurpose)
 	}
 
-	scr, cmd = scr.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	scr, cmd = scr.Update(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	scr = run(t, scr, cmd)
 	_ = scr
 

@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/domain"
@@ -167,7 +167,7 @@ func (m *Model) transferText(t importing.TransferProposal) string {
 	return fmt.Sprintf("%s %s <-> %s (%s)", mark, own, partner, t.Reason)
 }
 
-func (m *Model) handleDetailsKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleDetailsKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.km.Up):
 		m.detailCursor = max(0, m.detailCursor-1)

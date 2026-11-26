@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/0xballo/fui/internal/app"
@@ -22,7 +22,14 @@ type todayStub struct {
 
 func (s todayStub) Today() (domain.Date, error) { return s.today, nil }
 
-func press(m *Model, k tea.KeyType) { m.handleFilterKey(tea.KeyMsg{Type: k}) }
+func press(m *Model, k tea.KeyPressMsg) { m.handleFilterKey(k) }
+
+var (
+	ctrlD    = tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}
+	keyEnter = tea.KeyPressMsg{Code: tea.KeyEnter}
+	keyRight = tea.KeyPressMsg{Code: tea.KeyRight}
+	keyEsc   = tea.KeyPressMsg{Code: tea.KeyEsc}
+)
 
 func newFilterModel(t *testing.T, from, to string) *Model {
 	t.Helper()
@@ -41,16 +48,16 @@ func TestDatePicker(t *testing.T) {
 		name     string
 		from, to string
 		toField  bool
-		keys     []tea.KeyType
+		keys     []tea.KeyPressMsg
 		wantFrom string
 		wantTo   string
 	}{
-		{"pick from today", "", "", false, []tea.KeyType{tea.KeyCtrlD, tea.KeyEnter}, "2026-03-15", ""},
-		{"pick from invalid value opens on today", "garbage", "", false, []tea.KeyType{tea.KeyCtrlD, tea.KeyEnter}, "2026-03-15", ""},
-		{"pick moves from current value", "2026-01-10", "", false, []tea.KeyType{tea.KeyCtrlD, tea.KeyRight, tea.KeyEnter}, "2026-01-11", ""},
-		{"pick to", "", "2026-02-01", true, []tea.KeyType{tea.KeyCtrlD, tea.KeyEnter}, "", "2026-02-01"},
-		{"cancel from", "2026-01-10", "", false, []tea.KeyType{tea.KeyCtrlD, tea.KeyRight, tea.KeyEsc}, "2026-01-10", ""},
-		{"cancel to", "", "", true, []tea.KeyType{tea.KeyCtrlD, tea.KeyEsc}, "", ""},
+		{"pick from today", "", "", false, []tea.KeyPressMsg{ctrlD, keyEnter}, "2026-03-15", ""},
+		{"pick from invalid value opens on today", "garbage", "", false, []tea.KeyPressMsg{ctrlD, keyEnter}, "2026-03-15", ""},
+		{"pick moves from current value", "2026-01-10", "", false, []tea.KeyPressMsg{ctrlD, keyRight, keyEnter}, "2026-01-11", ""},
+		{"pick to", "", "2026-02-01", true, []tea.KeyPressMsg{ctrlD, keyEnter}, "", "2026-02-01"},
+		{"cancel from", "2026-01-10", "", false, []tea.KeyPressMsg{ctrlD, keyRight, keyEsc}, "2026-01-10", ""},
+		{"cancel to", "", "", true, []tea.KeyPressMsg{ctrlD, keyEsc}, "", ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -82,7 +89,7 @@ func TestDatePicker(t *testing.T) {
 
 func TestDatePickerIgnoredOnOtherFields(t *testing.T) {
 	m := newFilterModel(t, "", "")
-	press(m, tea.KeyCtrlD)
+	press(m, ctrlD)
 	if m.picker.IsOpen() {
 		t.Fatal("picker must open only on From/To")
 	}
@@ -163,7 +170,7 @@ func TestApplyFilterMonthYearAndClear(t *testing.T) {
 		t.Fatalf("missing year chip: %q", m.chipsView())
 	}
 
-	scr, cmd := scr.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
+	scr, cmd := scr.Update(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl})
 	run(t, scr, cmd)
 	if r := rec.reqs[2]; r.Year != 0 || r.Month != "" {
 		t.Fatalf("reset must clear the filter, got %+v", r)

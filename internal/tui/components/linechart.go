@@ -1,13 +1,14 @@
 package components
 
 import (
+	"image/color"
 	"math"
 	"strconv"
 	"strings"
 
-	"github.com/NimbleMarkets/ntcharts/canvas"
-	"github.com/NimbleMarkets/ntcharts/linechart"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
+	"github.com/NimbleMarkets/ntcharts/v2/canvas"
+	"github.com/NimbleMarkets/ntcharts/v2/linechart"
 
 	"github.com/0xballo/fui/internal/tui/theme"
 )
@@ -141,7 +142,7 @@ func (c LineChart) style(i int) lipgloss.Style {
 		return s
 	}
 	tk := c.theme.Tokens
-	cols := [maxSeries]lipgloss.Color{tk.Series1, tk.Series2, tk.Series3, tk.Series4}
+	cols := [maxSeries]color.Color{tk.Series1, tk.Series2, tk.Series3, tk.Series4}
 	return lipgloss.NewStyle().Foreground(cols[i])
 }
 

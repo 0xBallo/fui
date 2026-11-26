@@ -5,38 +5,27 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
-	"github.com/charmbracelet/x/exp/teatest"
-	"github.com/muesli/termenv"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/tui"
 	"github.com/0xballo/fui/internal/tui/screens"
+	"github.com/0xballo/fui/internal/tui/screens/screentest"
 )
 
-// forceColorProfile pins lipgloss's default renderer to profile for the duration of the test,
-// restoring the prior value on cleanup. Styles are built with lipgloss.NewStyle() against that
-// shared default renderer, and Renderer.ColorProfile() caches its first result for the whole
-// process (via sync.Once) rather than re-reading NO_COLOR/termenv on every render: once any test
-// in this binary has triggered that cache, a plain t.Setenv("NO_COLOR", "1") would have no
-// effect. Pinning the profile directly keeps every theme snapshot test below deterministic
-// regardless of run order.
-func forceColorProfile(t *testing.T, profile termenv.Profile) {
-	t.Helper()
-	r := lipgloss.DefaultRenderer()
-	prev := r.ColorProfile()
-	r.SetColorProfile(profile)
-	t.Cleanup(func() { r.SetColorProfile(prev) })
-}
+// plainView is the ANSI-stripped frame of m: the text assertions compare it, as they did when
+// lipgloss v1 rendered without styles outside a terminal.
+func plainView(m tea.Model) string { return ansi.Strip(m.View().Content) }
 
-// themeSnapshot renders Root with the given theme at 80x24 (FUI's minimum terminal size) and the
-// color profile pinned by forceColorProfile's caller, types keys, and diffs the raw (not
-// ANSI-stripped: that would hide the whole point, the tokens the theme chose) final view, once
+// themeSnapshot renders Root with the given theme at 80x24 (FUI's minimum terminal size), types keys, and diffs the final view converted to
+// profile p (not ANSI-stripped: that would hide the whole point, the tokens the theme chose) final view, once
 // wait has appeared, against testdata/<test name>.golden.
-func themeSnapshot(t *testing.T, theme, keys, wait string) {
+func themeSnapshot(t *testing.T, theme, keys, wait string, p colorprofile.Profile) {
 	t.Helper()
 	fx := newSnapshotFixture(t)
 	uc := useCases{Service: fx.Service, Reporting: fx.NewReporting(t)}
@@ -57,62 +46,52 @@ func themeSnapshot(t *testing.T, theme, keys, wait string) {
 	// Snapshot the final view, not the output stream: the renderer coalesces frames on a timer,
 	// so which intermediate frames reach the stream varies run to run.
 	final := tm.FinalModel(t, teatest.WithFinalTimeout(3*time.Second))
-	golden.RequireEqual(t, []byte(final.View()))
+	golden.RequireEqual(t, []byte(screentest.Downsample(final.View().Content, p)))
 }
 
 func TestDashboardSnapshotLatte(t *testing.T) {
-	forceColorProfile(t, termenv.TrueColor)
-	themeSnapshot(t, "latte", "", "net of loans")
+	themeSnapshot(t, "latte", "", "net of loans", colorprofile.TrueColor)
 }
 
 func TestDashboardSnapshotMocha(t *testing.T) {
-	forceColorProfile(t, termenv.TrueColor)
-	themeSnapshot(t, "mocha", "", "net of loans")
+	themeSnapshot(t, "mocha", "", "net of loans", colorprofile.TrueColor)
 }
 
 func TestDashboardSnapshotTerminal(t *testing.T) {
-	forceColorProfile(t, termenv.TrueColor)
-	themeSnapshot(t, "terminal", "", "net of loans")
+	themeSnapshot(t, "terminal", "", "net of loans", colorprofile.TrueColor)
 }
 
 func TestDashboardSnapshotHighContrast(t *testing.T) {
-	forceColorProfile(t, termenv.TrueColor)
-	themeSnapshot(t, "high-contrast", "", "net of loans")
+	themeSnapshot(t, "high-contrast", "", "net of loans", colorprofile.TrueColor)
 }
 
 func TestDashboardSnapshotNoColor(t *testing.T) {
-	forceColorProfile(t, termenv.Ascii)
-	themeSnapshot(t, "mocha", "", "net of loans")
+	themeSnapshot(t, "mocha", "", "net of loans", colorprofile.Ascii)
 }
 
 func TestTransactionsSnapshotLatte(t *testing.T) {
-	forceColorProfile(t, termenv.TrueColor)
-	themeSnapshot(t, "latte", "2", "booked")
+	themeSnapshot(t, "latte", "2", "booked", colorprofile.TrueColor)
 }
 
 func TestTransactionsSnapshotMocha(t *testing.T) {
-	forceColorProfile(t, termenv.TrueColor)
-	themeSnapshot(t, "mocha", "2", "booked")
+	themeSnapshot(t, "mocha", "2", "booked", colorprofile.TrueColor)
 }
 
 func TestTransactionsSnapshotTerminal(t *testing.T) {
-	forceColorProfile(t, termenv.TrueColor)
-	themeSnapshot(t, "terminal", "2", "booked")
+	themeSnapshot(t, "terminal", "2", "booked", colorprofile.TrueColor)
 }
 
 func TestTransactionsSnapshotHighContrast(t *testing.T) {
-	forceColorProfile(t, termenv.TrueColor)
-	themeSnapshot(t, "high-contrast", "2", "booked")
+	themeSnapshot(t, "high-contrast", "2", "booked", colorprofile.TrueColor)
 }
 
 func TestTransactionsSnapshotNoColor(t *testing.T) {
-	forceColorProfile(t, termenv.Ascii)
-	themeSnapshot(t, "mocha", "2", "booked")
+	themeSnapshot(t, "mocha", "2", "booked", colorprofile.Ascii)
 }
 
 // filteredTransactionsSnapshot opens Transactions through a drill-down SwitchScreenMsg at 80x24
 // and diffs the final view against testdata/<test name>.golden.
-func filteredTransactionsSnapshot(t *testing.T, theme string) {
+func filteredTransactionsSnapshot(t *testing.T, theme string, p colorprofile.Profile) {
 	t.Helper()
 	fx := newSnapshotFixture(t)
 	uc := useCases{Service: fx.Service, Reporting: fx.NewReporting(t)}
@@ -123,30 +102,25 @@ func filteredTransactionsSnapshot(t *testing.T, theme string) {
 		Filter: &app.ListTxRequest{Categories: []string{"Groceries"}, From: "2026-06-01", To: "2026-06-30"},
 	})
 	m = run(t, m, cmd)
-	golden.RequireEqual(t, []byte(m.View()))
+	golden.RequireEqual(t, []byte(screentest.Downsample(m.View().Content, p)))
 }
 
 func TestFilteredTransactionsSnapshotLatte(t *testing.T) {
-	forceColorProfile(t, termenv.TrueColor)
-	filteredTransactionsSnapshot(t, "latte")
+	filteredTransactionsSnapshot(t, "latte", colorprofile.TrueColor)
 }
 
 func TestFilteredTransactionsSnapshotMocha(t *testing.T) {
-	forceColorProfile(t, termenv.TrueColor)
-	filteredTransactionsSnapshot(t, "mocha")
+	filteredTransactionsSnapshot(t, "mocha", colorprofile.TrueColor)
 }
 
 func TestFilteredTransactionsSnapshotTerminal(t *testing.T) {
-	forceColorProfile(t, termenv.TrueColor)
-	filteredTransactionsSnapshot(t, "terminal")
+	filteredTransactionsSnapshot(t, "terminal", colorprofile.TrueColor)
 }
 
 func TestFilteredTransactionsSnapshotHighContrast(t *testing.T) {
-	forceColorProfile(t, termenv.TrueColor)
-	filteredTransactionsSnapshot(t, "high-contrast")
+	filteredTransactionsSnapshot(t, "high-contrast", colorprofile.TrueColor)
 }
 
 func TestFilteredTransactionsSnapshotNoColor(t *testing.T) {
-	forceColorProfile(t, termenv.Ascii)
-	filteredTransactionsSnapshot(t, "mocha")
+	filteredTransactionsSnapshot(t, "mocha", colorprofile.Ascii)
 }

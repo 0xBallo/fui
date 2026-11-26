@@ -3,8 +3,8 @@ package importer
 import (
 	"context"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/importing"
@@ -161,13 +161,13 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		m.mode = modeResult
 		m.afterModulesEnabled()
 		return m, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
 	return m, nil
 }
 
-func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch m.mode {
 	case modeIdle:
 		if key.Matches(msg, m.km.New) {
@@ -192,7 +192,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleConfirmKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleConfirmKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	yes, no := m.confirm.HandleKey(msg)
 	switch {
 	case yes:
@@ -203,7 +203,7 @@ func (m *Model) handleConfirmKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleResultKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleResultKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	if key.Matches(msg, m.km.New) || key.Matches(msg, m.km.Confirm) {
 		m.resetSourceForm()
 		m.mode = modeSource

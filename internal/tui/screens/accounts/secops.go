@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/0xballo/fui/internal/app/investing"
 	"github.com/0xballo/fui/internal/domain"
@@ -138,7 +138,7 @@ func (m *Model) openOpEditForm(line investing.OpLine) {
 	m.mode = modeOpEditForm
 }
 
-func (m *Model) handleSecFormKey(msg tea.KeyMsg, back mode) (screens.Screen, tea.Cmd) {
+func (m *Model) handleSecFormKey(msg tea.KeyPressMsg, back mode) (screens.Screen, tea.Cmd) {
 	f := &m.secops.form
 	switch msg.String() {
 	case "esc":
@@ -309,7 +309,7 @@ func (m *Model) selectedOp() (investing.OpLine, bool) {
 	return investing.OpLine{}, false
 }
 
-func (m *Model) handleOpsKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleOpsKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.km.Back):
 		m.mode = modeDetail
@@ -333,7 +333,7 @@ func (m *Model) handleOpsKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleOpConfirmKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleOpConfirmKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	yes, no := m.confirm.HandleKey(msg)
 	switch {
 	case yes:

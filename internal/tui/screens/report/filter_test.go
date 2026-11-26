@@ -6,16 +6,16 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
 	"github.com/google/go-cmp/cmp"
-	"github.com/muesli/termenv"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
 	scr "github.com/0xballo/fui/internal/tui/screens"
+	"github.com/0xballo/fui/internal/tui/screens/screentest"
 	"github.com/0xballo/fui/internal/tui/theme"
 )
 
@@ -275,9 +275,6 @@ func TestExportRejectsUnknownTarget(t *testing.T) {
 }
 
 func TestFilterGoldens(t *testing.T) {
-	prev := lipgloss.ColorProfile()
-	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
-
 	cases := []struct {
 		name  string
 		build func(t *testing.T, s scr.Screen) scr.Screen
@@ -296,7 +293,6 @@ func TestFilterGoldens(t *testing.T) {
 			render := func(th theme.Theme) string {
 				return c.build(t, kindScreen(t, h, th, spendingLeft)).View()
 			}
-			lipgloss.SetColorProfile(termenv.TrueColor)
 			var first string
 			for _, name := range themes {
 				plain := ansi.Strip(render(theme.Resolve(theme.Config{Theme: name}, nil)))
@@ -308,10 +304,9 @@ func TestFilterGoldens(t *testing.T) {
 			}
 			golden.RequireEqual(t, []byte(first))
 
-			lipgloss.SetColorProfile(termenv.Ascii)
-			v := render(theme.Default())
-			if strings.Contains(v, "\x1b") {
-				t.Errorf("NO_COLOR view contains escape codes: %q", v)
+			v := screentest.Downsample(render(theme.Default()), colorprofile.Ascii)
+			if screentest.HasColor(v) {
+				t.Errorf("NO_COLOR view contains colors: %q", v)
 			}
 			if ansi.Strip(v) != first {
 				t.Errorf("NO_COLOR view differs from the plain golden:\n%s", v)

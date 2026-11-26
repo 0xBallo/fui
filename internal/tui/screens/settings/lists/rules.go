@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/0xballo/fui/internal/app/rules"
 	"github.com/0xballo/fui/internal/domain"
@@ -161,13 +161,13 @@ func (m *Rules) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	case screens.ErrorMsg:
 		m.err = msg.Err
 		return m, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
 	return m, nil
 }
 
-func (m *Rules) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Rules) handleKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch m.mode {
 	case rulesForm:
 		return m.handleFormKey(msg)
@@ -193,7 +193,7 @@ func (m *Rules) applyLoaded(msg rulesLoadedMsg) {
 	m.mode = rulesList
 }
 
-func (m *Rules) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Rules) handleListKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.km.Up):
 		m.table.MoveUp(1)
@@ -215,7 +215,7 @@ func (m *Rules) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Rules) handleConfirmKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Rules) handleConfirmKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	yes, no := m.confirm.HandleKey(msg)
 	switch {
 	case yes:

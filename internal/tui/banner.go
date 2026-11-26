@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"os"
 	"regexp"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/0xballo/fui/internal/tui/theme"
 )
@@ -45,10 +47,10 @@ func formatVersion(v string) string {
 // authorLink renders the author name as an OSC 8 hyperlink; on terminals without color support
 // (and under the no-color theme) it stays plain text so escape sequences never leak into output.
 func authorLink() string {
-	if lipgloss.DefaultRenderer().ColorProfile() == termenv.Ascii {
+	if colorprofile.Detect(os.Stdout, os.Environ()) <= colorprofile.Ascii {
 		return authorName
 	}
-	return termenv.Hyperlink(authorURL, authorName)
+	return ansi.SetHyperlink(authorURL) + authorName + ansi.ResetHyperlink()
 }
 
 // byline is the "vX.Y by 0xBallo" text.

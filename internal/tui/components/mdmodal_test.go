@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
-	"github.com/muesli/termenv"
 
 	"github.com/0xballo/fui/internal/tui/components"
+	"github.com/0xballo/fui/internal/tui/screens/screentest"
 	"github.com/0xballo/fui/internal/tui/theme"
 )
 
@@ -30,8 +30,8 @@ func longDoc() string {
 	return b.String()
 }
 
-func keyMsg(m components.MarkdownModal, k tea.KeyType) components.MarkdownModal {
-	m, _ = m.Update(tea.KeyMsg{Type: k})
+func keyMsg(m components.MarkdownModal, k rune) components.MarkdownModal {
+	m, _ = m.Update(tea.KeyPressMsg{Code: k})
 	return m
 }
 
@@ -72,28 +72,26 @@ func TestMarkdownModalScrollAndClose(t *testing.T) {
 		t.Error("esc did not close")
 	}
 	m.Open()
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	m, _ = m.Update(tea.KeyPressMsg{Code: 'i', Text: string('i')})
 	if m.IsOpen() {
 		t.Error("i did not close")
 	}
 }
 
 func TestMarkdownModalNoColorGolden(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	m := components.NewMarkdownModal(mdTheme(t, "terminal"), "# Heading\n\nSome **bold** text.\n\n- one\n- two\n")
 	m.SetSize(50, 16)
 	m.Open()
 	golden.RequireEqual(t, []byte(ansi.Strip(m.View())))
 }
 
-func TestMarkdownModalAsciiProfileHasNoEscapes(t *testing.T) {
-	prev := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.Ascii)
-	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
-
+func TestMarkdownModalNoColorHasNoColors(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	m := components.NewMarkdownModal(mdTheme(t, "mocha"), "# Heading\n\nSome **bold** `code`\n\n- one\n")
 	m.SetSize(50, 16)
 	m.Open()
-	if v := m.View(); strings.Contains(v, "\x1b") {
-		t.Errorf("view contains ANSI escapes under Ascii profile:\n%q", v)
+	if v := screentest.Downsample(m.View(), colorprofile.Ascii); screentest.HasColor(v) {
+		t.Errorf("view contains colors under NO_COLOR:\n%q", v)
 	}
 }

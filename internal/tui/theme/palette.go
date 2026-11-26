@@ -1,8 +1,10 @@
 package theme
 
 import (
+	"image/color"
+
+	"charm.land/lipgloss/v2"
 	catppuccingo "github.com/catppuccin/go"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // tokensFromFlavor maps the Catppuccin palette of f onto FUI's semantic Tokens, following the
@@ -11,7 +13,7 @@ import (
 // expense, Yellow/Red for warning and over, Peach/Teal for pending and reconciled, and the eight
 // named hues for chart series.
 func tokensFromFlavor(f catppuccingo.Flavor) Tokens {
-	c := func(col catppuccingo.Color) lipgloss.Color { return lipgloss.Color(col.Hex) }
+	c := func(col catppuccingo.Color) color.Color { return lipgloss.Color(col.Hex) }
 	return Tokens{
 		Base:      c(f.Base()),
 		Surface:   c(f.Surface0()),
@@ -66,7 +68,7 @@ func highContrastTheme(dark bool) Theme {
 	if dark {
 		f = catppuccingo.Mocha
 	}
-	c := func(col catppuccingo.Color) lipgloss.Color { return lipgloss.Color(col.Hex) }
+	c := func(col catppuccingo.Color) color.Color { return lipgloss.Color(col.Hex) }
 	t := Tokens{
 		Base:      c(f.Crust()),
 		Surface:   c(f.Mantle()),
@@ -110,7 +112,7 @@ func highContrastTheme(dark bool) Theme {
 // to the nearest ANSI color when the terminal profile requires it) and to check WCAG contrast
 // deterministically in tests.
 func terminalTokens() Tokens {
-	const (
+	var (
 		black   = lipgloss.Color("#000000")
 		red     = lipgloss.Color("#800000")
 		green   = lipgloss.Color("#008000")
@@ -126,7 +128,6 @@ func terminalTokens() Tokens {
 		brightYellow  = lipgloss.Color("#ffff00")
 		brightBlue    = lipgloss.Color("#0000ff")
 		brightMagenta = lipgloss.Color("#ff00ff")
-		brightCyan    = lipgloss.Color("#00ffff")
 		brightWhite   = lipgloss.Color("#ffffff")
 	)
 	return Tokens{
@@ -180,7 +181,7 @@ func Default() Theme {
 const softenRatio = 0.4
 
 // soften returns fg blended toward base, the lighter tone used for pending rows.
-func soften(fg, base lipgloss.Color) lipgloss.Color {
+func soften(fg, base color.Color) color.Color {
 	fr, fgc, fb := hexToRGB(fg)
 	br, bg, bb := hexToRGB(base)
 	return rgbToHex(blend(fr, br, softenRatio), blend(fgc, bg, softenRatio), blend(fb, bb, softenRatio))

@@ -7,9 +7,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -119,23 +118,19 @@ func TestRecentKeyAndEmpty(t *testing.T) {
 	if v := s.view(80); !strings.Contains(v, "no transactions in this period") {
 		t.Errorf("empty view = %q", v)
 	}
-	cmd, ok := s.update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	cmd, ok := s.update(tea.KeyPressMsg{Code: 't', Text: string('t')})
 	if !ok || cmd == nil {
 		t.Fatal("t not handled")
 	}
 	if got := cmd(); got != (screens.SwitchScreenMsg{Target: screens.TabTransactions}) {
 		t.Errorf("msg = %#v", got)
 	}
-	if _, ok := s.update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}); ok {
+	if _, ok := s.update(tea.KeyPressMsg{Code: 'x', Text: string('x')}); ok {
 		t.Error("x consumed")
 	}
 }
 
 func TestRecentNoRowLooksSelected(t *testing.T) {
-	prev := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
-
 	th := theme.Default()
 	s := loaded(t, []app.TxView{txView(t, -500, domain.StatusBooked, false), txView(t, 500, domain.StatusBooked, false)})
 	bg := lipgloss.NewStyle().Background(th.Selected.GetBackground()).Render("x")

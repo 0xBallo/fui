@@ -4,13 +4,13 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/exp/golden"
-	"github.com/muesli/termenv"
 
 	"github.com/0xballo/fui/internal/module"
 	"github.com/0xballo/fui/internal/tui/screens"
+	"github.com/0xballo/fui/internal/tui/screens/screentest"
 	"github.com/0xballo/fui/internal/tui/theme"
 )
 
@@ -18,19 +18,9 @@ type fixedDark struct{}
 
 func (fixedDark) Dark(time.Duration) (dark, ok bool) { return true, true }
 
-// pinProfile fixes lipgloss's color profile for the test: styles render against the shared
-// default renderer, whose profile is cached process-wide (see forceColorProfile in internal/tui).
-func pinProfile(t *testing.T, p termenv.Profile) {
-	t.Helper()
-	r := lipgloss.DefaultRenderer()
-	prev := r.ColorProfile()
-	r.SetColorProfile(p)
-	t.Cleanup(func() { r.SetColorProfile(prev) })
-}
-
 // goldenViews renders the three views added for the import review (details, module dialog, CSV
-// mapper) at 80x24 and diffs each against its golden file.
-func goldenViews(t *testing.T, th theme.Theme) {
+// mapper) at 80x24, converted to profile p, and diffs each against its golden file.
+func goldenViews(t *testing.T, th theme.Theme, p colorprofile.Profile) {
 	t.Helper()
 	_, _, scr := richPreview(t, th, &recordingModules{}, &recordingProfiles{})
 	scr, _ = sendKey(scr, tea.KeyTab)
@@ -38,14 +28,14 @@ func goldenViews(t *testing.T, th theme.Theme) {
 		scr, _ = sendRunes(scr, "j")
 	}
 	scr, _ = sendRunes(scr, "t")
-	t.Run("details", func(t *testing.T) { golden.RequireEqual(t, []byte(scr.View())) })
+	t.Run("details", func(t *testing.T) { golden.RequireEqual(t, []byte(screentest.Downsample(scr.View(), p))) })
 
 	scr, _ = sendRunes(scr, "m")
 	scr, _ = sendRunes(scr, " ")
-	t.Run("modules", func(t *testing.T) { golden.RequireEqual(t, []byte(scr.View())) })
+	t.Run("modules", func(t *testing.T) { golden.RequireEqual(t, []byte(screentest.Downsample(scr.View(), p))) })
 
 	scr = csvMapperScreen(t, th)
-	t.Run("csvmap", func(t *testing.T) { golden.RequireEqual(t, []byte(scr.View())) })
+	t.Run("csvmap", func(t *testing.T) { golden.RequireEqual(t, []byte(screentest.Downsample(scr.View(), p))) })
 }
 
 func csvMapperScreen(t *testing.T, th theme.Theme) screens.Screen {
@@ -60,19 +50,17 @@ func csvMapperScreen(t *testing.T, th theme.Theme) screens.Screen {
 	scr, _ = sendRunes(scr, "n")
 	scr, _ = sendKey(scr, tea.KeyEnter)
 	scr, _ = sendRunes(scr, "bank.csv")
-	scr, cmd := sendKey(scr, tea.KeyCtrlP)
+	scr, cmd := scr.Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
 	return run(t, scr, cmd)
 }
 
 func TestImportGoldens(t *testing.T) {
 	for _, name := range []string{"latte", "mocha", "terminal", "high-contrast"} {
 		t.Run(name, func(t *testing.T) {
-			pinProfile(t, termenv.TrueColor)
-			goldenViews(t, theme.Resolve(theme.Config{Theme: name}, fixedDark{}))
+			goldenViews(t, theme.Resolve(theme.Config{Theme: name}, fixedDark{}), colorprofile.TrueColor)
 		})
 	}
 	t.Run("no-color", func(t *testing.T) {
-		pinProfile(t, termenv.Ascii)
-		goldenViews(t, theme.Resolve(theme.Config{Theme: "mocha"}, fixedDark{}))
+		goldenViews(t, theme.Resolve(theme.Config{Theme: "mocha"}, fixedDark{}), colorprofile.Ascii)
 	})
 }

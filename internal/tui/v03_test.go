@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/investing"
@@ -110,9 +110,9 @@ func newV03Root(t *testing.T, cfg tui.Config) tea.Model {
 // press types keys on the active screen and runs the commands they return.
 func press(m tea.Model, keys ...string) tea.Model {
 	for _, k := range keys {
-		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)}
+		msg := tea.KeyPressMsg{Code: []rune(k)[0], Text: k}
 		if k == "enter" {
-			msg = tea.KeyMsg{Type: tea.KeyEnter}
+			msg = tea.KeyPressMsg{Code: tea.KeyEnter}
 		}
 		var cmd tea.Cmd
 		m, cmd = m.Update(msg)
@@ -145,7 +145,7 @@ func TestV03FeaturesFollowModules(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			m := press(newV03Root(t, v03Config(tc.mods...)), tc.keys...)
-			view := m.View()
+			view := plainView(m)
 			for _, s := range tc.want {
 				if !strings.Contains(view, s) {
 					t.Errorf("missing %q in:\n%s", s, view)

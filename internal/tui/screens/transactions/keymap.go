@@ -1,7 +1,7 @@
 // Package transactions provides the register view for inspecting, searching and managing transactions.
 package transactions
 
-import "github.com/charmbracelet/bubbles/key"
+import "charm.land/bubbles/v2/key"
 
 // KeyMap defines the keyboard shortcuts for the transactions screen.
 type KeyMap struct {
@@ -48,7 +48,7 @@ func DefaultKeyMap() KeyMap {
 		Delete:      bind("d", "delete", "d"),
 		Filter:      bind("f", "filter", "f"),
 		Search:      bind("/", "search", "/"),
-		Select:      bind("space", "select", " "),
+		Select:      bind("space", "select", "space"),
 		Split:       bind("s", "split", "s"),
 		Tags:        bind("t", "tags", "t"),
 		Categorize:  bind("c", "bulk categorize", "c"),

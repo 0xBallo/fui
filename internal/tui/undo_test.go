@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
-	"github.com/charmbracelet/x/exp/teatest"
-	"github.com/muesli/termenv"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -38,7 +38,7 @@ func finalView(t *testing.T, tm *teatest.TestModel) string {
 	if err := tm.Quit(); err != nil {
 		t.Fatalf("Quit: %v", err)
 	}
-	return tm.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)).View()
+	return tm.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)).View().Content
 }
 
 func TestUndoNothingToUndo(t *testing.T) {
@@ -63,7 +63,7 @@ func TestUndoConfirmApplies(t *testing.T) {
 	waitFor(t, tm, "booked")
 	tm.Type("u")
 	waitFor(t, tm, "Undo tx.add")
-	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
 	waitFor(t, tm, "Undone tx.add")
 	_ = finalView(t, tm)
 
@@ -77,7 +77,7 @@ func TestUndoEscCancels(t *testing.T) {
 	tm := undoModel(t, fx, "mocha")
 	tm.Type("u")
 	waitFor(t, tm, "Undo tx.add")
-	tm.Send(tea.KeyMsg{Type: tea.KeyEsc})
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if v := ansi.Strip(finalView(t, tm)); strings.Contains(v, "y/enter yes") || strings.Contains(v, "Undone") {
 		t.Errorf("modal still open or applied after esc:\n%s", v)
 	}
@@ -106,36 +106,31 @@ func TestUndoListedInHelp(t *testing.T) {
 	}
 }
 
-// undoModalSnapshot opens the undo confirmation and diffs the raw 80x24 frame.
-func undoModalSnapshot(t *testing.T, theme string) {
+// undoModalSnapshot opens the undo confirmation and diffs the 80x24 frame converted to profile p.
+func undoModalSnapshot(t *testing.T, theme string, p colorprofile.Profile) {
 	t.Helper()
 	tm := undoModel(t, newSnapshotFixture(t), theme)
 	tm.Type("u")
 	waitFor(t, tm, "y/enter yes")
-	golden.RequireEqual(t, []byte(finalView(t, tm)))
+	golden.RequireEqual(t, []byte(screentest.Downsample(finalView(t, tm), p)))
 }
 
 func TestUndoModalSnapshotLatte(t *testing.T) {
-	forceColorProfile(t, termenv.TrueColor)
-	undoModalSnapshot(t, "latte")
+	undoModalSnapshot(t, "latte", colorprofile.TrueColor)
 }
 
 func TestUndoModalSnapshotMocha(t *testing.T) {
-	forceColorProfile(t, termenv.TrueColor)
-	undoModalSnapshot(t, "mocha")
+	undoModalSnapshot(t, "mocha", colorprofile.TrueColor)
 }
 
 func TestUndoModalSnapshotTerminal(t *testing.T) {
-	forceColorProfile(t, termenv.TrueColor)
-	undoModalSnapshot(t, "terminal")
+	undoModalSnapshot(t, "terminal", colorprofile.TrueColor)
 }
 
 func TestUndoModalSnapshotHighContrast(t *testing.T) {
-	forceColorProfile(t, termenv.TrueColor)
-	undoModalSnapshot(t, "high-contrast")
+	undoModalSnapshot(t, "high-contrast", colorprofile.TrueColor)
 }
 
 func TestUndoModalSnapshotNoColor(t *testing.T) {
-	forceColorProfile(t, termenv.Ascii)
-	undoModalSnapshot(t, "mocha")
+	undoModalSnapshot(t, "mocha", colorprofile.Ascii)
 }

@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
-	"github.com/charmbracelet/x/exp/teatest"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -58,7 +58,7 @@ func snapshot(t *testing.T, keys, wait string) {
 	// Snapshot the final view, not the output stream: the renderer coalesces frames on a timer,
 	// so which intermediate frames reach the stream varies run to run.
 	final := tm.FinalModel(t, teatest.WithFinalTimeout(3*time.Second))
-	golden.RequireEqual(t, []byte(ansi.Strip(final.View())))
+	golden.RequireEqual(t, []byte(ansi.Strip(final.View().Content)))
 }
 
 func TestDashboardSnapshot(t *testing.T) {

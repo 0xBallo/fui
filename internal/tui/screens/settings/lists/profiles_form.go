@@ -1,7 +1,7 @@
 package lists
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/tui/components"
 	"github.com/0xballo/fui/internal/tui/screens"
@@ -64,7 +64,7 @@ func (m *Profiles) prefillFormFields(cur *Profile) {
 	f.targetAccount.SetValue(cur.TargetAccount)
 }
 
-func (m *Profiles) handleFormKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Profiles) handleFormKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.mode = profilesListMode

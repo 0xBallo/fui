@@ -3,9 +3,9 @@ package components
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	"charm.land/lipgloss/v2"
 
 	"github.com/0xballo/fui/internal/tui/theme"
 )
@@ -32,7 +32,9 @@ func NewHelpBar(th theme.Theme) HelpBar {
 // SetWidth sets the width the collapsed line is truncated to.
 func (h *HelpBar) SetWidth(w int) {
 	h.width = w
-	h.help.Width = w
+	// bubbles v2 adds the trailing ellipsis only when it ends strictly inside the width; one extra
+	// column keeps it on a line that fills the width exactly, as before. Root cuts any overflow.
+	h.help.SetWidth(w + 1)
 }
 
 // Toggle switches between collapsed and expanded.

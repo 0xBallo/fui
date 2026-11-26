@@ -3,7 +3,7 @@ package budget
 import (
 	"context"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app/budgeting"
 	"github.com/0xballo/fui/internal/domain"
@@ -63,7 +63,7 @@ func (m *Model) otherEnvelopeNames(exclude string) []string {
 	return out
 }
 
-func (m *Model) handleFormKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleFormKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	if m.mode == modeNewForm || m.mode == modeEditForm {
 		if handled, cmd := m.handlePickerKey(msg); handled {
 			return m, cmd

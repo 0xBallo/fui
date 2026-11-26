@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/0xballo/fui/internal/app"
@@ -248,13 +248,13 @@ func (s *alertsSection) update(msg tea.Msg) (tea.Cmd, bool) {
 		return nil, true
 	case insightDoneMsg:
 		return tea.Batch(s.loadInsights(), func() tea.Msg { return screens.StatusMsg{Text: msg.status} }), true
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return s.handleKey(msg)
 	}
 	return nil, false
 }
 
-func (s *alertsSection) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+func (s *alertsSection) handleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	if !s.focused {
 		if key.Matches(msg, s.km.Focus) && len(s.entries) > 0 {
 			s.focused = true
@@ -314,8 +314,9 @@ func (s *alertsSection) view(width int) string {
 	if more := len(s.entries) - end; more > 0 {
 		lines = append(lines, s.th.Muted.Render(fmt.Sprintf("(+%d more)", more)))
 	}
+	// lipgloss v2 widths include the border.
 	return s.th.Header.Render("Alerts") + "\n" +
-		s.th.Border.Width(max(1, width-2)).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+		s.th.Border.Width(max(1, width-2)+s.th.Border.GetHorizontalBorderSize()).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 }
 
 // entryLine renders "icon level text"; the level word keeps the meaning without colour.

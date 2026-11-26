@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/term"
 )
 
@@ -24,16 +23,18 @@ type Detector interface {
 	Dark(timeout time.Duration) (dark, ok bool)
 }
 
-// LipglossDetector reuses the background lipgloss detects once at startup (bubbletea's init queries
-// OSC 11 through termenv, falling back to COLORFGBG, then dark). A second live OSC 11 query must
-// not run: on an unanswered query its stdin reader outlives the timeout and steals keystrokes from
-// the TUI.
-type LipglossDetector struct{}
-
-// Dark implements Detector; the answer is always ok because termenv already applied the fallbacks.
-func (LipglossDetector) Dark(time.Duration) (dark, ok bool) {
-	return lipgloss.HasDarkBackground(), true
+// KnownBackground reports the background Bubble Tea delivered with tea.BackgroundColorMsg (its
+// own OSC 11 query, read by the program's input loop). Until the terminal answers Known is false,
+// so Resolve falls back to COLORFGBG, then dark. A live OSC 11 query of our own must not run while
+// the program owns stdin: on an unanswered query its reader outlives the timeout and steals
+// keystrokes from the TUI.
+type KnownBackground struct {
+	Known  bool
+	IsDark bool
 }
+
+// Dark implements Detector.
+func (b KnownBackground) Dark(time.Duration) (dark, ok bool) { return b.IsDark, b.Known }
 
 // OSCDetector queries the real terminal's background color with the OSC 11 escape sequence,
 // writing the query to Out and reading the reply from In. A zero OSCDetector uses os.Stdin and

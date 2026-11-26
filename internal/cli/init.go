@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/charmbracelet/huh"
+	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/0xballo/fui/internal/cli/render"

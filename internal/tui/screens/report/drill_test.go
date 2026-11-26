@@ -6,17 +6,17 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
 	"github.com/google/go-cmp/cmp"
-	"github.com/muesli/termenv"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
 	scr "github.com/0xballo/fui/internal/tui/screens"
 	"github.com/0xballo/fui/internal/tui/screens/report"
+	"github.com/0xballo/fui/internal/tui/screens/screentest"
 	"github.com/0xballo/fui/internal/tui/theme"
 )
 
@@ -267,9 +267,6 @@ func TestSaveSpendingStoresGroupBy(t *testing.T) {
 }
 
 func TestGroupedReportGoldens(t *testing.T) {
-	prev := lipgloss.ColorProfile()
-	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
-
 	cases := []struct {
 		name string
 		left int
@@ -291,7 +288,6 @@ func TestGroupedReportGoldens(t *testing.T) {
 				}
 				return s.View()
 			}
-			lipgloss.SetColorProfile(termenv.TrueColor)
 			var first string
 			for _, name := range themes {
 				plain := ansi.Strip(render(theme.Resolve(theme.Config{Theme: name}, nil)))
@@ -303,14 +299,14 @@ func TestGroupedReportGoldens(t *testing.T) {
 			}
 			golden.RequireEqual(t, []byte(first))
 
-			lipgloss.SetColorProfile(termenv.Ascii)
-			v := render(theme.Default())
-			if strings.Contains(v, "\x1b") {
-				t.Errorf("NO_COLOR view contains escape codes: %q", v)
+			t.Setenv("NO_COLOR", "1")
+			v := screentest.Downsample(render(theme.Default()), colorprofile.Ascii)
+			if screentest.HasColor(v) {
+				t.Errorf("NO_COLOR view contains colors: %q", v)
 			}
 			if c.keys != "" {
 				// The help overlay falls back to raw markdown without color, so it has its own golden.
-				t.Run("NoColor", func(t *testing.T) { golden.RequireEqual(t, []byte(v)) })
+				t.Run("NoColor", func(t *testing.T) { golden.RequireEqual(t, []byte(ansi.Strip(v))) })
 				return
 			}
 			if ansi.Strip(v) != first {

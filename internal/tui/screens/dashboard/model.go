@@ -5,10 +5,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -76,7 +76,7 @@ func New(uc UseCases, loc domain.Locale, th theme.Theme, monthStartDay int) *Mod
 	}
 	m := &Model{
 		uc: uc, loc: loc, th: th, km: DefaultKeyMap(), monthStartDay: monthStartDay,
-		cycle: domain.CycleMonth, vp: viewport.New(0, 0),
+		cycle: domain.CycleMonth, vp: viewport.New(),
 	}
 	m.nw = &netWorthSection{uc: uc, loc: loc, th: th}
 	m.al = newAlertsSection(loc, th)
@@ -90,8 +90,8 @@ func (m *Model) Init() tea.Cmd { return m.loadBase() }
 // SetSize adapts the panels to the available terminal size.
 func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h
-	m.vp.Width = w
-	m.vp.Height = max(1, h-2)
+	m.vp.SetWidth(w)
+	m.vp.SetHeight(max(1, h-2))
 }
 
 // Title identifies the screen in the tab bar.
@@ -181,7 +181,7 @@ func (m *Model) atCurrent() bool {
 
 // Update advances the screen state; it performs no I/O itself.
 func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
-	if _, isKey := msg.(tea.KeyMsg); !isKey {
+	if _, isKey := msg.(tea.KeyPressMsg); !isKey {
 		for _, s := range m.sections {
 			if cmd, ok := s.update(msg); ok {
 				return m, cmd
@@ -198,13 +198,13 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 			m.anchor = msg.today
 		}
 		return m, m.recompute()
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
 	return m, nil
 }
 
-func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	if m.mode == modeForm {
 		return m.handleFormKey(msg)
 	}

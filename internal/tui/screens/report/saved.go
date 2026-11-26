@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/tui/components"
@@ -40,7 +40,7 @@ func (m *Model) refreshSavedTable() {
 	m.savedTable.SetRows(rows)
 }
 
-func (m *Model) handleSavedKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleSavedKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.km.Up):
 		m.savedTable.MoveUp(1)
@@ -99,7 +99,7 @@ func (m *Model) openRemoveConfirm() {
 	m.mode = modeConfirmRemove
 }
 
-func (m *Model) handleConfirmKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleConfirmKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	yes, no := m.confirm.HandleKey(msg)
 	switch {
 	case yes:

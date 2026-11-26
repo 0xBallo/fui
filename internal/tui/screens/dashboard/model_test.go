@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
 
@@ -44,12 +44,12 @@ func run(t *testing.T, scr screens.Screen, cmd tea.Cmd) screens.Screen {
 	return run(t, scr, next)
 }
 
-func sendKey(scr screens.Screen, k tea.KeyType) (screens.Screen, tea.Cmd) {
-	return scr.Update(tea.KeyMsg{Type: k})
+func sendKey(scr screens.Screen, k rune) (screens.Screen, tea.Cmd) {
+	return scr.Update(tea.KeyPressMsg{Code: k})
 }
 
 func sendRunes(scr screens.Screen, s string) (screens.Screen, tea.Cmd) {
-	return scr.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)})
+	return scr.Update(tea.KeyPressMsg{Code: []rune(s)[0], Text: s})
 }
 
 func newFixture(t *testing.T) (screentest.Fixture, screens.Screen) {

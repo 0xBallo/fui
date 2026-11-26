@@ -1,6 +1,6 @@
 package lists
 
-import "github.com/charmbracelet/bubbles/key"
+import "charm.land/bubbles/v2/key"
 
 // KeyMap defines the keyboard shortcuts shared by every CRUD list sub-view: browsing, adding,
 // editing and removing an entry, plus Test (rules only, ignored elsewhere).

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
 	"github.com/google/go-cmp/cmp"
@@ -128,7 +128,7 @@ func simScreen(t *testing.T, uc report.SimUseCases) scr.Screen {
 
 // drive feeds a key to s and runs the resulting commands, returning the screen and any status or
 // error text the screen emitted.
-func drive(t *testing.T, s scr.Screen, k tea.KeyMsg) (scr.Screen, string) {
+func drive(t *testing.T, s scr.Screen, k tea.KeyPressMsg) (scr.Screen, string) {
 	t.Helper()
 	var note string
 	var walk func(cmd tea.Cmd)
@@ -161,16 +161,16 @@ func keys(t *testing.T, s scr.Screen, in ...string) (scr.Screen, string) {
 	t.Helper()
 	var note string
 	for _, k := range in {
-		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)}
+		msg := tea.KeyPressMsg{Code: []rune(k)[0], Text: k}
 		switch k {
 		case "enter":
-			msg = tea.KeyMsg{Type: tea.KeyEnter}
+			msg = tea.KeyPressMsg{Code: tea.KeyEnter}
 		case "esc":
-			msg = tea.KeyMsg{Type: tea.KeyEsc}
+			msg = tea.KeyPressMsg{Code: tea.KeyEsc}
 		case "space":
-			msg = tea.KeyMsg{Type: tea.KeySpace, Runes: []rune(" ")}
+			msg = tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
 		case "down":
-			msg = tea.KeyMsg{Type: tea.KeyDown}
+			msg = tea.KeyPressMsg{Code: tea.KeyDown}
 		}
 		s, note = drive(t, s, msg)
 	}

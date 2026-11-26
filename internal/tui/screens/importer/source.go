@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/tui/components"
@@ -37,7 +37,7 @@ func connectorNames(cs []importing.ConnectorInfo) []string {
 	return names
 }
 
-func (m *Model) handleSourceKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleSourceKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.mode = modeIdle

@@ -6,8 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -109,7 +109,7 @@ func loadAccountTx(
 	}
 }
 
-func (m *Model) handleReconcilePreviewKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleReconcilePreviewKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch {
 	case msg.String() == "esc":
 		m.mode = m.reconcileBackMode

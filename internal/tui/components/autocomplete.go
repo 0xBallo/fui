@@ -3,9 +3,9 @@ package components
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/0xballo/fui/internal/tui/theme"
 )
@@ -77,7 +77,7 @@ func (a *Autocomplete) DropdownOpen() bool {
 
 // Update processes key events, navigating suggestion popups when open.
 func (a *Autocomplete) Update(msg tea.Msg) (Autocomplete, tea.Cmd) {
-	if keyMsg, ok := msg.(tea.KeyMsg); ok && a.input.Focused() {
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok && a.input.Focused() {
 		switch keyMsg.String() {
 		case "down", "tab":
 			if len(a.filtered) > 0 {

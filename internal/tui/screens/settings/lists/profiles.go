@@ -3,9 +3,9 @@ package lists
 import (
 	"fmt"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/0xballo/fui/internal/tui/components"
 	"github.com/0xballo/fui/internal/tui/screens"
@@ -108,13 +108,13 @@ func (m *Profiles) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	case screens.ErrorMsg:
 		m.err = msg.Err
 		return m, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
 	return m, nil
 }
 
-func (m *Profiles) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Profiles) handleKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch m.mode {
 	case profilesForm:
 		return m.handleFormKey(msg)
@@ -126,7 +126,7 @@ func (m *Profiles) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	return m.handleListKey(msg)
 }
 
-func (m *Profiles) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Profiles) handleListKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.km.Up):
 		m.table.MoveUp(1)
@@ -149,7 +149,7 @@ func (m *Profiles) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Profiles) handleConfirmKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Profiles) handleConfirmKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	yes, no := m.confirm.HandleKey(msg)
 	switch {
 	case yes:

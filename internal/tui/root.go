@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/0xballo/fui/internal/app"
@@ -115,6 +115,9 @@ type Root struct {
 	loc domain.Locale
 	th  theme.Theme
 	km  KeyMap
+	// bg is the terminal background Bubble Tea reported, used by the "auto" and "high-contrast"
+	// themes.
+	bg theme.KnownBackground
 
 	// tabs is indexed by screens.ID; a nil entry is a screen that is not routed (module disabled
 	// or no use cases wired) and renders as a disabled tab.
@@ -189,7 +192,7 @@ func (r *Root) undone(msg undoneMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleUndoKey resolves the open undo confirmation; every other key is swallowed.
-func (r *Root) handleUndoKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (r *Root) handleUndoKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	yes, _ := r.undo.HandleKey(msg)
 	if yes {
 		return r, r.applyUndo(r.undoPlan)
@@ -200,8 +203,8 @@ func (r *Root) handleUndoKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 var _ tea.Model = (*Root)(nil)
 
 // New builds Root over uc, the MVP screens, and cfg. Locale defaults to en-US and Theme to
-// "auto" when unset; "auto" and "high-contrast" detect the terminal's background with
-// theme.LipglossDetector (OSC 11, falling back to COLORFGBG, then assuming a dark background).
+// "auto" when unset; "auto" and "high-contrast" start from COLORFGBG (else a dark background) and
+// switch once the terminal answers the OSC 11 query sent by Init.
 func New(uc UseCases, cfg Config) *Root {
 	if cfg.Locale == "" {
 		cfg.Locale = domain.LocaleENUS
@@ -220,7 +223,7 @@ func (r *Root) rebuild() {
 	r.loc = cfg.Locale
 	r.th = theme.Resolve(theme.Config{
 		Theme: cfg.Theme, ThemeLight: cfg.ThemeLight, ThemeDark: cfg.ThemeDark,
-	}, theme.LipglossDetector{})
+	}, r.bg)
 	r.tabs = [len(tabNames)]screens.Screen{}
 	r.tabs[screens.TabDashboard] = r.newDashboard()
 	r.tabs[screens.TabTransactions] = r.newTransactions()
@@ -350,17 +353,20 @@ func (r *Root) resize() {
 	}
 }
 
-// Run starts the program full screen (the alternate screen, so the shell is restored on exit) and
-// with mouse reporting, over uc and cfg and blocks until the user quits or ctx is cancelled.
+// Run starts the program over uc and cfg (full screen and with mouse reporting, see View) and
+// blocks until the user quits or ctx is cancelled.
 func Run(ctx context.Context, uc UseCases, cfg Config) error {
-	if _, err := tea.NewProgram(New(uc, cfg), tea.WithContext(ctx), tea.WithAltScreen(), tea.WithMouseCellMotion()).Run(); err != nil {
+	if _, err := tea.NewProgram(New(uc, cfg), tea.WithContext(ctx)).Run(); err != nil {
 		return fmt.Errorf("run tui: %w", err)
 	}
 	return nil
 }
 
-// Init loads the data of the initially active screen (the dashboard).
-func (r *Root) Init() tea.Cmd { return r.tabs[r.active].Init() }
+// Init loads the data of the initially active screen (the dashboard) and asks the terminal for its
+// background color.
+func (r *Root) Init() tea.Cmd {
+	return tea.Batch(tea.RequestBackgroundColor, r.tabs[r.active].Init())
+}
 
 // Update advances the router state and, unless a global binding consumes the key, forwards the
 // message to the active screen.
@@ -370,6 +376,8 @@ func (r *Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		r.width, r.height = msg.Width, msg.Height
 		r.resize()
 		return r, nil
+	case tea.BackgroundColorMsg:
+		return r.setBackground(msg.IsDark())
 	case settings.ModulesChangedMsg:
 		r.cfg.Modules = msg.Enabled
 		r.rebuild()
@@ -395,7 +403,7 @@ func (r *Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return r.undoPlanned(msg)
 	case undoneMsg:
 		return r.undone(msg)
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return r.handleKey(msg)
 	case tea.MouseMsg:
 		return r.handleMouse(msg)
@@ -403,7 +411,7 @@ func (r *Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return r.forward(msg)
 }
 
-func (r *Root) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (r *Root) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if r.undo.Visible() {
 		return r.handleUndoKey(msg)
 	}
@@ -488,9 +496,18 @@ func (r *Root) forward(msg tea.Msg) (tea.Model, tea.Cmd) {
 // for tests that check no screen rebinds a key Root already uses globally.
 func (r *Root) ActiveKeyMap() []key.Binding { return r.tabs[r.active].KeyMap() }
 
-// View renders the tab bar, the active screen, and the status bar, or just a warning below the
+// View renders the program full screen (the alternate screen, so the shell is restored on exit)
+// with mouse reporting.
+func (r *Root) View() tea.View {
+	v := tea.NewView(r.render())
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	return v
+}
+
+// render draws the tab bar, the active screen, and the status bar, or just a warning below the
 // minimum supported terminal size.
-func (r *Root) View() string {
+func (r *Root) render() string {
 	if r.width > 0 && (r.width < minWidth || r.height < minHeight) {
 		return r.th.Warning.Render(fmt.Sprintf(
 			"Terminal too small: %dx%d. FUI needs at least %dx%d.", r.width, r.height, minWidth, minHeight))
@@ -580,26 +597,53 @@ const tabBarRows = 3
 // the active screen. A click anywhere closes the help; a screen with an open form gets no mouse
 // input, as its fields are keyboard-only.
 func (r *Root) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	if msg.Action != tea.MouseActionPress {
-		return r, nil
-	}
-	switch {
-	case r.help.Expanded():
-		if msg.Button == tea.MouseButtonLeft {
-			r.help.Toggle()
-			r.resize()
+	m := msg.Mouse()
+	switch msg.(type) {
+	case tea.MouseClickMsg:
+		return r.handleClick(m)
+	case tea.MouseWheelMsg:
+		if r.help.Expanded() || r.undo.Visible() || r.tabs[r.active].InputActive() {
+			return r, nil
 		}
-	case r.undo.Visible(), r.tabs[r.active].InputActive():
-	case msg.Button == tea.MouseButtonLeft && msg.Y >= r.bannerHeight() && msg.Y < r.bannerHeight()+tabBarRows:
-		if id, ok := r.tabAt(msg.X); ok {
-			return r.switchTo(id)
+		if m.Button == tea.MouseWheelUp {
+			return r.forward(tea.KeyPressMsg{Code: tea.KeyUp})
 		}
-	case msg.Button == tea.MouseButtonWheelUp:
-		return r.forward(tea.KeyMsg{Type: tea.KeyUp})
-	case msg.Button == tea.MouseButtonWheelDown:
-		return r.forward(tea.KeyMsg{Type: tea.KeyDown})
+		if m.Button == tea.MouseWheelDown {
+			return r.forward(tea.KeyPressMsg{Code: tea.KeyDown})
+		}
 	}
 	return r, nil
+}
+
+// handleClick closes the help on a left click, or switches to the tab clicked in the tab bar.
+func (r *Root) handleClick(m tea.Mouse) (tea.Model, tea.Cmd) {
+	switch {
+	case m.Button != tea.MouseLeft:
+	case r.help.Expanded():
+		r.help.Toggle()
+		r.resize()
+	case r.undo.Visible(), r.tabs[r.active].InputActive():
+	case m.Y >= r.bannerHeight() && m.Y < r.bannerHeight()+tabBarRows:
+		if id, ok := r.tabAt(m.X); ok {
+			return r.switchTo(id)
+		}
+	}
+	return r, nil
+}
+
+// setBackground re-resolves the theme with the background the terminal reported. Screens are
+// rebuilt (and the active one reloaded) only when the theme actually changes, which happens at
+// most once, right after startup.
+func (r *Root) setBackground(dark bool) (tea.Model, tea.Cmd) {
+	r.bg = theme.KnownBackground{Known: true, IsDark: dark}
+	next := theme.Resolve(theme.Config{
+		Theme: r.cfg.Theme, ThemeLight: r.cfg.ThemeLight, ThemeDark: r.cfg.ThemeDark,
+	}, r.bg)
+	if next.Name == r.th.Name && next.Tokens.Base == r.th.Tokens.Base {
+		return r, nil
+	}
+	r.rebuild()
+	return r, r.tabs[r.active].Init()
 }
 
 func (r *Root) renderTabs(pad int, numbered bool) []string {

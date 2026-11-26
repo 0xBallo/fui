@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -103,7 +103,7 @@ func (m *Model) startEditForm(tx domain.Transaction, tags []string) {
 	m.form.Focus()
 }
 
-func (m *Model) handleFormKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleFormKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.mode = modeList
@@ -116,7 +116,7 @@ func (m *Model) handleFormKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 			m.form.Update(msg)
 			if m.tagsF.Focused() {
 				// Accepting a suggestion leaves the cursor where it was; the next token is typed at the end.
-				m.tagsF.Update(tea.KeyMsg{Type: tea.KeyEnd})
+				m.tagsF.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
 			}
 			return m, nil
 		}
@@ -163,7 +163,7 @@ func (m *Model) payeeName(id domain.PayeeID) string {
 // updateTagsField forwards a key to the Tags input. Autocomplete only matches the whole value, so
 // the suggestions are the known tags re-prefixed with the tokens already typed, which makes each
 // comma-separated token completable. Typing reopens the popup that accepting a suggestion closed.
-func (m *Model) updateTagsField(msg tea.KeyMsg) {
+func (m *Model) updateTagsField(msg tea.KeyPressMsg) {
 	switch msg.String() {
 	case "up", "down", "tab":
 	default:

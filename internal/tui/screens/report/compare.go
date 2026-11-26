@@ -4,9 +4,9 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/tui/components"
@@ -96,7 +96,7 @@ func (m *Model) runCompare() tea.Cmd {
 	}
 }
 
-func (m *Model) handleCompareKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleCompareKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	if m.cmp.formActive {
 		return m.handleCompareFormKey(msg)
 	}
@@ -133,7 +133,7 @@ func (m *Model) openCompareForm() {
 	c.form.Focus()
 }
 
-func (m *Model) handleCompareFormKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleCompareFormKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	c := &m.cmp
 	switch msg.String() {
 	case "esc":

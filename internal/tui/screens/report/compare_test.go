@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
-	"github.com/charmbracelet/x/exp/teatest"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -131,12 +131,12 @@ func (m *teaScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *teaScreen) View() string { return m.scr.View() }
+func (m *teaScreen) View() tea.View { return tea.NewView(m.scr.View()) }
 
 func TestCompareTeatest(t *testing.T) {
 	s := compareScreen(t, theme.Default())
 	tm := teatest.NewTestModel(t, &teaScreen{scr: s}, teatest.WithInitialTermSize(80, 24))
-	teatest.WaitFor(t, tm.Output(), func(b []byte) bool { return bytes.Contains(b, []byte("Net worth")) },
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool { return bytes.Contains(b, []byte("710.00")) },
 		teatest.WithDuration(15*time.Second))
 	tm.Type("c")
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool { return bytes.Contains(b, []byte("TOTAL")) },

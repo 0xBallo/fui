@@ -2,7 +2,7 @@
 
 Nov 12, 2026 · @Mattia Ballo
 
-**Versione 1.5** — 25 novembre 2026 · allineata alle FS 1.4, con la chiusura delle lacune v0.5, i temi Catppuccin della TUI, il git flow con `develop` e le librerie della TUI rinnovata; le modifiche rispetto alle versioni precedenti sono nella sezione Cronologia delle versioni
+**Versione 1.6** — 26 novembre 2026 · allineata alle FS 1.4, con la chiusura delle lacune v0.5, i temi Catppuccin della TUI, il git flow con `develop`, le librerie della TUI rinnovata e la migrazione a Bubble Tea v2; le modifiche rispetto alle versioni precedenti sono nella sezione Cronologia delle versioni
 
 ## Panoramica e principi tecnici
 
@@ -28,18 +28,18 @@ Lo stack resta quello deciso nelle FS (Go, Bubble Tea, SQLite senza cgo); attorn
 | --- | --- | --- |
 | Linguaggio | Go, ultima versione stabile, fissata con `toolchain` in `go.mod` | Build riproducibili; si supportano le ultime due minor |
 | CLI | `spf13/cobra` | Sottocomandi annidati, `--help` per comando, completamento bash, zsh e fish già incluso |
-| Prompt interattivi | `charmbracelet/huh` | Stesso ecosistema della TUI; usato solo se c'è un terminale e manca `--no-input` |
-| TUI | `charmbracelet/bubbletea`, `bubbles`, `lipgloss` (major v1) | Architettura Elm; liste, input, help, viewport, barre di avanzamento e keymap pronti; la migrazione a v2 è fuori perimetro (ADR 0019) |
-| Markdown nella TUI | `charmbracelet/glamour` (versione compatibile con Lip Gloss v1) | Finestre di spiegazione di Budget e Report scritte in markdown |
-| Grafici della TUI | `NimbleMarkets/ntcharts` (ramo per Bubble Tea v1) | Grafici a linee e serie temporali nei Report; le barre orizzontali restano un componente interno |
-| Selettore di date | `ethanefung/bubble-datepicker` | Scelta delle date nei filtri delle transazioni |
+| Prompt interattivi | `charm.land/huh/v2` | Stesso ecosistema della TUI; usato solo se c'è un terminale e manca `--no-input` |
+| TUI | `charm.land/bubbletea/v2`, `bubbles/v2`, `lipgloss/v2` | Architettura Elm; liste, input, help, viewport, barre di avanzamento e keymap pronti (ADR 0021) |
+| Markdown nella TUI | `charm.land/glamour/v2` | Finestre di spiegazione di Budget e Report scritte in markdown |
+| Grafici della TUI | `NimbleMarkets/ntcharts/v2` | Grafici a linee e serie temporali nei Report; le barre orizzontali restano un componente interno |
+| Selettore di date | Componente interno `components.DatePicker` | Scelta delle date nei filtri delle transazioni; nessuna libreria esterna ha una versione per Bubble Tea v2 (ADR 0021) |
 | Archivio | `modernc.org/sqlite` | SQLite in puro Go, `CGO_ENABLED=0`, cross-compilazione banale |
 | Query | `sqlc` (generazione da SQL) | Query scritte in SQL e verificate in fase di build; nessun ORM |
 | Migrazioni | `pressly/goose` con `embed.FS` | Migrazioni SQL numerate dentro il binario |
 | Configurazione | `pelletier/go-toml/v2` | Parser TOML rigoroso, decodifica in struct tipate |
 | Log | `log/slog` (stdlib) | Log strutturati, redazione dei dati sensibili tramite `LogValuer` |
 | Excel (connettore Widiba) | `xuri/excelize` | Lettura XLSX solo nel binario del connettore, non in `fui` |
-| Test | `testing`, `google/go-cmp`, `rogpeppe/go-internal/testscript`, `pgregory.net/rapid`, `charmbracelet/x/exp/teatest` | Unit, end-to-end CLI, property-based, snapshot della TUI |
+| Test | `testing`, `google/go-cmp`, `rogpeppe/go-internal/testscript`, `pgregory.net/rapid`, `charmbracelet/x/exp/teatest/v2` | Unit, end-to-end CLI, property-based, snapshot della TUI |
 | Qualità | `golangci-lint`, `gofumpt`, `govulncheck` | Lint, formattazione, vulnerabilità note |
 | Release | `goreleaser` | Binari firmati per Linux e macOS, checksum, SBOM |
 | Ricerca testuale | FTS5 di SQLite con tokenizer trigram + `golang.org/x/text` per la normalizzazione | Corrispondenza parziale senza distinzione di maiuscole e accenti entro 200 ms su 100.000 transazioni |
@@ -298,7 +298,7 @@ La TUI segue l'architettura Elm di Bubble Tea con una regola ferma: `Update` e `
 | `terminal` | Solo i 16 colori ANSI del terminale, come fallback per terminali senza truecolor o per chi preferisce il proprio schema |
 | `high-contrast` | Variante ad alto contrasto: sfondo `Crust`, testo `Text`, accenti saturi, scelta in automatico tra Latte e Mocha come per `auto` |
 
-**Rilevamento dello sfondo** — all'avvio la TUI interroga il colore di sfondo del terminale con la sequenza OSC 11, con un timeout di 100 ms per restare entro i 300 ms di apertura. Se il terminale non risponde, usa la variabile `COLORFGBG`; in mancanza di entrambi assume uno sfondo scuro. Se il terminale notifica un cambio di tema durante l'esecuzione, la TUI passa al flavor corrispondente senza riavvio.
+**Rilevamento dello sfondo** — all'avvio la TUI chiede il colore di sfondo del terminale con la sequenza OSC 11 (`tea.RequestBackgroundColor`) senza bloccare l'apertura. Finché il terminale non risponde usa la variabile `COLORFGBG` e, in mancanza, assume uno sfondo scuro; quando arriva la risposta (`tea.BackgroundColorMsg`) ricalcola il tema e ricostruisce le schermate solo se il tema cambia. Se il terminale notifica un cambio di tema durante l'esecuzione, la TUI passa al flavor corrispondente senza riavvio.
 
 **Token semantici** — i componenti non usano mai colori della palette direttamente: il pacchetto `internal/tui/theme` espone token con un significato, e ogni tema li mappa sui colori del proprio flavor.
 
@@ -316,7 +316,7 @@ La TUI segue l'architettura Elm di Bubble Tea con una regola ferma: `Update` e `
 | `IncomeSoft`, `ExpenseSoft` | Green e Red schiariti verso `Base` | Entrate e uscite non confermate (sempre con il simbolo di stato) |
 | `Chip` | Surface1 | Sfondo delle etichette dei tag |
 
-**Profondità di colore e `NO_COLOR`** — Lip Gloss riduce i colori esadecimali a 256 colori quando il terminale non supporta il truecolor; con soli 16 colori FUI passa al tema `terminal`. Con `NO_COLOR` impostato non si usano colori, qualunque sia il tema.
+**Profondità di colore e `NO_COLOR`** — Lip Gloss produce sempre colori pieni e Bubble Tea li riduce in uscita al profilo del terminale (256 colori quando manca il truecolor); con soli 16 colori FUI passa al tema `terminal`. Con `NO_COLOR` impostato non si usano colori, qualunque sia il tema.
 
 **Scelta del tema** — nella schermata Impostazioni una voce Aspetto elenca i temi con anteprima immediata; la scelta si salva in `theme` (oppure con `fui config set theme mocha`). Un tema scelto esplicitamente non viene mai sovrascritto dal rilevamento automatico.
 
@@ -623,9 +623,10 @@ Le decisioni architetturali si registrano come ADR in `docs/adr/NNNN-titolo.md` 
 | 0011 | Reset come ricostruzione in file temporaneo con rename atomico e backup escluso dalla rotazione |
 | 0012 | Temi della TUI dalla palette Catppuccin tramite token semantici; tema `auto` con rilevamento dello sfondo (OSC 11, poi `COLORFGBG`, poi scuro) |
 | 0013 | Git flow con `develop` (PREVIEW) e `main` (PROD), squash merge di feature e hotfix branch, hook `pre-commit` e tag di versione al rilascio |
-| 0019 | Librerie della TUI: Bubble Tea v1, glamour, ntcharts e bubble-datepicker; il resto con componenti Charm già presenti o interni |
+| 0019 | Librerie della TUI: Bubble Tea v1, glamour, ntcharts e bubble-datepicker; il resto con componenti Charm già presenti o interni (sostituito da 0021) |
 | 0016 | Annullamento esteso a ogni scrittura su transazioni (emendato in v0.5) |
 | 0020 | Decisioni P1–P16 della chiusura delle lacune v0.5 |
+| 0021 | Migrazione della TUI a Bubble Tea v2 e all'ecosistema `charm.land/*/v2`; selettore di date interno al posto di `bubble-datepicker` |
 
 **Da decidere**
 
@@ -638,9 +639,17 @@ Le decisioni architetturali si registrano come ADR in `docs/adr/NNNN-titolo.md` 
 - [ ] Verificare che il build di `modernc.org/sqlite` in uso includa FTS5 con il tokenizer trigram; in caso contrario ripiegare su `LIKE` sulla colonna normalizzata e misurare i 200 ms.
 - [ ] Confermare i nomi dei preset (`expense`, `full`, `custom`) e degli id dei moduli, che diventano parte del contratto della CLI.
 - [ ] Aggiornare le FS: la chiave `theme` ha ora valore predefinito `auto` con i flavor Catppuccin, mentre le FS 1.2 indicano che il tema segue i colori del terminale.
-- [ ] Verificare come la major di Bubble Tea scelta espone il colore di sfondo e la notifica del cambio di tema, che determinano l'implementazione del rilevamento.
+- [x] Verificare come la major di Bubble Tea scelta espone il colore di sfondo: Bubble Tea v2 lo restituisce con `tea.BackgroundColorMsg` in risposta a `tea.RequestBackgroundColor` (ADR 0021).
 
 ## Cronologia delle versioni
+
+**Versione 1.6** — 26 novembre 2026, migrazione a Bubble Tea v2
+
+| Sezione | Modifica |
+| --- | --- |
+| Stack e dipendenze | Ecosistema Charm alla major v2 (`charm.land/*/v2`, `ntcharts/v2`, `teatest/v2`); `bubble-datepicker` sostituito da un componente interno |
+| TUI | Rilevamento dello sfondo con `tea.BackgroundColorMsg` senza bloccare l'apertura; riduzione dei colori in uscita da parte di Bubble Tea |
+| Decisioni tecniche e punti aperti | ADR 0021 sostituisce ADR 0019; chiuso il punto sul rilevamento dello sfondo |
 
 **Versione 1.5** — 25 novembre 2026, chiusura delle lacune v0.5
 

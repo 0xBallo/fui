@@ -1,7 +1,7 @@
 package components
 
 import (
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/0xballo/fui/internal/tui/theme"
 )
@@ -11,5 +11,5 @@ import (
 // cannot composite layers, so the screen behind is replaced rather than shown dimmed.
 func Modal(th theme.Theme, w, h int, content string) string {
 	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, th.Dialog.Render(content),
-		lipgloss.WithWhitespaceChars("╱"), lipgloss.WithWhitespaceForeground(th.Tokens.Surface))
+		lipgloss.WithWhitespaceChars("╱"), lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Foreground(th.Tokens.Surface)))
 }
