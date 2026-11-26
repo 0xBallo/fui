@@ -7,6 +7,8 @@ All notable changes to FUI are listed here, newest first. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-26
+
 ### Added
 
 - Budget: annual periods with a suggested monthly quota, per-budget warning/over thresholds, `budget set` that
@@ -133,7 +135,8 @@ All notable changes to FUI are listed here, newest first. The format follows
 - TUI screens: Budget, Reports, Import and Settings (modules, theme, categories, tags, rules, recurrences, import
   profiles); dynamic shell completion of names.
 
-[Unreleased]: https://github.com/0xBallo/fui/compare/v0.4.0...develop
+[Unreleased]: https://github.com/0xBallo/fui/compare/v0.5.0...develop
+[0.5.0]: https://github.com/0xBallo/fui/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/0xBallo/fui/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/0xBallo/fui/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/0xBallo/fui/compare/v0.2...v0.2.1
