@@ -2,12 +2,16 @@ package importing
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/lending"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 )
 
 // ImportResult reports what ApplyImport wrote. Batch is the zero value when nothing was imported.
@@ -17,6 +21,8 @@ type ImportResult struct {
 	Accounts     int
 	Securities   int
 	SecurityOps  int
+	Loans        int // loans created
+	LoanVersions int // loan schedule versions stored
 	Categories   int
 	Payees       int
 	Tags         int
@@ -24,13 +30,38 @@ type ImportResult struct {
 	// RecurrencesConfirmed counts the rows that booked a pending transaction a recurrence
 	// created instead of inserting a new one (see recur.go); included in Transactions too.
 	RecurrencesConfirmed int
-	BackupPath           string
+	// InstallmentsConfirmed counts the rows that booked a pending loan installment and split it
+	// into principal transfer and interest (see recur.go); included in Transactions too.
+	InstallmentsConfirmed int
+	BackupPath            string
+	// Warnings lists what the apply skipped, e.g. records of modules left disabled.
+	Warnings []RowWarning
+}
+
+// ApplyOptions tunes ApplyImportWith.
+type ApplyOptions struct {
+	// AcceptTransfers accepts every transfer proposal of the plan.
+	AcceptTransfers bool
+	// EnableModules are enabled through the module use case before the import writes, so that
+	// the records of those modules are imported; the records of any other disabled module are
+	// skipped with a warning. Needs ModuleWriter.
+	EnableModules []module.ID
+	// Modules is the set enabled now; the zero value is none.
+	Modules module.Set
+	// ModuleWriter persists the enabled modules; the previous set is restored if the import fails.
+	ModuleWriter app.ModuleConfigWriter
 }
 
 // ApplyImport is step 8: a backup (reason "import"), then one transaction that creates the new
 // accounts and categories, the import batch and the included rows. A plan with unmapped
 // accounts cannot be applied, and one with no included row writes nothing.
 func (s *Service) ApplyImport(ctx context.Context, p ImportPlan) (ImportResult, error) {
+	return s.ApplyImportWith(ctx, p, ApplyOptions{})
+}
+
+// ApplyImportWith is ApplyImport with the user's choices on transfer proposals and on the
+// records of disabled modules.
+func (s *Service) ApplyImportWith(ctx context.Context, p ImportPlan, opts ApplyOptions) (ImportResult, error) {
 	if len(p.Unmapped) > 0 {
 		refs := make([]string, len(p.Unmapped))
 		for i, u := range p.Unmapped {
@@ -39,17 +70,32 @@ func (s *Service) ApplyImport(ctx context.Context, p ImportPlan) (ImportResult, 
 		return ImportResult{}, newError(ErrUnmappedAccounts, map[string]any{"refs": refs},
 			"accounts not mapped: %s", strings.Join(refs, ", "))
 	}
-	if p.Counts().Included == 0 {
-		return ImportResult{}, nil
+	if opts.AcceptTransfers {
+		p.Transfers = slices.Clone(p.Transfers)
+		for i := range p.Transfers {
+			p.Transfers[i].Accept = true
+		}
+	}
+	enable, err := s.planModules(ctx, opts)
+	if err != nil {
+		return ImportResult{}, err
+	}
+	if p.Counts().Included == 0 && !p.hasLoanWrites(opts.EnableModules) {
+		return ImportResult{Warnings: loanWarnings(p.ModuleRecords, opts.EnableModules)}, nil
 	}
 	path, err := s.backup.Backup(ctx, app.BackupReasonImport)
 	if err != nil {
 		return ImportResult{}, fmt.Errorf("backup before import: %w", err)
 	}
 	res := ImportResult{BackupPath: path}
+	if len(enable.Added) > 0 {
+		if err := app.New(s.store, s.clock, s.backup, app.Config{}).ApplyEnableModule(ctx, opts.ModuleWriter, enable); err != nil {
+			return ImportResult{}, fmt.Errorf("enable modules: %w", err)
+		}
+	}
 	err = s.store.WithTx(ctx, func(r app.Repos) error {
 		w := &writer{
-			r: r, p: p, now: s.clock.Now().UTC(),
+			r: r, p: p, now: s.clock.Now().UTC(), enabled: opts.EnableModules,
 			ids: map[string]domain.AccountID{}, cats: map[string]domain.CategoryID{},
 			payees: map[string]domain.PayeeID{}, tags: map[string]domain.TagID{},
 			sec: map[domain.SecurityID]domain.SecurityID{}, cash: map[string]domain.TransactionID{},
@@ -57,13 +103,55 @@ func (s *Service) ApplyImport(ctx context.Context, p ImportPlan) (ImportResult, 
 		return w.run(ctx, &res)
 	})
 	if err != nil {
-		return ImportResult{}, fmt.Errorf("apply import: %w", err)
+		err = fmt.Errorf("apply import: %w", err)
+		if len(enable.Added) > 0 {
+			// The configuration is not part of the database transaction: undo it by hand.
+			if rb := opts.ModuleWriter.SetModulesEnabled(ctx, enable.Before.IDs()); rb != nil {
+				err = errors.Join(err, fmt.Errorf("restore modules.enabled: %w", rb))
+			}
+		}
+		return ImportResult{}, err
 	}
+	res.Warnings = append(res.Warnings, loanWarnings(p.ModuleRecords, opts.EnableModules)...)
 	return res, nil
+}
+
+// loanWarnings reports the loan records skipped because the loans module stays off; security
+// operations warn row by row.
+func loanWarnings(records []ModuleRecords, enabled []module.ID) []RowWarning {
+	var out []RowWarning
+	for _, m := range records {
+		if m.Module != module.Loans || slices.Contains(enabled, m.Module) {
+			continue
+		}
+		for _, line := range m.Lines {
+			out = append(out, RowWarning{Line: line, Message: fmt.Sprintf("record of module %s not imported", m.Module)})
+		}
+	}
+	return out
+}
+
+// planModules plans enabling opts.EnableModules together, validating them before anything is
+// written. The returned plan adds nothing when no module has to be enabled.
+func (s *Service) planModules(ctx context.Context, opts ApplyOptions) (app.EnableModulePlan, error) {
+	uc := app.New(s.store, s.clock, s.backup, app.Config{})
+	plan := app.EnableModulePlan{Before: opts.Modules, After: opts.Modules}
+	for _, id := range opts.EnableModules {
+		next, err := uc.PlanEnableModule(ctx, plan.After, id)
+		if err != nil {
+			return app.EnableModulePlan{}, fmt.Errorf("enable module %q: %w", id, err)
+		}
+		plan.After, plan.Added = next.After, append(plan.Added, next.Added...)
+	}
+	if len(plan.Added) > 0 && opts.ModuleWriter == nil {
+		return app.EnableModulePlan{}, errors.New("enable modules: module config writer is required")
+	}
+	return plan, nil
 }
 
 // writer performs the writes of one ApplyImport inside its transaction.
 type writer struct {
+	enabled []module.ID // modules the import enables, for the gated security operations
 	r       app.Repos
 	p       ImportPlan
 	now     time.Time
@@ -95,13 +183,16 @@ func (w *writer) run(ctx context.Context, res *ImportResult) error {
 	if err := w.link(ctx, res); err != nil {
 		return err
 	}
+	if err := w.loans(ctx, res); err != nil {
+		return err
+	}
 	if err := w.importTransactions(ctx, res); err != nil {
 		return err
 	}
 	if err := w.securities(ctx, res); err != nil {
 		return err
 	}
-	return w.securityOps(ctx, res)
+	return w.securityOps(ctx, batch.ID, res)
 }
 
 func (w *writer) importTransactions(ctx context.Context, res *ImportResult) error {
@@ -116,6 +207,16 @@ func (w *writer) importTransactions(ctx context.Context, res *ImportResult) erro
 				return fmt.Errorf("confirm pending transaction of line %d: %w", row.Line, err)
 			}
 			res.RecurrencesConfirmed++
+			if row.ConfirmsInstallment {
+				plan, err := lending.ConfirmWithin(ctx, w.r, t.ID)
+				if err != nil {
+					return fmt.Errorf("confirm loan installment of line %d: %w", row.Line, err)
+				}
+				for _, msg := range plan.Warnings {
+					res.Warnings = append(res.Warnings, RowWarning{Line: row.Line, Message: msg})
+				}
+				res.InstallmentsConfirmed++
+			}
 		} else if t, err = w.r.Transactions().Insert(ctx, w.txs[i]); err != nil {
 			return fmt.Errorf("create transaction of line %d: %w", row.Line, err)
 		}
@@ -140,7 +241,19 @@ func (w *writer) importTransactions(ctx context.Context, res *ImportResult) erro
 }
 
 func (w *writer) securities(ctx context.Context, res *ImportResult) error {
+	// A security only wanted by operations of a module left disabled is not created.
+	gated, other := map[domain.SecurityID]bool{}, map[domain.SecurityID]bool{}
+	for _, row := range w.p.SecurityOps {
+		if row.Module != "" && !slices.Contains(w.enabled, row.Module) {
+			gated[row.Security.ID] = true
+		} else {
+			other[row.Security.ID] = true
+		}
+	}
 	for _, sec := range w.p.NewSecurities {
+		if gated[sec.ID] && !other[sec.ID] {
+			continue
+		}
 		inserted, err := w.r.Securities().Insert(ctx, sec)
 		if err != nil {
 			return fmt.Errorf("create security %q: %w", sec.Name, err)
@@ -151,12 +264,19 @@ func (w *writer) securities(ctx context.Context, res *ImportResult) error {
 	return nil
 }
 
-func (w *writer) securityOps(ctx context.Context, res *ImportResult) error {
+func (w *writer) securityOps(ctx context.Context, batch domain.ImportBatchID, res *ImportResult) error {
 	for _, row := range w.p.SecurityOps {
 		if !row.Include {
 			continue
 		}
+		if row.Module != "" && !slices.Contains(w.enabled, row.Module) {
+			res.Warnings = append(res.Warnings, RowWarning{
+				Line: row.Line, Message: fmt.Sprintf("security_op skipped: module %s is not enabled", row.Module),
+			})
+			continue
+		}
 		op := row.Op
+		op.ImportBatchID = batch
 		if op.Account < 0 {
 			op.Account = w.ids[row.AccountRef]
 		}

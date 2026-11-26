@@ -46,6 +46,44 @@ func contractBudgets(t *testing.T, f *fixture) {
 	})
 	budgetMoves(t, f, foodBudget.ID, tripBudget.ID)
 	budgetDeleteCascade(t, f, foodBudget.ID)
+	budgetPeriodRoundTrip(t, f, trip)
+}
+
+// budgetPeriodRoundTrip checks that period, non-default thresholds and a January override
+// survive Insert/Update/Get, and that a zero period is stored as monthly.
+func budgetPeriodRoundTrip(t *testing.T, f *fixture, trip domain.Tag) {
+	ctx := context.Background()
+	jan := domain.MonthKey{Year: 2026, Month: 1}
+	yearly := mustBudget(t, "Yearly", []domain.BudgetTarget{{TagID: trip.ID}})
+	yearly.Period = domain.BudgetYearly
+	yearly.Thresholds = domain.BudgetThresholds{Warn: 70, Over: 120}
+	yearly.Overrides = map[domain.MonthKey]domain.Money{jan: mustMoney(t, 120000)}
+	f.do(t, func(r app.Repos) error {
+		got, err := r.Budgets().Insert(ctx, yearly)
+		if err != nil {
+			t.Fatalf("Insert yearly: %v", err)
+		}
+		if got.Period != domain.BudgetYearly || got.Thresholds != yearly.Thresholds || got.Overrides[jan].Minor() != 120000 {
+			t.Errorf("Insert yearly = %+v, want yearly, 70/120 and the january override", got)
+		}
+		got.Period = ""
+		if err := r.Budgets().Update(ctx, got); err != nil {
+			t.Fatalf("Update zero period: %v", err)
+		}
+		back, err := r.Budgets().Get(ctx, got.ID)
+		if err != nil || back.Period != domain.BudgetMonthly {
+			t.Errorf("Get after zero-period Update = %+v, %v; want monthly", back, err)
+		}
+		got.Period = domain.BudgetYearly
+		if err := r.Budgets().Update(ctx, got); err != nil {
+			t.Fatalf("Update yearly: %v", err)
+		}
+		back, err = r.Budgets().Get(ctx, got.ID)
+		if err != nil || back.Period != domain.BudgetYearly || back.Thresholds != yearly.Thresholds || back.Overrides[jan].Minor() != 120000 {
+			t.Errorf("Get after Update = %+v, %v; want yearly, 70/120 and the january override", back, err)
+		}
+		return nil
+	})
 }
 
 // budgetFixtures inserts the categories and tag that the budgets below target.

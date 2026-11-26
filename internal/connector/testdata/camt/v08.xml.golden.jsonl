@@ -1,0 +1,9 @@
+{"type":"meta","protocol":"fui/1","connector":"camt","version":"0.1.0","source":{"file":"v08.xml","sha256":"d014433bed5dbf0b9414a49bf1e1e5df5c520cb0d20f0c48a832028cda0d2527"}}
+{"type":"account","ref":"IT60X0542811101000000123456","name":"IT60X0542811101000000123456","currency":"EUR","kind":"checking","iban":"IT60X0542811101000000123456"}
+{"type":"balance","account":"IT60X0542811101000000123456","date":"2026-02-28","amount":-9050}
+{"type":"transaction","account":"IT60X0542811101000000123456","id":"SVC-100#1","date":"2026-02-03","value_date":"2026-02-03","amount":-1000,"currency":"EUR","description":"Water bill","payee":"Water Utility","counterparty_iban":"DE89370400440532013000","status":"booked"}
+{"type":"transaction","account":"IT60X0542811101000000123456","id":"SVC-100#2","date":"2026-02-03","value_date":"2026-02-03","amount":-2000,"currency":"EUR","description":"Power bill","payee":"Power Utility","status":"booked"}
+{"type":"transaction","account":"IT60X0542811101000000123456","id":"camt-bf16ce6af48d2161","date":"2026-02-10","amount":-6050,"currency":"EUR","description":"Membership","payee":"Gym Club","status":"pending"}
+{"type":"transaction","account":"IT60X0542811101000000123456","id":"SVC-101","date":"2026-02-11","amount":500,"currency":"EUR","description":"Lunch","payee":"Friend","status":"booked"}
+{"type":"transaction","account":"IT60X0542811101000000123456","id":"SVC-102","date":"2026-03-01","amount":100,"currency":"EUR","description":"Interest","status":"booked"}
+{"type":"end","transactions":5,"errors":0}

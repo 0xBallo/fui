@@ -40,9 +40,10 @@ func (c *Config) Get(key string) (string, error) {
 		return strconv.Itoa(c.Backup.Keep), nil
 	case "connectors.timeout":
 		return c.Connectors.Timeout.String(), nil
-	case "forecast.horizon":
-		return strconv.Itoa(c.Forecast.Horizon), nil
 	default:
+		if v, ok := c.getForecast(key); ok {
+			return v, nil
+		}
 		if v, ok := c.getInsight(key); ok {
 			return v, nil
 		}
@@ -51,6 +52,16 @@ func (c *Config) Get(key string) (string, error) {
 		}
 		return "", fmt.Errorf("unknown configuration key: %q", key)
 	}
+}
+
+func (c *Config) getForecast(key string) (string, bool) {
+	switch key {
+	case "forecast.horizon":
+		return string(c.Forecast.Horizon), true
+	case "forecast.min_balance":
+		return c.Forecast.MinBalance, true
+	}
+	return "", false
 }
 
 func (c *Config) getProfileField(key string) (string, error) {
@@ -252,6 +263,10 @@ func (c *Config) setComplexField(key, value string) (bool, error) {
 	if key == "forecast.horizon" {
 		return c.setForecastHorizon(key, value)
 	}
+	if key == "forecast.min_balance" {
+		c.Forecast.MinBalance = strings.TrimSpace(value)
+		return true, nil
+	}
 	switch key {
 	case "backup.keep":
 		keep, err := strconv.Atoi(value)
@@ -301,14 +316,11 @@ func (c *Config) setBudgetMode(value string) (bool, error) {
 }
 
 func (c *Config) setForecastHorizon(key, value string) (bool, error) {
-	horizon, err := strconv.Atoi(value)
+	horizon, err := normalizeHorizon(key, value)
 	if err != nil {
-		return true, fmt.Errorf("invalid value for key %q: %q (expected integer)", key, value)
-	}
-	if err := validateForecastHorizon(horizon); err != nil {
 		return true, err
 	}
-	c.Forecast.Horizon = horizon
+	c.Forecast.Horizon = ForecastHorizon(horizon)
 	return true, nil
 }
 

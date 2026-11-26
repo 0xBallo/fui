@@ -8,11 +8,14 @@ import (
 	"strings"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/assetting"
+	"github.com/0xballo/fui/internal/app/lending"
 	"github.com/0xballo/fui/internal/app/recurring"
 	"github.com/0xballo/fui/internal/app/rules"
 	"github.com/0xballo/fui/internal/cli"
 	"github.com/0xballo/fui/internal/config"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 	"github.com/0xballo/fui/internal/tui/screens/settings"
 	"github.com/0xballo/fui/internal/tui/screens/settings/lists"
 )
@@ -137,5 +140,29 @@ func settingsLists(cfg *config.Config, deps *cli.Deps) settings.Lists {
 	if deps.Recurring != nil {
 		l.Recurrences = recurrenceUseCases{Service: deps.Recurring, lookups: lk}
 	}
+	if deps.Assets != nil {
+		l.Assets = assetUseCases{Service: deps.Assets, loans: deps.Loans}
+	}
 	return l
+}
+
+// assetUseCases satisfies lists.AssetsUseCases: the asset service plus the loan names to link.
+type assetUseCases struct {
+	*assetting.Service
+	loans *lending.Service
+}
+
+func (a assetUseCases) ListLoanNames(ctx context.Context, enabled module.Set) ([]string, error) {
+	if a.loans == nil {
+		return nil, nil
+	}
+	infos, err := a.loans.List(ctx, enabled)
+	if err != nil {
+		return nil, fmt.Errorf("list loans: %w", err)
+	}
+	names := make([]string, len(infos))
+	for i, in := range infos {
+		names[i] = in.Loan.Name
+	}
+	return names, nil
 }

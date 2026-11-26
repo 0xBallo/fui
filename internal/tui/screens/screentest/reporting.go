@@ -2,6 +2,9 @@ package screentest
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/reporting"
@@ -149,6 +152,36 @@ func (r Reporting) Spending(ctx context.Context, params reporting.SpendingParams
 // Runway runs the runway KPI.
 func (r Reporting) Runway(ctx context.Context, params reporting.RunwayParams) (reporting.RunwayResult, error) {
 	return r.runway.Run(ctx, params)
+}
+
+// ResultExport records one call to FakeExporter.
+type ResultExport struct {
+	Format string
+	Data   any
+}
+
+// FakeExporter is a stand-in for the report screen's ExportResult port: it records every call and
+// writes a minimal csv or json body, so screen tests need not depend on the CLI renderers.
+type FakeExporter struct {
+	Calls []ResultExport
+}
+
+// ExportResult records the call and writes data as json, or a one-line csv marker.
+func (e *FakeExporter) ExportResult(w io.Writer, format string, data any) error {
+	e.Calls = append(e.Calls, ResultExport{Format: format, Data: data})
+	switch format {
+	case "json":
+		if err := json.NewEncoder(w).Encode(data); err != nil {
+			return fmt.Errorf("fake export json: %w", err)
+		}
+		return nil
+	case "csv":
+		if _, err := fmt.Fprintf(w, "csv:%T\n", data); err != nil {
+			return fmt.Errorf("fake export csv: %w", err)
+		}
+		return nil
+	}
+	return fmt.Errorf("fake export: unknown format %q", format)
 }
 
 // testingT is the subset of *testing.T this package needs, so helpers that only have a *testing.T

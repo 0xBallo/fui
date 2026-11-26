@@ -38,6 +38,8 @@ type Change struct {
 type Plan struct {
 	Changes []Change
 	Bulk    bool
+	// Notices are side effects worth telling the user about, such as an implicitly created payee.
+	Notices []string
 }
 
 // moneyFields flattens m into the keys prefix and prefix_currency of fields.

@@ -69,6 +69,7 @@ type Rules struct {
 type ruleFormFields struct {
 	name, priority, enabled         components.Autocomplete
 	descContains, descEquals        components.Autocomplete
+	hintContains, hintEquals        components.Autocomplete
 	minAbs, maxAbs, sign            components.Autocomplete
 	accounts, category, payee, tags components.Autocomplete
 }
@@ -256,6 +257,12 @@ func ruleSummary(r domain.Rule) string {
 	}
 	if r.Conditions.DescriptionEquals != "" {
 		parts = append(parts, "equals "+quote(r.Conditions.DescriptionEquals))
+	}
+	if r.Conditions.HintContains != "" {
+		parts = append(parts, "hint contains "+quote(r.Conditions.HintContains))
+	}
+	if r.Conditions.HintEquals != "" {
+		parts = append(parts, "hint equals "+quote(r.Conditions.HintEquals))
 	}
 	if r.Actions.CategoryID != 0 {
 		parts = append(parts, "-> category")

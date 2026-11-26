@@ -12,7 +12,6 @@ import (
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
-	"github.com/0xballo/fui/internal/module"
 	"github.com/0xballo/fui/internal/tui/components"
 	"github.com/0xballo/fui/internal/tui/screens"
 	"github.com/0xballo/fui/internal/tui/theme"
@@ -29,6 +28,11 @@ const (
 	modeReconcilePreview
 	modeConfirm
 	modePriceForm
+	modeSecurityForm
+	modeOpForm
+	modeOps
+	modeOpEditForm
+	modeOpConfirm
 )
 
 // Model is the accounts screen: a list of balances, the movement detail of one account, and the
@@ -68,10 +72,16 @@ type Model struct {
 	reconcileForm         components.Form
 	reconcilePlan         app.ReconcilePlan
 	reconcileNotice       string
+	reconcileBalance      string
+	reconcileDate         string
+	reconcileCands        []domain.Transaction
+	reconcileCursor       int
 	reconcileBackMode     mode
 
 	positionsUC PositionsUseCases
 	positions   positionState
+	secops      secOpsState
+	crypto      bool
 }
 
 var _ screens.Screen = (*Model)(nil)
@@ -94,6 +104,7 @@ func New(uc UseCases, loc domain.Locale, th theme.Theme) *Model {
 	}, th)
 	m.confirm = components.NewConfirmDialog(th)
 	m.initPositions()
+	m.initSecOps()
 	return m
 }
 
@@ -133,7 +144,8 @@ func (m *Model) KeyMap() []key.Binding { return m.keyBindings() }
 
 // InputActive reports whether the add-account form is capturing keystrokes.
 func (m *Model) InputActive() bool {
-	return m.mode == modeForm || m.mode == modeReconcileForm || m.mode == modePriceForm
+	return m.mode == modeForm || m.mode == modeReconcileForm || m.mode == modePriceForm ||
+		m.mode == modeSecurityForm || m.mode == modeOpForm || m.mode == modeOpEditForm
 }
 
 // loadedMsg carries a fresh account listing back into Update.
@@ -180,12 +192,6 @@ type detailLoadedMsg struct {
 	positions []positionViewRow
 }
 
-type reconcilePlannedMsg struct {
-	plan app.ReconcilePlan
-}
-
-type reconcileAppliedMsg struct{ loaded loadedMsg }
-
 func (m *Model) loadDetail(name string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -217,9 +223,14 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		m.setPositions(msg.positions)
 		m.mode = modeDetail
 		return m, nil
+	case opsLoadedMsg:
+		m.setOps(msg.lines)
+		return m, nil
 	case reconcilePlannedMsg:
-		m.reconcilePlan = msg.plan
-		m.mode = modeReconcilePreview
+		m.setReconcilePlan(msg)
+		return m, nil
+	case reconcileSavedMsg:
+		m.reconcileNotice = msg.notice
 		return m, nil
 	case reconcileAppliedMsg:
 		m.applyLoaded(msg.loaded)
@@ -242,6 +253,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		return m.handleConfirmKey(msg)
 	case modePriceForm:
 		return m.handlePriceFormKey(msg)
+	case modeSecurityForm, modeOpForm:
+		return m.handleSecFormKey(msg, modeDetail)
+	case modeOpEditForm:
+		return m.handleSecFormKey(msg, modeOps)
+	case modeOps:
+		return m.handleOpsKey(msg)
+	case modeOpConfirm:
+		return m.handleOpConfirmKey(msg)
 	case modeDetail:
 		return m.handleDetailKey(msg)
 	case modeList:
@@ -305,6 +324,14 @@ func (m *Model) handleDetailKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		m.openReconcileForm(m.detail.Account.Name, modeDetail)
 	case key.Matches(msg, m.km.Price):
 		m.openPriceForm()
+	case key.Matches(msg, m.km.Security):
+		m.openSecurityForm()
+	case key.Matches(msg, m.km.Op):
+		m.openOpForm()
+	case key.Matches(msg, m.km.Ops):
+		if m.positionsVisible() {
+			return m, m.loadOps(m.detail.Account.Name)
+		}
 	}
 	return m, nil
 }
@@ -371,65 +398,32 @@ func (m *Model) handleReconcileFormKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd)
 }
 
 func (m *Model) submitReconcilePlan() tea.Cmd {
-	account := m.reconcileAccount
 	balance := strings.TrimSpace(m.reconcileBalanceField.Value())
-	date := strings.TrimSpace(m.reconcileDateField.Value())
 	if balance == "" {
 		m.reconcileNotice = "Statement balance is required."
 		return nil
 	}
 	m.reconcileNotice = ""
-	uc := m.uc
-	return func() tea.Msg {
-		plan, err := uc.PlanReconcile(context.Background(), module.Default(), app.ReconcileRequest{
-			Account: account, StatementBalance: balance, Date: date,
-		})
-		if err != nil {
-			return screens.ErrorMsg{Err: err}
-		}
-		return reconcilePlannedMsg{plan: plan}
-	}
-}
-
-func (m *Model) handleReconcilePreviewKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
-		m.mode = m.reconcileBackMode
-		return m, nil
-	case "enter":
-		if !m.reconcilePlan.Difference.IsZero() {
-			m.reconcileNotice = "Difference must be zero to close reconciliation."
-			return m, nil
-		}
-		return m, m.submitReconcileApply()
-	}
-	return m, nil
-}
-
-func (m *Model) submitReconcileApply() tea.Cmd {
-	plan := m.reconcilePlan
-	uc := m.uc
-	return func() tea.Msg {
-		ctx := context.Background()
-		if err := uc.ApplyReconcile(ctx, module.Default(), plan); err != nil {
-			return screens.ErrorMsg{Err: err}
-		}
-		msg := m.fetch(ctx)
-		loaded, ok := msg.(loadedMsg)
-		if !ok {
-			return msg
-		}
-		return reconcileAppliedMsg{loaded: loaded}
-	}
+	m.reconcileBalance = balance
+	m.reconcileDate = strings.TrimSpace(m.reconcileDateField.Value())
+	m.reconcileCands = nil
+	m.reconcileCursor = 0
+	return m.planReconcileCmd(nil, nil)
 }
 
 func (m *Model) openAddForm() {
 	m.nameField = components.NewAutocomplete("Name:", "e.g. Main checking", m.th)
-	m.kindField = components.NewAutocomplete("Kind:", "cash/checking/credit_card/savings/investment/loan", m.th)
-	m.kindField.SetSuggestions([]string{
+	kinds := []string{
 		string(domain.AccountCash), string(domain.AccountChecking), string(domain.AccountCreditCard),
 		string(domain.AccountSavings), string(domain.AccountInvestment), string(domain.AccountLoan),
-	})
+	}
+	hint := "cash/checking/credit_card/savings/investment/loan"
+	if m.crypto {
+		kinds = append(kinds, string(domain.AccountWallet))
+		hint += "/wallet"
+	}
+	m.kindField = components.NewAutocomplete("Kind:", hint, m.th)
+	m.kindField.SetSuggestions(kinds)
 	m.currField = components.NewAutocomplete("Currency:", "EUR", m.th)
 	m.openField = components.NewAutocomplete("Opening balance:", "0", m.th)
 	m.dateField = components.NewAutocomplete("Opened on:", "today", m.th)
@@ -517,6 +511,12 @@ func (m *Model) View() string {
 		return components.Modal(m.th, m.width, m.height, m.confirm.View())
 	case modePriceForm:
 		return components.Modal(m.th, m.width, m.height, m.viewPriceForm())
+	case modeSecurityForm, modeOpForm, modeOpEditForm:
+		return components.Modal(m.th, m.width, m.height, m.viewSecForm("enter next/save · esc cancel"))
+	case modeOps:
+		return m.viewOps()
+	case modeOpConfirm:
+		return components.Modal(m.th, m.width, m.height, m.confirm.View())
 	case modeDetail:
 		return m.viewDetail()
 	case modeList:
@@ -562,32 +562,6 @@ func (m *Model) viewReconcileForm() string {
 	out += "\n\n" + m.th.Muted.Render("enter preview · esc cancel")
 	if m.reconcileNotice != "" {
 		out += "\n" + m.th.Warning.Render(m.reconcileNotice)
-	}
-	return out
-}
-
-func (m *Model) viewReconcilePreview() string {
-	p := m.reconcilePlan
-	out := m.th.Title.Render("Reconcile preview") + "\n"
-	out += m.th.Base.Render("Account: " + p.Account.Name)
-	out += "\n" + m.th.Base.Render("Date: "+p.Date.String()+"   Statement: "+domain.FormatAmount(p.StatementBalance, m.loc))
-	diffLine := "Difference: " + domain.FormatAmount(p.Difference, m.loc)
-	if p.Difference.IsZero() {
-		out += "\n" + m.th.StatusBar.Render(diffLine)
-		out += "\n" + m.th.Muted.Render("enter close reconciliation · esc back")
-	} else {
-		out += "\n" + m.th.Warning.Render(diffLine)
-		out += "\n" + m.th.Muted.Render("esc back (close is available only when difference is zero)")
-	}
-	if len(p.Unreconciled) > 0 {
-		out += "\n\n" + m.th.Header.Render("Unreconciled up to date:")
-		for _, tx := range p.Unreconciled {
-			out += "\n" + m.th.Base.Render(
-				tx.Date.Format(m.loc)+"  "+tx.Description+"  "+domain.FormatAmount(tx.Amount, m.loc))
-		}
-	}
-	if m.reconcileNotice != "" {
-		out += "\n\n" + m.th.Warning.Render(m.reconcileNotice)
 	}
 	return out
 }

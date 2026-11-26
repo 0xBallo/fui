@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -180,6 +181,49 @@ func (r reconciliations) LastClosed(_ context.Context, accountID domain.AccountI
 		return app.Reconciliation{}, notFound("reconciliation", accountID)
 	}
 	return out, nil
+}
+
+func (r reconciliations) Ticks(_ context.Context, accountID domain.AccountID) ([]domain.TransactionID, error) {
+	out := make([]domain.TransactionID, 0, len(r.st.Ticks[accountID]))
+	for id := range r.st.Ticks[accountID] {
+		out = append(out, id)
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
+func (r reconciliations) SetTicks(_ context.Context, accountID domain.AccountID, ids []domain.TransactionID, ticked bool) error {
+	if err := r.writable(); err != nil {
+		return err
+	}
+	for _, id := range ids {
+		tx, ok := r.st.Txs[id]
+		if !ok {
+			return notFound("transaction", id)
+		}
+		if tx.AccountID != accountID {
+			return fmt.Errorf("transaction %d does not belong to account %d: %w", id, accountID, domain.ErrInvalidValue)
+		}
+		set := r.st.Ticks[accountID]
+		if ticked {
+			if set == nil {
+				set = map[domain.TransactionID]struct{}{}
+				r.st.Ticks[accountID] = set
+			}
+			set[id] = struct{}{}
+		} else {
+			delete(set, id)
+		}
+	}
+	return nil
+}
+
+func cloneTicks(in map[domain.AccountID]map[domain.TransactionID]struct{}) map[domain.AccountID]map[domain.TransactionID]struct{} {
+	out := make(map[domain.AccountID]map[domain.TransactionID]struct{}, len(in))
+	for k, v := range in {
+		out[k] = maps.Clone(v)
+	}
+	return out
 }
 
 var _ app.ReconciliationRepo = reconciliations{}

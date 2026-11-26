@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/exp/golden"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/recurring"
@@ -144,5 +145,81 @@ func TestRecurrencesLoadAddEditRemove(t *testing.T) {
 	scr = run(t, scr, cmd)
 	if strings.Contains(scr.View(), "Rent payment") {
 		t.Fatalf("expected the recurrence removed, got:\n%s", scr.View())
+	}
+}
+
+// seedRecurrence adds a monthly rent recurrence starting 2026-07-01 through the same adapter the
+// view uses.
+func seedRecurrence(t *testing.T, fx screentest.Fixture) {
+	t.Helper()
+	fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "0", OpenedOn: "2026-01-01"})
+	svc := recurring.New(fx.Store, fixedClock{now: time.Date(2026, 6, 15, 9, 0, 0, 0, time.UTC)}, stubBackup{},
+		recurring.Config{Locale: domain.LocaleENUS, Location: time.UTC})
+	plan, err := svc.PlanAdd(t.Context(), module.Default(), recurring.AddRequest{
+		Account: "Checking", Description: "Monthly rent", Amount: "-850", Every: 1, Unit: "months", DayOfMonth: 1, Start: "2026-07-01",
+	})
+	if err != nil {
+		t.Fatalf("PlanAdd: %v", err)
+	}
+	if _, err := svc.ApplyAdd(t.Context(), plan); err != nil {
+		t.Fatalf("ApplyAdd: %v", err)
+	}
+}
+
+func TestRecurrencesRunUntilFlow(t *testing.T) {
+	fx, scr := newRecurrencesFixture(t)
+	seedRecurrence(t, fx)
+	scr = run(t, scr, scr.Init())
+
+	scr, cmd := sendRunes(scr, "r")
+	scr = run(t, scr, cmd)
+	if v := scr.View(); !strings.Contains(v, "Run until:") || !strings.Contains(v, "0 occurrence(s)") {
+		t.Fatalf("expected the prompt previewing 0 occurrences for today, got:\n%s", v)
+	}
+
+	scr, _ = sendRunes(scr, "2026-09-15")
+	scr, cmd = sendKey(scr, tea.KeyEnter) // plan the typed date
+	scr = run(t, scr, cmd)
+	if !strings.Contains(scr.View(), "3 occurrence(s) will be created") {
+		t.Fatalf("expected a 3 occurrence preview, got:\n%s", scr.View())
+	}
+	scr.SetSize(80, 24)
+	golden.RequireEqual(t, []byte(scr.View()))
+	scr.SetSize(100, 30)
+
+	scr, cmd = sendKey(scr, tea.KeyEnter) // confirm
+	if cmd == nil {
+		t.Fatal("expected a command applying the run")
+	}
+	msg := cmd()
+	scr, cmd = scr.Update(msg)
+	if cmd == nil {
+		t.Fatal("expected a status notice command")
+	}
+	if st, ok := cmd().(screens.StatusMsg); !ok || !strings.Contains(st.Text, "3") {
+		t.Fatalf("expected a notice with the count, got %#v", st)
+	}
+	if v := scr.View(); strings.Contains(v, "Run until:") || !strings.Contains(v, "2026-10-01") {
+		t.Fatalf("expected the list back with the next date advanced, got:\n%s", v)
+	}
+}
+
+func TestRecurrencesRunUntilInvalidDateAndCancel(t *testing.T) {
+	fx, scr := newRecurrencesFixture(t)
+	seedRecurrence(t, fx)
+	scr = run(t, scr, scr.Init())
+
+	scr, cmd := sendRunes(scr, "r")
+	scr = run(t, scr, cmd)
+	scr, _ = sendRunes(scr, "not-a-date")
+	scr, cmd = sendKey(scr, tea.KeyEnter)
+	scr = run(t, scr, cmd)
+	if v := scr.View(); !strings.Contains(v, "Run until:") || !strings.Contains(v, "Error:") {
+		t.Fatalf("expected the prompt to stay open with an inline error, got:\n%s", v)
+	}
+
+	scr, _ = sendKey(scr, tea.KeyEsc)
+	if v := scr.View(); strings.Contains(v, "Run until:") || strings.Contains(v, "Error:") {
+		t.Fatalf("expected esc to close the prompt and clear the error, got:\n%s", v)
 	}
 }

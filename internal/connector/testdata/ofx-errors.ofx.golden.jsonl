@@ -1,0 +1,8 @@
+{"type":"meta","protocol":"fui/1","connector":"ofx","version":"0.1.0","source":{"file":"ofx-errors.ofx","sha256":"465ffaf2b4fd15d4a8213b65e8b4af948235d6897f95f99c3e2f50705439f685"}}
+{"type":"account","ref":"IT60X0542811101000000123456","name":"IT60X0542811101000000123456","currency":"EUR","kind":"checking","iban":"IT60X0542811101000000123456"}
+{"type":"balance","account":"IT60X0542811101000000123456","date":"2026-10-31","amount":123456}
+{"type":"error","line":30,"message":"DTPOSTED: invalid date \"not-a-date\"","raw":{"amount":"-3.00","date":"not-a-date","element":"STMTTRN","fitid":"BAD-DATE"}}
+{"type":"error","line":37,"message":"TRNAMT: invalid amount \"abc\"","raw":{"amount":"abc","date":"20261005","element":"STMTTRN","fitid":"BAD-AMT"}}
+{"type":"transaction","account":"IT60X0542811101000000123456","id":"OK-1","date":"2026-10-03","amount":-1250,"currency":"EUR","description":"Coffee bar","status":"booked","kind":"payment"}
+{"type":"transaction","account":"IT60X0542811101000000123456","id":"OK-2","date":"2026-10-06","amount":10000,"currency":"EUR","description":"Salary","status":"booked","kind":"refund"}
+{"type":"end","transactions":2,"errors":2}

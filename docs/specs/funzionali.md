@@ -2,7 +2,7 @@
 
 Nov 9, 2026 · @Mattia Ballo
 
-**Versione 1.3** — 18 novembre 2026 · le modifiche rispetto alle versioni precedenti sono nella sezione Cronologia delle versioni
+**Versione 1.4** — 25 novembre 2026 · le modifiche rispetto alle versioni precedenti sono nella sezione Cronologia delle versioni
 
 ## Panoramica e obiettivi
 
@@ -35,7 +35,7 @@ FUI è modulare: il nucleo è sempre attivo e ogni altra area si attiva solo se 
 | Ricorrenze | Ricorrenze e previsione di cassa | sì | — |
 | Mutui e prestiti | Finanziamenti, piani di ammortamento, eventi, report debito residuo e interessi pagati | no | Ricorrenze |
 | Investimenti | Conti di investimento, titoli, operazioni e posizioni | no | — |
-| Crypto | Wallet e cripto-attività, con quantità frazionarie | no | Investimenti |
+| Crypto | Conti di tipo wallet e cripto-attività, con quantità frazionarie | no | Investimenti |
 | Beni | Immobili, veicoli e altri beni con valutazioni manuali, collegabili a un mutuo | no | — |
 | Analisi | Analisi automatiche e report salvati | sì | — |
 | Simulazioni | Rendimento investimenti, PAC e flussi di cassa | no | Ricorrenze |
@@ -51,8 +51,8 @@ FUI è modulare: il nucleo è sempre attivo e ogni altra area si attiva solo se 
 
 - I suoi comandi spariscono dall'aiuto e da `fui help --json`; se invocati falliscono con un messaggio che spiega come attivarlo.
 - Le sue schermate e i suoi riquadri spariscono dalla TUI; i tasti delle altre schermate non cambiano.
-- I dati non vengono cancellati: restano nell'archivio, esclusi da Dashboard, report e patrimonio netto, e ricompaiono riattivando il modulo.
-- Se un import contiene record di un modulo disattivato (es. `schedule` e `installment` senza Mutui e prestiti), l'anteprima li segnala e chiede se attivare il modulo o saltarli.
+- I dati non vengono cancellati: restano nell'archivio, esclusi da Dashboard, report e patrimonio netto, e ricompaiono riattivando il modulo. Senza il modulo Investimenti sono esclusi i conti di tipo investimento, senza il modulo Crypto quelli di tipo wallet (patrimonio netto, autonomia, report, Dashboard); gli elenchi dei conti continuano a mostrarli.
+- Se un import contiene record di un modulo disattivato (es. `schedule` e `installment` senza Mutui e prestiti), l'anteprima li segnala con «attiva il modulo o salta»: da terminale FUI chiede cosa fare, senza terminale i record sono saltati con un avviso oppure, con `--enable-modules`, il modulo viene attivato.
 - La skill per agenti legge i moduli attivi con `fui module list --json` e propone solo comandi disponibili.
 
 ## Modello di dominio
@@ -61,7 +61,7 @@ Il dominio ruota attorno a conti e transazioni; categorie, tag, budget, ricorren
 
 | Entità | Descrizione | Attributi principali |
 | --- | --- | --- |
-| Conto | Contenitore di denaro con un saldo | nome, descrizione (opzionale), tipo (contanti, conto corrente, carta di credito, risparmio, investimento, finanziamento), valuta, saldo iniziale, data di apertura, archiviato |
+| Conto | Contenitore di denaro con un saldo | nome, descrizione (opzionale), tipo (contanti, conto corrente, carta di credito, risparmio, investimento, wallet cripto, finanziamento), valuta, saldo iniziale, data di apertura, archiviato |
 | Transazione | Singolo movimento su un conto | data, importo con segno, conto, beneficiario, categoria, tag, note, stato (in sospeso, registrata, riconciliata), id di import |
 | Trasferimento | Spostamento tra due conti dell'utente | due movimenti collegati di segno opposto, eventuale commissione |
 | Split | Ripartizione di una transazione su più categorie | righe con categoria e importo; la somma eguaglia il totale |
@@ -72,7 +72,7 @@ Il dominio ruota attorno a conti e transazioni; categorie, tag, budget, ricorren
 | Ricorrenza | Modello di transazione periodica | transazione modello, regola (ogni N giorni/settimane/mesi, giorno del mese), prossima data, registrazione automatica in stato in sospeso, confermata dall'utente o da un import |
 | Regola | Classificazione automatica | condizioni su descrizione, importo, conto; azioni: imposta categoria, beneficiario, tag |
 | Valuta | Valuta di un conto | codice ISO 4217, tassi di cambio manuali per data |
-| Titolo | Strumento finanziario detenuto in un conto di investimento | nome, ticker o ISIN, tipo (azione, ETF, obbligazione, fondo, cripto), valuta, precisione della quantità (es. 8 decimali per le cripto, salvata come intero), prezzi manuali per data |
+| Titolo | Strumento finanziario detenuto in un conto di investimento | nome, ticker o ISIN, tipo (azione, ETF, obbligazione, fondo, cripto), valuta, precisione della quantità (es. 8 decimali per le cripto, salvata come intero, immutabile dopo la creazione), prezzi manuali per data con almeno 8 cifre decimali di precisione (sempre interi, mai numeri in virgola mobile) |
 | Operazione su titolo | Acquisto, vendita o provento; la posizione è la somma delle operazioni e vale quantità × ultimo prezzo noto | data, conto, titolo, tipo (acquisto, vendita, dividendo o cedola), quantità, prezzo unitario, commissioni, movimento di liquidità collegato |
 | Bene | Bene non finanziario dell'utente; entra nel patrimonio netto all'ultima valutazione | nome, tipo (immobile, veicolo, altro), data e valore di acquisto, valutazioni manuali per data, finanziamento collegato (opzionale) |
 | Finanziamento | Mutuo o prestito, gestito come conto passività con saldo pari al debito residuo | tipo (mutuo, prestito), capitale erogato, data di erogazione, durata, tipo di tasso (fisso, variabile, misto), conto di addebito delle rate |
@@ -114,31 +114,32 @@ Il binario si chiama `fui`: senza argomenti apre la TUI, con un sottocomando ese
 | `fui init` | Crea l'archivio e le categorie predefinite e sceglie i moduli | `fui init --currency EUR --preset expense` |
 | `fui module list / enable / disable` | Mostra e cambia i moduli attivi | `fui module enable investments` |
 | `fui add` | Aggiunge una transazione; data predefinita oggi | `fui add -12,50 Esselunga -c Spesa -a Contanti` |
-| `fui tx list / search / show / edit / rm` | Elenca, cerca e modifica transazioni con filtri | `fui tx search amazon --from 2026-01-01 --min 50` |
+| `fui tx list / search / show / edit / rm` | Elenca, cerca e modifica transazioni con filtri; `add` e `tx edit` accettano `--payee` e `--tag`, `tx edit` anche `--untag` | `fui tx edit 42 --payee Esselunga --tag spesa --untag da-rivedere` |
 | `fui transfer` | Sposta denaro tra due conti | `fui transfer 500 --from Fineco --to Risparmio` |
-| `fui account add / list / edit / archive` | Gestisce i conti e mostra i saldi | `fui account list --json` |
+| `fui account add / list / edit / archive` | Gestisce i conti (anche di tipo `wallet`) e mostra i saldi | `fui account list --json` |
 | `fui category add / list / rename / merge / rm` | Gestisce le categorie | `fui category merge Bar Ristoranti` |
 | `fui tag add / list / rm` | Gestisce i tag | `fui tag add vacanze-2026` |
-| `fui budget set / list / status / assign / move` | Imposta e controlla i budget; con le buste assegna e sposta importi | `fui budget set Spesa 400 --month 2026-11` |
-| `fui recurring add / list / run / skip / confirm` | Gestisce le ricorrenze | `fui recurring run --until today` |
+| `fui budget set / list / status / assign / move / copy` | Crea o aggiorna un budget (`--category`, `--tag`, `--period month\|year`, `--warn`, `--over`, `--no-carry`), ne controlla lo stato; con le buste assegna e sposta importi; `copy --from MESE` copia i budget da un mese precedente | `fui budget set Spesa 400 --month 2026-11 --warn 80 --over 100` |
+| `fui recurring add / list / edit / rm / run / skip / confirm` | Gestisce le ricorrenze; `edit` e `rm` usano l'id della ricorrenza (non ha un nome), come `skip` e `confirm` | `fui recurring run --until today` |
 | `fui loan add / show / schedule / event` | Gestisce mutui e prestiti, i piani di ammortamento e i loro eventi | `fui loan event Mutuo --rate 3,15 --from 2027-01-01` |
-| `fui security add / list / price` | Gestisce titoli e cripto e i loro prezzi manuali (moduli investments, crypto) | `fui security add 'VWCE ETF' --kind etf --ticker VWCE --currency EUR` |
-| `fui invest buy / sell / dividend` | Registra acquisti, vendite e dividendi, con liquidità collegata opzionale | `fui invest buy VWCE --account Broker --quantity 10 --price 100` |
-| `fui position list` | Mostra le posizioni calcolate (costo medio ponderato, valore, utile) | `fui position list --date 2026-03-31 --json` |
-| `fui undo` | Annulla l'ultima scrittura su transazioni (add, edit, rm, transfer, split); mostra sempre l'anteprima | `fui undo --yes` |
-| `fui asset add / list / value` | Gestisce i beni e le loro valutazioni | `fui asset value Casa 320000 --date 2026-12-31` |
-| `fui rule add / list / test / apply` | Gestisce le regole di categorizzazione | `fui rule test "AMAZON"` |
+| `fui security add / list / edit / rm / price` | Gestisce titoli e cripto e i loro prezzi manuali (moduli investments, crypto); la precisione della quantità non cambia dopo la creazione | `fui security add 'VWCE ETF' --kind etf --ticker VWCE --currency EUR` |
+| `fui invest buy / sell / dividend / coupon / list / edit / rm` | Registra, elenca, corregge ed elimina acquisti, vendite, dividendi e cedole, con liquidità collegata opzionale | `fui invest buy VWCE --account Broker --quantity 10 --price 100` |
+| `fui position list` | Mostra le posizioni calcolate (costo medio ponderato, valore, utile); `--by-security` le somma per titolo su tutti i conti | `fui position list --date 2026-03-31 --json` |
+| `fui undo` | Annulla l'ultima scrittura su transazioni (add, edit, rm, transfer, split e unsplit, categorizzazione, tag e untag, applicazione di regole, conferma di ricorrenze e rate); mostra sempre l'anteprima | `fui undo --yes` |
+| `fui asset add / list / show / edit / rm / value / value rm / link / unlink` | Gestisce i beni, le loro valutazioni e il collegamento a un finanziamento | `fui asset value Casa 320000 --date 2026-12-31` |
+| `fui rule add / list / edit / rm / test / apply` | Gestisce le regole di categorizzazione; `rule test` accetta solo il testo (conto e importo sono facoltativi e, se mancano, le condizioni relative sono segnalate come non valutate) | `fui rule test "AMAZON"` |
 | `fui connector list / show / test` | Elenca i connettori installati, ne mostra i parametri e ne prova l'output senza importare | `fui connector test fineco-pdf estratto.pdf` |
-| `fui import` | Importa movimenti tramite un connettore | `fui import ott.csv --connector csv --profile fineco --dry-run` |
-| `fui export` | Esporta transazioni in CSV, JSON o formato FUI, oppure l'intero archivio | `fui export --format json --all` |
-| `fui report run / save / list` | Esegue un report predefinito o salvato, ne salva uno nuovo | `fui report run categories --month 2026-10` |
+| `fui import` / `fui import detect` | Importa movimenti tramite un connettore; `detect` riconosce il formato di un file e, con `--save`, ne salva il profilo; `--accept-transfers` accetta le proposte di trasferimento, `--enable-modules` attiva i moduli richiesti dai record | `fui import ott.csv --connector csv --profile fineco --dry-run` |
+| `fui export` | Esporta transazioni in CSV, JSON o formato FUI, oppure con `--all --output DIR` ogni tabella dell'archivio più la configurazione | `fui export --format json --all` |
+| `fui report run / save / list / rm` | Esegue un report predefinito o salvato, ne salva uno nuovo (filtri, `--group-by` e periodo relativo inclusi) | `fui report run categories --month 2026-10 --group-by tag` |
 | `fui insights` | Mostra le segnalazioni delle analisi automatiche; `--dismiss KEY` le nasconde, `--accept KEY` trasforma un abbonamento in ricorrenza | `fui insights --json` |
-| `fui report compare` | Confronta la spesa di due periodi per categoria | `fui report compare --a last-month --b this-month --by category` |
-| `fui forecast` | Mostra la previsione del flusso di cassa | `fui forecast --horizon 12m` |
+| `fui report compare` | Confronta la spesa di due periodi (`YYYY-MM`, `YYYY-Qn`, `YYYY` o periodi relativi) con gli stessi filtri degli altri report; si salva con `fui report save NAME compare` | `fui report compare --a last-month --b this-month --by category` |
+| `fui forecast` | Mostra la previsione del flusso di cassa; `--horizon` accetta `Nd`, `Nw`, `Nm` (un numero da solo vale giorni), `--granularity day\|week`, `--min-balance` la soglia minima | `fui forecast --horizon 12m --granularity week` |
 | `fui kpi runway / networth` | Mostra l'autonomia (con `--include-investments`) e il patrimonio netto con le sue componenti | `fui kpi networth --json` |
-| `fui simulate investment / pac / cashflow / save / list / compare` | Calcola, salva e confronta scenari ipotetici senza toccare i dati | `fui simulate pac --monthly 200 --years 20 --rate 4,5` |
-| `fui reconcile` | Riconcilia un conto con un saldo noto | `fui reconcile Fineco --balance 2340,18 --date 2026-10-31` |
-| `fui backup / restore` | Copia e ripristina l'archivio | `fui backup` |
+| `fui simulate investment / pac / cashflow / save / list / rm / compare` | Calcola, salva, elimina e confronta scenari ipotetici senza toccare i dati; `cashflow --account` limita la simulazione a un conto | `fui simulate pac --monthly 200 --years 20 --rate 4,5` |
+| `fui reconcile` | Riconcilia un conto con un saldo noto, in blocco o spuntando le singole transazioni con `--tick` e `--untick` | `fui reconcile Fineco --balance 2340,18 --date 2026-10-31` |
+| `fui backup` | Copia l'archivio | `fui backup` |
+| `fui restore FILE` | Ripristina l'archivio da un backup (`.db`) o ricostruisce tutto da un dump (`dump.json`), dopo un backup; `--with-config` scrive anche la configurazione contenuta nel dump (quella attuale resta come `config.toml.bak`) | `fui restore dump/dump.json --with-config --yes` |
 | `fui reset` | Azzera l'archivio e lo riporta allo stato iniziale, dopo un backup | `fui reset --keep-settings` |
 | `fui skill install / show` | Installa o mostra la skill per gli agenti AI | `fui skill install --target ~/.claude/skills` |
 | `fui help` | Mostra l'aiuto; con `--json` il riferimento completo per gli agenti | `fui help --json` |
@@ -151,6 +152,7 @@ Il binario si chiama `fui`: senza argomenti apre la TUI, con un sottocomando ese
 - **Input interattivo:** se mancano campi obbligatori e c'è un terminale, FUI li chiede; con `--no-input` o senza terminale fallisce con un messaggio chiaro.
 - **Riferimenti per nome:** conti, categorie e tag si indicano per nome con corrispondenza parziale; se il nome è ambiguo, FUI elenca le opzioni ed esce con errore.
 - **Importi e date:** accetta virgola o punto decimale secondo il locale; date assolute (`2026-11-09`) e relative (`today`, `yesterday`, `-3d`).
+- **Registrazione all'avvio:** all'avvio di CLI e TUI le ricorrenze e le rate dei finanziamenti scadute sono registrate in automatico come in sospeso, solo per i moduli attivi e in modo idempotente; `recurring run --until` e `loan run` servono ad anticiparle. Il passaggio è saltato per `help`, `completion`, `init`, `reset`, `restore`, `backup`, `version` e quando l'archivio manca o è bloccato.
 - **Anteprima:** `--dry-run` su import, applicazione regole, ricorrenze e modifiche di massa.
 - **Aiuto:** `--help` su ogni comando, con almeno un esempio; completamento per bash, zsh e fish.
 
@@ -179,7 +181,7 @@ Il binario si chiama `fui`: senza argomenti apre la TUI, con un sottocomando ese
 
 - Prima di azzerare, FUI crea sempre un backup, escluso dalla rotazione automatica finché l'utente non lo cancella.
 - In un terminale FUI chiede di digitare `reset` per confermare; senza terminale serve `--yes`.
-- Senza opzioni cancella tutto e ricrea le categorie predefinite; con `--keep-settings` conserva categorie, tag, regole, profili e associazioni dei connettori, e cancella conti, transazioni, budget, ricorrenze, finanziamenti, investimenti e simulazioni.
+- Senza opzioni cancella tutto e ricrea le categorie predefinite; con `--keep-settings` conserva categorie, tag, regole, profili e associazioni dei connettori (queste ultime si ricollegano per nome del conto al primo import successivo, grazie a una tabella di associazioni in attesa), e cancella conti, transazioni, budget, ricorrenze, finanziamenti, investimenti e simulazioni.
 - Il file di configurazione non viene toccato.
 - Se l'archivio non esiste, `fui reset` si comporta come `fui init`.
 
@@ -215,12 +217,12 @@ La TUI si apre sulla Dashboard e offre sette schermate raggiungibili con un tast
 | Tasto | Schermata | Contenuto | Azioni principali |
 | --- | --- | --- | --- |
 | 1 | Dashboard | Riquadri in quest'ordine, tutti riferiti al ciclo di calcolo scelto (mese contabile, trimestre, anno, dall'inizio): patrimonio con la liquidità lorda in grande (tutti i conti tranne prestiti e mutui, nella valuta di riferimento) e in piccolo il netto dei prestiti; autonomia come conto alla rovescia in anni, mesi e giorni con la data di esaurimento; grafico a barre orizzontali con entrate (verde), uscite (rosso) e risparmio (testo) con i valori; ultimi 10 movimenti; avvisi | Aggiunta rapida, cambio del ciclo e periodo precedente o successivo, vai a tutte le transazioni, gestione degli avvisi |
-| 2 | Transazioni | Lista filtrabile e ordinabile (data, conto, beneficiario, categoria, tag come etichette, importo, stato); uscite in rosso, entrate in verde, trasferimenti senza colore, transazioni non confermate in una tonalità più chiara dello stesso colore; totale entrate e uscite del filtro corrente in grande | Aggiungi, modifica, elimina, split, categorizzazione multipla, ricerca testuale e filtri con selettore di date |
-| 3 | Conti | Elenco conti con valuta e saldo, separato tra conti che formano il patrimonio lordo e prestiti o mutui, con il totale di ciascuna sezione nella valuta di riferimento; dettaglio movimenti per conto | Aggiungi, archivia, riconcilia, passa da una sezione all'altra |
-| 4 | Budget | Per tetto o busta: importo, speso, previsto, residuo con riporto, barra di avanzamento colorata per fascia (verde sotto il 70%, giallo 70–89%, arancione 90–99%, rosso dal 100%) con un'icona per fascia; con le buste anche il saldo Da assegnare | Imposta importo, mese precedente e successivo, copia dal mese prima, assegna e sposta tra buste, spiegazione dei tipi di budget |
-| 5 | Report | Report predefiniti e salvati con tabelle e grafici adatti al risultato (linee per le serie nel tempo, barre per i confronti), previsione di cassa | Cambia report e periodo, esporta, spiegazione dei report |
-| 6 | Import | Anteprima del file, mappatura colonne, duplicati evidenziati | Scegli connettore e profilo, includi o escludi righe, conferma |
-| 7 | Impostazioni | Moduli attivi, categorie, tag, regole, ricorrenze, profili di import | CRUD su ogni elemento |
+| 2 | Transazioni | Lista filtrabile e ordinabile (data, conto, beneficiario, categoria, tag come etichette, importo, stato); uscite in rosso, entrate in verde, trasferimenti senza colore, transazioni non confermate in una tonalità più chiara dello stesso colore; totale entrate e uscite del filtro corrente in grande | Aggiungi, modifica, elimina, split, categorizzazione multipla, ricerca testuale e filtri con selettore di date; sulle righe in sospeso `c` conferma e `S` salta (una ricorrenza saltata scarta la transazione in sospeso) |
+| 3 | Conti | Elenco conti con valuta e saldo, separato tra conti che formano il patrimonio lordo e prestiti o mutui, con il totale di ciascuna sezione nella valuta di riferimento; dettaglio movimenti per conto | Aggiungi (`n`), apri (`o`), `l` e `p` per le azioni del conto, archivia, riconcilia con `Spazio` per spuntare le singole transazioni, passa da una sezione all'altra |
+| 4 | Budget | Per tetto o busta: importo, speso, previsto, residuo con riporto, barra di avanzamento colorata per fascia fissa (verde sotto il 70%, giallo 70–89%, arancione 90–99% con `‼`, rosso dal 100% con `✗ OVER`), indipendente dalle soglie del budget, che valgono per segnalazioni e avvisi; con le buste anche il saldo Da assegnare | Crea e modifica un budget con un modulo (periodo, soglie, riporto), mese precedente e successivo, copia dal mese prima, assegna e sposta tra buste, spiegazione dei tipi di budget |
+| 5 | Report | Report predefiniti e salvati con tabelle e grafici adatti al risultato (linee per le serie nel tempo, barre per i confronti), previsione di cassa | Cambia report e periodo, modulo dei filtri, `Invio` apre le transazioni della riga, `r` esegue, esporta il risultato, spiegazione dei report |
+| 6 | Import | Anteprima del file, mappatura colonne, duplicati evidenziati | Scegli connettore e profilo, includi o escludi righe, `Tab` alterna righe e dettagli, `t` accetta un trasferimento proposto, `m` gestisce i moduli richiesti, `Ctrl+P` apre la mappatura delle colonne CSV, conferma |
+| 7 | Impostazioni | Moduli attivi, categorie, tag, regole, ricorrenze, beni, profili di import | CRUD su ogni elemento; nelle Ricorrenze `r` esegue quelle in scadenza; nei Beni `Invio` apre il dettaglio, `v` aggiunge una valutazione, `l` e `L` collegano e scollegano un finanziamento |
 
 **Layout** — dall'alto: il titolo FinanceUI in caratteri ASCII con il sottotitolo `vX.Y by 0xBallo` (`0xBallo` è un collegamento al profilo GitHub; con meno di 30 righe diventa una sola riga accanto alle schede), le schede, la schermata, la riga di stato e la barra dei comandi alta una riga. Se i comandi non entrano nella riga vengono troncati con `…`; `?` espande la barra mostrando tutte le scorciatoie, divise tra globali e della schermata corrente.
 
@@ -239,6 +241,7 @@ La TUI si apre sulla Dashboard e offre sette schermate raggiungibili con un tast
 | `Spazio` | Seleziona per azioni multiple |
 | `Esc` | Torna indietro o chiudi il pannello |
 | `?` | Espande la barra dei comandi con tutte le scorciatoie, divise tra globali e della schermata |
+| `u` | Annulla l'ultima scrittura su transazioni (con anteprima e conferma) |
 | `q` | Esci |
 
 **Scorciatoie di schermata**
@@ -327,7 +330,7 @@ Ogni import passa da un connettore: FUI ne include alcuni e permette di aggiunge
 | Bonifico Estero In Uscita, Pagamento Istantaneo | transfer | Se l'IBAN del beneficiario appartiene a un conto dell'utente, FUI propone di collegarlo come trasferimento |
 | Addebito Diretto Sdd | payment | Il codice mandato aiuta a riconoscere le ricorrenze |
 | Trasferimento A / Da Linea Libera | transfer | Spostamento automatico verso il deposito Linea Libera: il connettore genera anche il movimento opposto sul conto `widiba-linea-libera`, con lo stesso valore di `transfer` |
-| Rimborso Titoli E/o Fondi Comuni | investment | Vendita di quote di fondi; in v0.3 diventa un'operazione su titolo |
+| Rimborso Titoli E/o Fondi Comuni | investment | Vendita di quote di fondi; resta una transazione di natura `investment` sul conto, non un'operazione su titolo |
 | Altre causali | other | Da mappare quando compaiono |
 
 - Le colonne si individuano dal testo dell'intestazione e non dalla posizione, perché il riepilogo sopra la tabella può cambiare altezza.
@@ -342,16 +345,16 @@ Ogni import passa da un connettore: FUI ne include alcuni e permette di aggiunge
 2. Normalizzazione di date, importi e descrizioni.
 3. Deduplicazione rispetto alle transazioni già presenti.
 4. Applicazione delle regole di categorizzazione.
-5. Anteprima con righe nuove, duplicate e dubbie.
+5. Anteprima (CLI e TUI) con righe nuove, duplicate e dubbie, avvisi, categorie, tag e beneficiari che verranno creati, proposte di trasferimento (accettabili con `--accept-transfers`, con una domanda interattiva o con `t` nella TUI), discrepanze dei saldi e record di moduli disattivati.
 6. Conferma e scrittura in un'unica operazione atomica, marcata con un id di lotto.
 
 **Deduplicazione** — una riga è duplicata se coincide l'id esterno oppure l'impronta (conto, data, importo, descrizione normalizzata). Una riga con stesso conto e importo e data entro ±2 giorni viene segnalata come dubbia, non scartata. Una riga che corrisponde a una transazione in sospeso generata da una ricorrenza la conferma, invece di crearne una nuova.
 
 **Annullamento** — `fui import undo <lotto>` rimuove tutte le transazioni di quel lotto, se non ancora riconciliate.
 
-**Export** — transazioni filtrate in CSV, JSON o formato FUI; dump completo dell'archivio in JSON o CSV (un file per entità), reimportabile con `fui restore`, per portabilità e migrazione.
+**Export** — transazioni filtrate in CSV, JSON o formato FUI; dump completo con `fui export --all --output DIR`: `DIR/dump.json` contiene ogni tabella dell'archivio più la configurazione, accanto a un file per entità; `fui restore DIR/dump.json` lo reimporta, dopo un backup, ricostruendo l'archivio in modo atomico come il reset (la configurazione si ripristina solo con `--with-config`).
 
-**Riconciliazione** — l'utente indica il saldo dell'estratto a una data; FUI mostra la differenza e le transazioni non ancora spuntate. Quando la differenza è zero, le transazioni fino a quella data passano allo stato riconciliata; modificarle in seguito richiede una conferma esplicita.
+**Riconciliazione** — l'utente indica il saldo dell'estratto a una data; FUI mostra la differenza e le transazioni non ancora spuntate. In modalità a blocco, quando la differenza è zero le transazioni fino a quella data passano allo stato riconciliata. In alternativa si spuntano le singole transazioni (`--tick` e `--untick`, `Spazio` nella TUI): se ci sono spunte, la chiusura richiede differenza zero sull'insieme spuntato e riconcilia solo quelle. Modificare in seguito una transazione riconciliata richiede una conferma esplicita.
 
 ## Formato FUI
 
@@ -373,10 +376,10 @@ Il formato FUI è il contratto tra connettori e FUI: JSON Lines in UTF-8, un ogg
 | `meta` | Prima riga, obbligatoria | `protocol`, `connector`, `version`, `source` (nome file e sha256) |
 | `account` | Prima dei record che lo usano | `ref`, `name`, `currency`, `kind` (checking, card, savings, investment, cash, loan), `iban` opzionale |
 | `transaction` | Un record per movimento | Vedi tabella seguente |
-| `balance` | Opzionale | `account`, `date`, `amount`: saldo dell'estratto a una data, usato per la riconciliazione |
-| `schedule` | Prima delle rate di un piano | `account` (conto di tipo loan), `valid_from`, `rate`, `rate_type` (fixed, variable, mixed) |
+| `balance` | Opzionale (anche dai connettori OFX e CAMT.053) | `account`, `date`, `amount`: saldo dell'estratto a una data, usato per la riconciliazione e per segnalare discrepanze nell'anteprima |
+| `schedule` | Prima delle rate di un piano | `account` (conto di tipo loan), `valid_from`, `rate`, `rate_type` (fixed, variable, mixed); opzionali `debit_account`, `kind`, `principal`, `disbursed_on`, `term_months`: senza di essi un import aggiorna solo un finanziamento già esistente sullo stesso conto, altrimenti avvisa e salta i record di quel finanziamento; l'export li scrive sempre |
 | `installment` | Una per rata, dopo il proprio `schedule` | `account`, `due_date`, `principal`, `interest`, `fees`, `remaining` (importi interi in unità minime) |
-| `error` | Per ogni riga sorgente non convertibile | `line`, `message`, `raw` |
+| `error` | Per ogni riga sorgente non convertibile, o avviso del connettore (OFX e CAMT.053 lo usano, con `raw.severity` = `warning` per gli avvisi) | `line`, `message`, `raw` |
 | `end` | Ultima riga, obbligatoria | `transactions`, `errors`: conteggi per verificare che l'output sia completo |
 
 **Campi del record transaction**
@@ -396,13 +399,13 @@ Il formato FUI è il contratto tra connettori e FUI: JSON Lines in UTF-8, un ogg
 | `status` | `booked` o `pending` | sì | `pending` entra in FUI come in sospeso |
 | `kind` | payment, transfer, exchange, fee, interest, refund, investment, other | no | Natura del movimento; predefinito other; `investment` indica acquisti, vendite e rimborsi di titoli o fondi |
 | `transfer` | stringa | no | Stesso valore su due movimenti = un trasferimento tra conti |
-| `original` | oggetto `amount` + `currency` | no | Importo nella valuta originale per pagamenti in valuta estera |
+| `original` | oggetto `amount` + `currency` | no | Importo nella valuta originale per pagamenti in valuta estera; conservato nella transazione |
 | `balance_after` | intero | no | Saldo dopo il movimento, usato per i controlli di coerenza |
-| `category_hint` | stringa | no | Categoria proposta dalla banca; la usano solo le regole, non viene mai applicata direttamente |
+| `category_hint` | stringa | no | Categoria proposta dalla banca; la usano solo le regole (condizioni `hint-contains` e `hint-equals`), non viene mai applicata direttamente |
 | `category` | stringa | no | Categoria da applicare direttamente; la scrive l'export di FUI, mentre i connettori usano `category_hint` |
 | `tags` | array di stringhe | no | Tag da applicare |
 | `notes` | stringa | no | Note dell'utente |
-| `raw` | oggetto | no | Campi originali della riga, conservati per diagnosi |
+| `raw` | oggetto | no | Campi originali della riga, conservati nella transazione per diagnosi |
 
 **Regole**
 
@@ -472,7 +475,9 @@ FUI offre due modalità di budget, tetti di spesa e buste, scelte con la chiave 
 
 - Un tetto copre una o più categorie o tag, con periodo mensile o annuale e importo nella valuta base.
 - L'importo mensile può avere variazioni per singoli mesi (es. Regali più alto a dicembre).
-- FUI mostra speso, previsto, residuo e percentuale; avvisa al superamento di soglie configurabili, predefinite all'80% e al 100%.
+- FUI mostra speso, previsto, residuo e percentuale; ogni budget ha le proprie soglie di avviso e sforamento (`--warn` e `--over`, predefinite all'80% e al 100%), visibili e modificabili anche nella TUI.
+- Il riporto di avanzo e sforamento è attivo per i nuovi budget; `--no-carry` (o l'interruttore nella TUI) lo disattiva, mentre i budget esistenti mantengono il valore salvato.
+- `fui budget set NOME IMPORTO` crea il budget se manca; il periodo è `month` o `year`. Un tetto annuale mostra speso e residuo «al mese visualizzato»; la copia dal mese precedente salta i budget annuali.
 
 **Buste**
 
@@ -481,7 +486,7 @@ FUI offre due modalità di budget, tetti di spesa e buste, scelte con la chiave 
 3. Ogni uscita delle categorie o dei tag coperti scala dalla busta corrispondente.
 4. Per spendere oltre il contenuto di una busta, l'utente sposta importi da un'altra busta; gli spostamenti sono registrati come movimenti di budget, non come transazioni.
 
-- Una busta annuale ha un obiettivo per l'anno e suggerisce la quota mensile da assegnare: residuo diviso per i mesi rimanenti.
+- Una busta annuale ha un obiettivo per l'anno e mostra la quota mensile suggerita da assegnare: residuo diviso per i mesi rimanenti.
 - Le uscite su categorie non coperte da alcuna busta sono segnalate come "non coperte".
 - Un saldo "Da assegnare" negativo indica che si è assegnato più di quanto entrato e viene segnalato.
 - Il totale delle buste più "Da assegnare" deve coincidere con la somma dei saldi dei conti di liquidità inclusi nel budget; investimenti e finanziamenti sono esclusi.
@@ -517,11 +522,13 @@ I report predefiniti rispondono alle domande ricorrenti, i report salvati permet
 - Le transazioni con split contano nella categoria di ciascuna riga per il relativo importo.
 - In TUI i report mostrano barre orizzontali e sparkline; in CLI una tabella, con `--chart` per le barre testuali.
 
-**Filtri e raggruppamenti comuni** — ogni report accetta periodo, conti, categorie, tag, beneficiari, intervallo di importi, stato e testo nella descrizione, e può raggruppare per categoria, tag, beneficiario, conto, settimana, mese o anno. Nella TUI ogni riga di un report apre le transazioni che la compongono.
+**Filtri e raggruppamenti comuni** — ogni report accetta periodo, conti, categorie, tag, beneficiari, intervallo di importi, stato e testo nella descrizione (gli stessi filtri delle transazioni), e può raggruppare con `--group-by` per categoria, tag, beneficiario, conto, settimana, mese o anno; `--granularity` vale dove esiste una serie nel tempo. Nella TUI `Invio` su una riga apre le transazioni che la compongono e un modulo imposta i filtri. La spesa conta le sole uscite, senza compensare i rimborsi.
+
+**Confronto periodi** — i due periodi si indicano come `YYYY-MM`, `YYYY-Qn`, `YYYY` o con i periodi relativi (`this-month`, `last-month`…) e accettano gli stessi filtri; il confronto si salva con `fui report save NAME compare`.
 
 **Report salvati** (v0.2)
 
-- Un report salvato ha un nome, un report di base, filtri, raggruppamento e un periodo relativo (es. "ultimi 3 mesi", "anno corrente"), così resta aggiornato senza modifiche.
+- Un report salvato ha un nome, un report di base, filtri, raggruppamento e un periodo relativo (es. "ultimi 3 mesi", "anno corrente"), salvati come parametri JSON, così resta aggiornato senza modifiche.
 - Si crea dalla TUI salvando la vista corrente o da CLI con `fui report save`, e si esegue con `fui report run <nome>`.
 - I report salvati compaiono nella schermata Report accanto ai predefiniti.
 
@@ -538,7 +545,7 @@ I report predefiniti rispondono alle domande ricorrenti, i report salvati permet
 
 **Previsione di cassa** (v0.2)
 
-- Orizzonte configurabile con `forecast.horizon`, predefinito 6 mesi.
+- Orizzonte configurabile con `forecast.horizon` (predefinito `6m`) o con `--horizon`, che accetta `Nd`, `Nw` e `Nm` (un numero da solo vale giorni); soglia minima con `forecast.min_balance`.
 - Parte dal saldo attuale dei conti di liquidità e somma ricorrenze, rate dei finanziamenti e spese variabili stimate dai budget o, in loro assenza, dalla media degli ultimi 3 mesi per categoria.
 - Mostra il saldo previsto per conto e totale, per giorno o settimana, ed evidenzia il primo giorno in cui un conto scenderebbe sotto zero o sotto una soglia minima configurata.
 - Si consulta nella schermata Report o con `fui forecast`.
@@ -598,6 +605,8 @@ Tutti i dati stanno in un unico file locale; FUI non apre connessioni di rete e 
 | `theme` | Tema della TUI | terminale |
 | `backup.keep` | Numero di backup conservati | 10 |
 | `import.profiles` | Profili di import per banca | nessuno |
+| `forecast.horizon` | Orizzonte della previsione di cassa (`Nd`, `Nw`, `Nm`) | 6m |
+| `forecast.min_balance` | Soglia minima di saldo evidenziata dalla previsione | nessuna |
 
 ## Requisiti non funzionali
 
@@ -665,6 +674,21 @@ Lo stack è deciso; le domande rimaste riguardano il perimetro e si possono chiu
 - [ ] Raccogliere export Widiba e Revolut su periodi più lunghi per verificare causali e tipi di movimento assenti negli export di prova.
 
 ## Cronologia delle versioni
+
+**Versione 1.4** — 25 novembre 2026
+
+| Sezione | Modifica |
+| --- | --- |
+| Moduli | Tipo di conto wallet (modulo Crypto); senza i moduli Investimenti o Crypto i relativi conti sono esclusi da patrimonio, autonomia, report e Dashboard; import di record di moduli disattivati con `--enable-modules` |
+| Modello di dominio | Tipo di conto wallet; prezzi dei titoli con almeno 8 cifre decimali |
+| Requisiti funzionali — CLI | Nuovi o estesi: `import detect`, `--accept-transfers`, `--enable-modules`, `add` e `tx edit` con beneficiario e tag, `recurring edit` e `rm`, `reconcile --tick` e `--untick`, `budget set` con periodo, soglie e riporto, `budget copy --from`, filtri e raggruppamenti dei report, `forecast --horizon Nd\|Nw\|Nm` e `--granularity`, `report save NAME compare`, `security edit` e `rm`, `invest list`, `edit`, `rm` e `coupon`, `position list --by-security`, comandi `asset`, `simulate cashflow --account`, `restore FILE.json`, `export --all` |
+| Requisiti funzionali — CLI | Ricorrenze e rate registrate in automatico all'avvio; `undo` copre ogni scrittura su transazioni; `reset --keep-settings` conserva anche le associazioni dei connettori |
+| Requisiti funzionali — TUI | `u` annulla; Report con `Invio`, `r` e modulo dei filtri; Import con `Tab`, `t`, `m`, `Ctrl+P`; Transazioni con `c` e `S` su righe in sospeso; Impostazioni con Ricorrenze `r` e Beni; Conti con `n`, `o`, `l`, `p` e `Spazio` per riconciliare; fasce fisse della barra Budget |
+| Formato FUI | Campi opzionali di `schedule`; `original` e `raw` conservati; record `error` e `balance` da OFX e CAMT.053; condizioni di regola su `category_hint` |
+| Budget | Periodo annuale con quota mensile suggerita, riporto attivo di default, soglie per budget |
+| Import, export e riconciliazione | Anteprima completa, riconciliazione per singola transazione, dump completo (`dump.json`) e ripristino con `restore FILE.json [--with-config]` |
+| Report e analytics | Filtri e raggruppamenti comuni, confronto periodi salvabile, orizzonte della previsione `Nd`/`Nw`/`Nm` |
+| Import, export e riconciliazione | Il rimborso titoli Widiba resta una transazione di natura investment |
 
 **Versione 1.3** — 18 novembre 2026
 

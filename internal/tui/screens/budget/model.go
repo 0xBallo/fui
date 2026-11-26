@@ -26,6 +26,8 @@ const (
 	modeAssignForm
 	modeMoveForm
 	modeConfirm
+	modeNewForm
+	modeEditForm
 )
 
 // Model is the budget screen: a table of every cap or envelope evaluated for one month, plus the
@@ -48,6 +50,7 @@ type Model struct {
 
 	target      string // selected budget name for the active form
 	amountField components.Autocomplete
+	bf          budgetFields
 	toField     components.Autocomplete
 	form        components.Form
 
@@ -74,6 +77,7 @@ func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h
 	m.table.SetHeight(max(3, h-10))
 	m.table.SetWidth(w)
+	m.refreshTable()
 	m.help.SetSize(w, h)
 }
 
@@ -85,7 +89,8 @@ func (m *Model) KeyMap() []key.Binding { return m.km.Bindings() }
 
 // InputActive reports whether a form is capturing keystrokes.
 func (m *Model) InputActive() bool {
-	return m.help.IsOpen() || m.mode == modeSetForm || m.mode == modeAssignForm || m.mode == modeMoveForm
+	return m.help.IsOpen() || m.mode == modeSetForm || m.mode == modeAssignForm || m.mode == modeMoveForm ||
+		m.mode == modeNewForm || m.mode == modeEditForm
 }
 
 // statusLoadedMsg carries a fresh month status back into Update.
@@ -124,6 +129,9 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		m.refreshTable()
 		m.mode = modeList
 		return m, nil
+	case namesLoadedMsg:
+		m.bf.setSuggestions(msg)
+		return m, nil
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -136,7 +144,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		return m, nil
 	}
 	switch m.mode {
-	case modeSetForm, modeAssignForm, modeMoveForm:
+	case modeSetForm, modeAssignForm, modeMoveForm, modeNewForm, modeEditForm:
 		return m.handleFormKey(msg)
 	case modeConfirm:
 		return m.handleConfirmKey(msg)
@@ -156,6 +164,10 @@ func (m *Model) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		return m, m.navigate(-1)
 	case key.Matches(msg, m.km.NextMonth):
 		return m, m.navigate(1)
+	case key.Matches(msg, m.km.NewBudget):
+		return m, m.openBudgetForm(modeNewForm)
+	case key.Matches(msg, m.km.Edit):
+		return m, m.openBudgetForm(modeEditForm)
 	case key.Matches(msg, m.km.SetAmount):
 		m.openSetForm()
 	case key.Matches(msg, m.km.Assign):
@@ -199,7 +211,7 @@ func (m *Model) submitCopy() tea.Cmd {
 	month := m.monthIn
 	return func() tea.Msg {
 		ctx := context.Background()
-		plan, err := m.uc.PlanCopyPrevious(ctx, month)
+		plan, err := m.uc.PlanCopy(ctx, budgeting.CopyRequest{Month: month})
 		if err != nil {
 			return screens.ErrorMsg{Err: err}
 		}

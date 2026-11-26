@@ -24,6 +24,9 @@ type Backuper interface {
 type ResetOptions struct {
 	// KeepSettings keeps the categories, tags and payees (and any other settings that exist); everything else is deleted.
 	KeepSettings bool
+	// OnWarning, when set, receives a message for every kept setting the reset had to drop (for
+	// instance a rule condition on an account, which a keep-settings reset deletes).
+	OnWarning func(string)
 }
 
 // Resetter rebuilds the archive as a fresh one. The Backuper given to New must also implement it
@@ -390,6 +393,11 @@ type ReconciliationRepo interface {
 	Get(ctx context.Context, accountID domain.AccountID, date domain.Date) (Reconciliation, error)
 	// LastClosed returns the most recent closed reconciliation of account.
 	LastClosed(ctx context.Context, accountID domain.AccountID) (Reconciliation, error)
+	// Ticks returns the transactions of account ticked against the statement in progress, by ID.
+	Ticks(ctx context.Context, accountID domain.AccountID) ([]domain.TransactionID, error)
+	// SetTicks ticks or unticks ids; it is idempotent and fails with domain.ErrInvalidValue when a
+	// transaction does not belong to account.
+	SetTicks(ctx context.Context, accountID domain.AccountID, ids []domain.TransactionID, ticked bool) error
 }
 
 // SecurityRepo stores securities, their manual prices, and operations.
@@ -414,6 +422,8 @@ type SecurityRepo interface {
 	// ListOpsBySecurity returns operations of security in [from,to], ordered by date then ID.
 	// A zero from or to means unbounded on that side.
 	ListOpsBySecurity(ctx context.Context, securityID domain.SecurityID, from, to domain.Date) ([]domain.SecurityOp, error)
+	// ListOpsByBatch returns the operations created by an import batch, ordered by date then ID.
+	ListOpsByBatch(ctx context.Context, batch domain.ImportBatchID) ([]domain.SecurityOp, error)
 }
 
 // AssetRepo stores manually valued assets and their valuation history. Asset names are unique

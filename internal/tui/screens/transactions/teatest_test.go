@@ -73,3 +73,23 @@ func TestTransactionsSplitSnapshot(t *testing.T) {
 	model := &screenModel{scr: scr, width: 100, height: 30}
 	snapshot(t, model, "Store", "s", "Split transaction")
 }
+
+func TestTransactionsEditFormPayeeTagsSnapshot(t *testing.T) {
+	fx := screentest.New(t)
+	fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "1000", OpenedOn: "2026-01-01"})
+	fx.Tx(t, app.AddTxRequest{
+		Account: "Checking", Amount: "-30", Description: "Store", Date: "2026-06-10",
+		Payee: "Esselunga", Tags: []string{"trip", "work"},
+	})
+
+	scr := screens.Screen(transactions.New(fx.Service, domain.LocaleENUS, theme.Default()))
+	scr.SetSize(80, 24)
+	for cmd := scr.Init(); cmd != nil; {
+		scr, cmd = scr.Update(cmd())
+	}
+	scr, cmd := scr.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	for cmd != nil {
+		scr, cmd = scr.Update(cmd())
+	}
+	golden.RequireEqual(t, []byte(ansi.Strip(scr.View())))
+}

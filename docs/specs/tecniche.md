@@ -2,7 +2,7 @@
 
 Nov 12, 2026 · @Mattia Ballo
 
-**Versione 1.4** — 18 novembre 2026 · allineata alle FS 1.3, con i temi Catppuccin della TUI, il git flow con `develop` e le librerie della TUI rinnovata; le modifiche rispetto alle versioni precedenti sono nella sezione Cronologia delle versioni
+**Versione 1.5** — 25 novembre 2026 · allineata alle FS 1.4, con la chiusura delle lacune v0.5, i temi Catppuccin della TUI, il git flow con `develop` e le librerie della TUI rinnovata; le modifiche rispetto alle versioni precedenti sono nella sezione Cronologia delle versioni
 
 ## Panoramica e principi tecnici
 
@@ -132,7 +132,7 @@ I moduli delle FS sono un registro statico nel codice che governa cosa è espost
 | --- | --- | --- |
 | CLI | Comandi nascosti da `--help` e `fui help --json`; se invocati falliscono con `module_disabled` | Annotazione `module` su ogni comando cobra, applicata da un hook della radice |
 | TUI | Schermate e riquadri della Dashboard assenti; i tasti delle altre schermate non cambiano | Il router registra solo le schermate dei moduli attivi; i tasti numerici restano fissi |
-| Dati | Nessuna cancellazione; esclusi da Dashboard, report e patrimonio netto | Le query di aggregazione ricevono il `module.Set` e filtrano per tipo di conto ed entità |
+| Dati | Nessuna cancellazione; esclusi da Dashboard, report e patrimonio netto | Le query di aggregazione ricevono il `module.Set` e filtrano per tipo di conto ed entità: senza `investments` sono esclusi i conti `investment`, senza `crypto` i conti `wallet`; gli elenchi dei conti li mostrano comunque |
 | Import | Record di moduli spenti (es. `schedule`, `installment`) segnalati nell'anteprima, con scelta tra attivare il modulo o saltarli | Il validatore dello stream classifica ogni record per modulo |
 | Agenti | La skill legge `fui module list --json` | Output stabile con id, stato e dipendenze |
 
@@ -153,18 +153,21 @@ Lo schema usa tabelle `STRICT`, chiavi esterne attive, importi come `INTEGER` in
 
 | Tabella | Contenuto | Vincoli e indici chiave |
 | --- | --- | --- |
-| `accounts` | Conti, incluso il tipo finanziamento | `kind` con `CHECK`; `archived_at` nullable |
-| `transactions` | Movimenti con stato, data contabile, operazione e valuta | `UNIQUE(account_id, external_id)`; indici `(account_id, date, id)`, `(category_id, date)`, `(fingerprint)` |
+| `accounts` | Conti, inclusi i tipi finanziamento e `wallet` (migrazione 0019) | `kind` con `CHECK`; `archived_at` nullable |
+| `transactions` | Movimenti con stato, data contabile, operazione e valuta; importo e valuta originali e record sorgente `raw` JSON (migrazione 0016) | `UNIQUE(account_id, external_id)`; indici `(account_id, date, id)`, `(category_id, date)`, `(fingerprint)` |
 | `transaction_splits` | Righe di split | Somma = importo della transazione, verificata nel dominio e da un test di integrità |
 | `transfer_groups` | Collega i due lati di un trasferimento e l'eventuale commissione | Somma dei lati = − commissione |
 | `categories`, `tags`, `transaction_tags` | Classificazione | `ON DELETE RESTRICT` sulle categorie usate |
 | `payees`, `payee_aliases` | Beneficiari normalizzati e alias per gli import | Alias unico per beneficiario |
-| `budgets`, `budget_amounts`, `budget_moves` | Tetti e buste, variazioni mensili, assegnazioni e spostamenti | Una categoria coperta da un solo budget per periodo |
+| `budgets`, `budget_amounts`, `budget_moves` | Tetti e buste, variazioni mensili, assegnazioni e spostamenti; `budgets.period` (`month` o `year`, migrazione 0017) con le variazioni annuali sul gennaio dell'anno | Una categoria coperta da un solo budget per periodo |
 | `recurrences` | Modelli di transazione periodica | Regola serializzata in colonne esplicite, non JSON |
 | `rules` | Regole di categorizzazione | Condizioni e azioni in JSON validato, `priority` per l'ordine |
 | `fx_rates` | Tassi manuali per valuta e data | `UNIQUE(currency, date)` |
-| `securities`, `security_prices`, `security_ops` | Titoli e cripto con scala della quantità, prezzi manuali, operazioni (v0.3, moduli investments e crypto) | `security_ops.cash_tx_id` collega il movimento di liquidità |
+| `securities`, `security_prices`, `security_ops` | Titoli e cripto con scala della quantità e dei prezzi (`price_scale`, almeno 8 cifre per le cripto, immutabile, migrazione 0019), prezzi manuali, operazioni (v0.3, moduli investments e crypto) | `security_ops.cash_tx_id` collega il movimento di liquidità; `security_ops.import_batch_id` (migrazione 0016) permette di annullare un import |
 | `loans`, `loan_schedules`, `loan_installments`, `loan_events` | Finanziamenti con piani versionati (v0.2) | `UNIQUE(loan_id, valid_from)` sui piani |
+| `connector_ref_pending` | Associazioni connettore → nome del conto portate da `reset --keep-settings` (migrazione 0020) | `UNIQUE(connector, ref)` |
+| `reconcile_ticks` | Transazioni spuntate durante una riconciliazione in corso (migrazione 0018) | Chiave `(account_id, transaction_id)`, `ON DELETE CASCADE` |
+| `op_log` | Giornale dell'annullamento (migrazione 0015) | Vedi «Giornale di annullamento» |
 | `import_batches`, `connector_account_refs` | Lotti di import annullabili, associazioni `ref` → conto | `source_sha256` per riconoscere un file già importato |
 | `saved_reports`, `dismissed_insights` | Report salvati, segnalazioni ignorate | Nessuno particolare |
 | `assets`, `asset_valuations` | Beni (immobili, veicoli, altro) e valutazioni manuali per data (v0.3, modulo assets) | `loan_id` nullable verso `loans`; `UNIQUE(asset_id, date)` sulle valutazioni |
@@ -173,6 +176,10 @@ Lo schema usa tabelle `STRICT`, chiavi esterne attive, importi come `INTEGER` in
 Il saldo non è memorizzato: si calcola come saldo iniziale più somma dei movimenti, sfruttando l'indice `(account_id, date, id)`. Se i benchmark lo richiederanno si aggiungerà una cache per mese, invalidata dalle scritture e verificata da un test che la confronta con il calcolo completo.
 
 **Ricerca testuale** — ogni transazione ha una colonna `search_text` calcolata in Go: descrizione, beneficiario e note in minuscolo, senza accenti (decomposizione NFD e rimozione dei segni diacritici) e con spazi normalizzati. Su quella colonna lavora l'indice FTS5 con tokenizer trigram, che supporta la corrispondenza parziale; la stessa funzione normalizza il testo cercato, così indice e query non possono divergere. Per testi più corti di tre caratteri si ricade su `LIKE` sulla stessa colonna.
+
+**Scala dei prezzi** — i prezzi dei titoli sono interi con una scala per titolo (`price_scale`), predefinita alle cifre decimali della valuta e almeno 8 per le cripto (`domain.MaxQuantityScale`); nessun `float`. La scala si fissa alla creazione e non si cambia.
+
+**Giornale di annullamento** — ogni scrittura su transazioni aggiunge in `op_log` una riga con tipo (`tx.add`, `tx.edit`, `tx.rm`, `transfer`, `split`, `tx.categorize`, `tx.tag`, `tx.untag`, `rules.apply`, `recurring.confirm`, `loan.confirm`) e istantanee JSON prima e dopo, scritte nella stessa transazione SQL della modifica. Una voce può portare una maschera di campi (`category`, `tags`, `status`, `payee`): il controllo di obsolescenza confronta, e il ripristino sovrascrive, solo quei campi, così le modifiche successive agli altri campi sopravvivono all'annullamento. Il ripristino rifiuta righe riconciliate o cambiate; se una riga ripristinata punta a un beneficiario, lotto o ricorrenza ormai assenti, il riferimento viene azzerato con un avviso. Le conferme automatiche dell'import (rate dei finanziamenti, abbinamento delle ricorrenze) non sono nel giornale: si annullano con `import undo`.
 
 **Moduli e schema** — tutte le tabelle esistono a prescindere dai moduli attivi: la disattivazione agisce sulle query, mai sullo schema.
 
@@ -376,7 +383,11 @@ Ogni use case di scrittura è una sola transazione SQL: o si applica tutto o nie
 
 **Ripristino** — `fui restore` controlla il file con `PRAGMA integrity_check` e la versione dello schema, fa un backup dell'archivio corrente, scrive in un file temporaneo nella stessa directory e lo sostituisce con un `rename` atomico. Il dump completo in JSON o CSV segue lo stesso percorso dopo aver ricostruito un archivio temporaneo.
 
-**Reset** — `fui reset` costruisce l'archivio nuovo in un file temporaneo nella stessa directory: esegue le migrazioni, crea le categorie predefinite e, con `--keep-settings`, copia categorie, tag, regole, profili di import e associazioni dei connettori dall'archivio corrente. Prima del `rename` atomico crea un backup con motivo `reset`, che la rotazione di `backup.keep` non cancella mai; resta finché l'utente non lo elimina. Il file di configurazione non viene toccato.
+**Dump completo v2 e ripristino da dump** — `fui export --all --format json --output DIR` scrive `DIR/dump.json` (formato `fui-dump`, v2): ogni tabella dello schema più il `config.toml`, con gli importi come interi in unità minime, accanto a un file per entità. `fui restore FILE.json` riconosce il dump (altrimenti errore di input), fa un backup con motivo `restore`, ricostruisce l'archivio in un file temporaneo (migrazioni, poi inserimento di tutte le tabelle in ordine di dipendenza, con rimappatura degli id delle regole) e lo sostituisce con un `rename` atomico, come il reset; la configurazione incorporata si scrive solo con `--with-config`, conservando quella attuale in `config.toml.bak`.
+
+**Registrazione all'avvio** — prima di eseguire un comando, la radice della CLI (e la TUI all'apertura) chiama `app.Catchup` con le sorgenti `CatchupSource` delle ricorrenze e delle rate dei finanziamenti: ognuna crea le transazioni in sospeso scadute fino a oggi, è idempotente e non fa nulla se il suo modulo è spento. Il passaggio è saltato per `help`, `completion`, `__complete`, `init`, `reset`, `restore`, `backup`, `version` e quando l'archivio manca o è bloccato.
+
+**Reset** — `fui reset` costruisce l'archivio nuovo in un file temporaneo nella stessa directory: esegue le migrazioni, crea le categorie predefinite e, con `--keep-settings`, copia categorie, tag, regole, profili di import e associazioni dei connettori dall'archivio corrente (le associazioni, salvate per nome del conto nella tabella `connector_ref_pending` (migrazione 0020), si ricollegano al primo import successivo che trova un conto con quel nome). Prima del `rename` atomico crea un backup con motivo `reset`, che la rotazione di `backup.keep` non cancella mai; resta finché l'utente non lo elimina. Il file di configurazione non viene toccato.
 
 ## Configurazione, log e sicurezza
 
@@ -613,6 +624,8 @@ Le decisioni architetturali si registrano come ADR in `docs/adr/NNNN-titolo.md` 
 | 0012 | Temi della TUI dalla palette Catppuccin tramite token semantici; tema `auto` con rilevamento dello sfondo (OSC 11, poi `COLORFGBG`, poi scuro) |
 | 0013 | Git flow con `develop` (PREVIEW) e `main` (PROD), squash merge di feature e hotfix branch, hook `pre-commit` e tag di versione al rilascio |
 | 0019 | Librerie della TUI: Bubble Tea v1, glamour, ntcharts e bubble-datepicker; il resto con componenti Charm già presenti o interni |
+| 0016 | Annullamento esteso a ogni scrittura su transazioni (emendato in v0.5) |
+| 0020 | Decisioni P1–P16 della chiusura delle lacune v0.5 |
 
 **Da decidere**
 
@@ -628,6 +641,15 @@ Le decisioni architetturali si registrano come ADR in `docs/adr/NNNN-titolo.md` 
 - [ ] Verificare come la major di Bubble Tea scelta espone il colore di sfondo e la notifica del cambio di tema, che determinano l'implementazione del rilevamento.
 
 ## Cronologia delle versioni
+
+**Versione 1.5** — 25 novembre 2026, chiusura delle lacune v0.5
+
+| Sezione | Modifica |
+| --- | --- |
+| Modello dati e schema SQLite | Migrazioni 0016–0020 (dati di import, periodo del budget, spunte di riconciliazione, tipo `wallet` e scala dei prezzi, associazioni dei connettori in attesa); giornale di annullamento con maschere di campi; scala dei prezzi |
+| Moduli | Esclusione dei conti `investment` e `wallet` quando il relativo modulo è spento |
+| Persistenza, migrazioni e backup | Registrazione all'avvio di ricorrenze e rate; dump completo v2 e `fui restore`; il reset conserva le associazioni dei connettori |
+| Decisioni tecniche e punti aperti | ADR 0020; ADR 0016 emendato |
 
 **Versione 1.4** — 18 novembre 2026, librerie della TUI rinnovata
 

@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/exp/golden"
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/0xballo/fui/internal/app"
@@ -22,6 +24,10 @@ type stubSim struct {
 	saved []string
 	list  []app.SavedSimulation
 	cmpd  []string
+	// removed records the confirmed removals; listAfter replaces list once one happened.
+	removed   []string
+	planned   string
+	listAfter []app.SavedSimulation
 }
 
 func result(base int64) simulate.Result {
@@ -47,6 +53,7 @@ func (s *stubSim) Run(_ context.Context, req simulating.RunRequest) (simulating.
 				{End: "2026-01-31", BaseMinor: 90000, ScenarioMinor: 80000},
 				{End: "2026-02-28", BaseMinor: 80000, ScenarioMinor: 20000},
 			},
+			Accounts: stubAccounts(req),
 		}}, nil
 	}
 	return simulating.RunResult{Kind: req.Kind, Investment: triple()}, nil
@@ -61,7 +68,32 @@ func (s *stubSim) ApplySave(_ context.Context, p simulating.SavePlan) (app.Saved
 	return p.Simulation, nil
 }
 
-func (s *stubSim) List(context.Context) ([]app.SavedSimulation, error) { return s.list, nil }
+func stubAccounts(req simulating.RunRequest) []simulating.CashFlowAccount {
+	var out []simulating.CashFlowAccount
+	for i, name := range req.CashFlow.Accounts {
+		out = append(out, simulating.CashFlowAccount{Account: name, ID: int64(i + 1), Months: []simulating.CashFlowMonth{
+			{End: "2026-01-31", ScenarioMinor: 40000}, {End: "2026-02-28", ScenarioMinor: 10000},
+		}})
+	}
+	return out
+}
+
+func (s *stubSim) List(context.Context) ([]app.SavedSimulation, error) {
+	if len(s.removed) > 0 {
+		return s.listAfter, nil
+	}
+	return s.list, nil
+}
+
+func (s *stubSim) PlanRemove(_ context.Context, ref string) (simulating.RemovePlan, error) {
+	s.planned = ref
+	return simulating.RemovePlan{}, nil
+}
+
+func (s *stubSim) ApplyRemove(context.Context, simulating.RemovePlan) error {
+	s.removed = append(s.removed, s.planned)
+	return nil
+}
 
 func (s *stubSim) Rerun(_ context.Context, ref string) (simulating.RerunResult, error) {
 	return simulating.RerunResult{
@@ -208,6 +240,100 @@ func TestSimParamsFormBuildsRequest(t *testing.T) {
 	}
 	if s.InputActive() {
 		t.Fatal("form should be closed")
+	}
+}
+
+func TestSimRemoveSavedConfirm(t *testing.T) {
+	uc := &stubSim{
+		list:      []app.SavedSimulation{{Name: "a", Kind: "investment"}, {Name: "b", Kind: "pac"}},
+		listAfter: []app.SavedSimulation{{Name: "b", Kind: "pac"}},
+	}
+	s := simScreen(t, uc)
+	s, _ = keys(t, s, "m", "v")
+	if !offers(s, "d") {
+		t.Fatalf("saved list should offer d: %v", s.KeyMap())
+	}
+	for _, cancel := range []string{"n", "esc"} {
+		s, _ = keys(t, s, "d")
+		if v := s.View(); !strings.Contains(v, "Delete saved simulation \"a\"?") {
+			t.Fatalf("confirmation missing:\n%s", v)
+		}
+		s, _ = keys(t, s, cancel)
+		if len(uc.removed) != 0 || !strings.Contains(s.View(), "Saved simulations") {
+			t.Fatalf("%s must cancel: removed=%v\n%s", cancel, uc.removed, s.View())
+		}
+	}
+	s, _ = keys(t, s, "d", "y")
+	if diff := cmp.Diff([]string{"a"}, uc.removed); diff != "" {
+		t.Fatalf("removed (-want +got):\n%s", diff)
+	}
+	if v := s.View(); strings.Contains(v, "investment") || !strings.Contains(v, "pac") {
+		t.Fatalf("list not refreshed:\n%s", v)
+	}
+}
+
+func TestSimCashFlowFormEventsAndAccounts(t *testing.T) {
+	uc := &stubSim{}
+	s := simScreen(t, uc)
+	s, _ = keys(t, s, "m", "l", "l", "p")
+	for _, in := range []string{"", "2027-03-01:-5000; 2027-04-01:100", "2027-06-01:300", "2027-01-01", "2027-02-01:20000:4,5:5", "Main, Savings"} {
+		if in != "" {
+			s, _ = keys(t, s, in)
+		}
+		s, _ = keys(t, s, "enter")
+	}
+	if s.InputActive() {
+		t.Fatalf("form should be closed:\n%s", s.View())
+	}
+	got := uc.runs[len(uc.runs)-1].CashFlow
+	want := simulating.CashFlowParams{
+		Months: 12, Accounts: []string{"Main", "Savings"},
+		Events: []simulating.CashFlowEvent{
+			{Kind: "one_off", Date: "2027-03-01", AmountMinor: -500000},
+			{Kind: "one_off", Date: "2027-04-01", AmountMinor: 10000},
+			{Kind: "recurring_change", Date: "2027-06-01", AmountMinor: 30000},
+			{Kind: "stop_income", Date: "2027-01-01"},
+			{Kind: "new_loan", Date: "2027-02-01", AmountMinor: 2000000, RateBP: 450, Years: 5},
+		},
+	}
+	if diff := cmp.Diff(want, *got); diff != "" {
+		t.Fatalf("params (-want +got):\n%s", diff)
+	}
+	if v := s.View(); !strings.Contains(v, "Main") || !strings.Contains(v, "Savings") || !strings.Contains(v, "400.00") {
+		t.Fatalf("per-account view missing:\n%s", v)
+	}
+}
+
+func TestSimFormAndAccountGoldens(t *testing.T) {
+	names := []string{"latte", "frappe", "macchiato", "mocha", "terminal", "high-contrast"}
+	views := map[string]func(scr.Screen) scr.Screen{
+		"form": func(s scr.Screen) scr.Screen { s, _ = keys(t, s, "m", "l", "l", "p"); return s },
+		"accounts": func(s scr.Screen) scr.Screen {
+			s, _ = keys(t, s, "m", "l", "l", "p", "enter", "enter", "enter", "enter", "enter")
+			s, _ = keys(t, s, "Main,Savings")
+			s, _ = keys(t, s, "enter")
+			return s
+		},
+		"confirm": func(s scr.Screen) scr.Screen { s, _ = keys(t, s, "m", "v", "d"); return s },
+	}
+	for view, open := range views {
+		t.Run(view, func(t *testing.T) {
+			var base string
+			for _, name := range names {
+				uc := &stubSim{list: []app.SavedSimulation{{Name: "a", Kind: "investment"}}}
+				h := newHarness(t)
+				m := report.New(h.uc, domain.LocaleENUS, 1, theme.Resolve(theme.Config{Theme: name}, compareNoDetector{}))
+				m.SetSimulations(uc)
+				m.SetSize(80, 24)
+				plain := ansi.Strip(open(run(t, m, m.Init())).View())
+				if base == "" {
+					base = plain
+				} else if plain != base {
+					t.Fatalf("theme %s changes the text:\n%s\n---\n%s", name, plain, base)
+				}
+			}
+			golden.RequireEqual(t, []byte(base))
+		})
 	}
 }
 

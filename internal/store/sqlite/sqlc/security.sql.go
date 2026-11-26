@@ -56,7 +56,7 @@ func (q *Queries) DeleteSecurityPrice(ctx context.Context, arg DeleteSecurityPri
 }
 
 const getSecurity = `-- name: GetSecurity :one
-SELECT id, name, ticker, isin, kind, currency, quantity_scale, created_at, updated_at
+SELECT id, name, ticker, isin, kind, currency, quantity_scale, price_scale, created_at, updated_at
 FROM securities
 WHERE id = ?1
 `
@@ -72,6 +72,7 @@ func (q *Queries) GetSecurity(ctx context.Context, id int64) (Security, error) {
 		&i.Kind,
 		&i.Currency,
 		&i.QuantityScale,
+		&i.PriceScale,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -79,7 +80,7 @@ func (q *Queries) GetSecurity(ctx context.Context, id int64) (Security, error) {
 }
 
 const getSecurityOp = `-- name: GetSecurityOp :one
-SELECT id, date, account_id, security_id, kind, quantity_units, quantity_scale, unit_price_minor, unit_price_currency, fees_minor, fees_currency, cash_tx_id, created_at, updated_at
+SELECT id, date, account_id, security_id, kind, quantity_units, quantity_scale, unit_price_minor, unit_price_currency, fees_minor, fees_currency, cash_tx_id, created_at, updated_at, import_batch_id
 FROM security_ops
 WHERE id = ?1
 `
@@ -102,6 +103,7 @@ func (q *Queries) GetSecurityOp(ctx context.Context, id int64) (SecurityOp, erro
 		&i.CashTxID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ImportBatchID,
 	)
 	return i, err
 }
@@ -113,7 +115,8 @@ INSERT INTO securities (
     isin,
     kind,
     currency,
-    quantity_scale
+    quantity_scale,
+    price_scale
 )
 VALUES (
     ?1,
@@ -121,9 +124,10 @@ VALUES (
     ?3,
     ?4,
     ?5,
-    ?6
+    ?6,
+    ?7
 )
-RETURNING id, name, ticker, isin, kind, currency, quantity_scale, created_at, updated_at
+RETURNING id, name, ticker, isin, kind, currency, quantity_scale, price_scale, created_at, updated_at
 `
 
 type InsertSecurityParams struct {
@@ -133,6 +137,7 @@ type InsertSecurityParams struct {
 	Kind          string
 	Currency      string
 	QuantityScale int64
+	PriceScale    int64
 }
 
 func (q *Queries) InsertSecurity(ctx context.Context, arg InsertSecurityParams) (Security, error) {
@@ -143,6 +148,7 @@ func (q *Queries) InsertSecurity(ctx context.Context, arg InsertSecurityParams) 
 		arg.Kind,
 		arg.Currency,
 		arg.QuantityScale,
+		arg.PriceScale,
 	)
 	var i Security
 	err := row.Scan(
@@ -153,6 +159,7 @@ func (q *Queries) InsertSecurity(ctx context.Context, arg InsertSecurityParams) 
 		&i.Kind,
 		&i.Currency,
 		&i.QuantityScale,
+		&i.PriceScale,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -171,7 +178,8 @@ INSERT INTO security_ops (
     unit_price_currency,
     fees_minor,
     fees_currency,
-    cash_tx_id
+    cash_tx_id,
+    import_batch_id
 )
 VALUES (
     ?1,
@@ -184,9 +192,10 @@ VALUES (
     ?8,
     ?9,
     ?10,
-    ?11
+    ?11,
+    ?12
 )
-RETURNING id, date, account_id, security_id, kind, quantity_units, quantity_scale, unit_price_minor, unit_price_currency, fees_minor, fees_currency, cash_tx_id, created_at, updated_at
+RETURNING id, date, account_id, security_id, kind, quantity_units, quantity_scale, unit_price_minor, unit_price_currency, fees_minor, fees_currency, cash_tx_id, created_at, updated_at, import_batch_id
 `
 
 type InsertSecurityOpParams struct {
@@ -201,6 +210,7 @@ type InsertSecurityOpParams struct {
 	FeesMinor         int64
 	FeesCurrency      string
 	CashTxID          sql.NullInt64
+	ImportBatchID     sql.NullInt64
 }
 
 func (q *Queries) InsertSecurityOp(ctx context.Context, arg InsertSecurityOpParams) (SecurityOp, error) {
@@ -216,6 +226,7 @@ func (q *Queries) InsertSecurityOp(ctx context.Context, arg InsertSecurityOpPara
 		arg.FeesMinor,
 		arg.FeesCurrency,
 		arg.CashTxID,
+		arg.ImportBatchID,
 	)
 	var i SecurityOp
 	err := row.Scan(
@@ -233,12 +244,13 @@ func (q *Queries) InsertSecurityOp(ctx context.Context, arg InsertSecurityOpPara
 		&i.CashTxID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ImportBatchID,
 	)
 	return i, err
 }
 
 const listSecurities = `-- name: ListSecurities :many
-SELECT id, name, ticker, isin, kind, currency, quantity_scale, created_at, updated_at
+SELECT id, name, ticker, isin, kind, currency, quantity_scale, price_scale, created_at, updated_at
 FROM securities
 ORDER BY id
 `
@@ -260,6 +272,7 @@ func (q *Queries) ListSecurities(ctx context.Context) ([]Security, error) {
 			&i.Kind,
 			&i.Currency,
 			&i.QuantityScale,
+			&i.PriceScale,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -276,8 +289,54 @@ func (q *Queries) ListSecurities(ctx context.Context) ([]Security, error) {
 	return items, nil
 }
 
+const listSecurityOpsByBatch = `-- name: ListSecurityOpsByBatch :many
+SELECT id, date, account_id, security_id, kind, quantity_units, quantity_scale, unit_price_minor, unit_price_currency, fees_minor, fees_currency, cash_tx_id, created_at, updated_at, import_batch_id
+FROM security_ops
+WHERE import_batch_id = ?1
+ORDER BY date, id
+`
+
+func (q *Queries) ListSecurityOpsByBatch(ctx context.Context, importBatchID sql.NullInt64) ([]SecurityOp, error) {
+	rows, err := q.db.QueryContext(ctx, listSecurityOpsByBatch, importBatchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SecurityOp
+	for rows.Next() {
+		var i SecurityOp
+		if err := rows.Scan(
+			&i.ID,
+			&i.Date,
+			&i.AccountID,
+			&i.SecurityID,
+			&i.Kind,
+			&i.QuantityUnits,
+			&i.QuantityScale,
+			&i.UnitPriceMinor,
+			&i.UnitPriceCurrency,
+			&i.FeesMinor,
+			&i.FeesCurrency,
+			&i.CashTxID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ImportBatchID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSecurityOpsBySecurity = `-- name: ListSecurityOpsBySecurity :many
-SELECT id, date, account_id, security_id, kind, quantity_units, quantity_scale, unit_price_minor, unit_price_currency, fees_minor, fees_currency, cash_tx_id, created_at, updated_at
+SELECT id, date, account_id, security_id, kind, quantity_units, quantity_scale, unit_price_minor, unit_price_currency, fees_minor, fees_currency, cash_tx_id, created_at, updated_at, import_batch_id
 FROM security_ops
 WHERE security_id = ?1
   AND (?2 = '' OR date >= ?2)
@@ -315,6 +374,7 @@ func (q *Queries) ListSecurityOpsBySecurity(ctx context.Context, arg ListSecurit
 			&i.CashTxID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ImportBatchID,
 		); err != nil {
 			return nil, err
 		}
@@ -449,8 +509,9 @@ SET
     fees_minor = ?9,
     fees_currency = ?10,
     cash_tx_id = ?11,
+    import_batch_id = ?12,
     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-WHERE id = ?12
+WHERE id = ?13
 `
 
 type UpdateSecurityOpParams struct {
@@ -465,6 +526,7 @@ type UpdateSecurityOpParams struct {
 	FeesMinor         int64
 	FeesCurrency      string
 	CashTxID          sql.NullInt64
+	ImportBatchID     sql.NullInt64
 	ID                int64
 }
 
@@ -481,6 +543,7 @@ func (q *Queries) UpdateSecurityOp(ctx context.Context, arg UpdateSecurityOpPara
 		arg.FeesMinor,
 		arg.FeesCurrency,
 		arg.CashTxID,
+		arg.ImportBatchID,
 		arg.ID,
 	)
 	if err != nil {

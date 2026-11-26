@@ -1,0 +1,47 @@
+# tx add/edit with --payee and --tag: implicit creation, notices, dry-run, clearing.
+exec fui init --preset expense --currency EUR
+exec fui account add Checking --kind checking --currency EUR --opening-balance 1000
+
+# add with a new payee and two tags: notices go to stderr, tx show lists them
+exec fui add -12,50 Dinner -a Checking --payee Trattoria --tag outing --tag friends --date 2026-01-10
+stderr 'created payee Trattoria'
+stderr 'created tag outing'
+stderr 'created tag friends'
+exec fui tx show 1
+stdout 'payee: Trattoria'
+stdout 'tags: outing, friends'
+
+# a known payee is matched case-insensitively and creates nothing
+exec fui add -3 Coffee -a Checking --payee trattoria --tag OUTING --date 2026-01-11
+! stderr 'created'
+exec fui tx show 2
+stdout 'payee: Trattoria'
+stdout 'tags: outing'
+
+# dry-run writes nothing and lists the creations (plan JSON carries the notices)
+exec fui tx edit 2 --payee Bakery --tag errands --dry-run --json
+stdout '"notices"'
+stdout 'created payee Bakery'
+exec fui tx show 2
+stdout 'payee: Trattoria'
+! stdout 'errands'
+exec fui payee list
+! stdout 'Bakery'
+
+# edit: change the payee, add and remove tags
+exec fui tx edit 2 --payee Bakery --tag errands --untag outing
+stderr 'created payee Bakery'
+exec fui tx show 2
+stdout 'payee: Bakery'
+stdout 'tags: errands'
+! stdout 'outing'
+
+# an empty payee clears it
+exec fui tx edit 2 --payee ''
+exec fui tx show 2
+! stdout 'payee:'
+
+# --json carries the notices of the write
+exec fui add -1 Gum -a Checking --payee Kiosk --json
+stdout '"notices"'
+stdout 'created payee Kiosk'

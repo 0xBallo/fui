@@ -1,0 +1,67 @@
+# asset lifecycle: add, show, edit, value, value rm, link/unlink, rm.
+exec fui init --preset expense --currency EUR
+
+# module off: every asset command is refused
+! exec fui asset list
+stderr 'assets'
+exec fui module enable assets
+exec fui module enable loans
+
+exec fui asset add Car --kind vehicle --value 15000 --purchase-date 2026-01-01
+stdout 'Car'
+exec fui asset show Car
+stdout 'name: Car'
+stdout 'loan: -'
+exec fui asset show Car --json
+stdout '"name":"Car"'
+stdout '"history":\[\]'
+! exec fui asset show Nope
+stderr 'Nope'
+
+# edit
+! exec fui asset edit Car
+exec fui asset edit Car --purchase-value 16000 --dry-run
+stdout 'edit asset'
+exec fui asset edit Car --name Auto --purchase-value 16000 --json
+stdout '"name":"Auto"'
+stdout '"purchase_value":1600000'
+
+# valuations
+exec fui asset value Auto 14000 --date 2026-06-01
+exec fui asset show Auto --csv
+stdout '2026-06-01,14000'
+exec fui asset value rm Auto 2026-06-01 --dry-run
+stdout 'valuation'
+exec fui asset show Auto --csv
+stdout '2026-06-01,14000'
+exec fui asset value rm Auto 2026-06-01
+exec fui asset show Auto --json
+stdout '"history":\[\]'
+! exec fui asset value rm Auto 2026-06-01
+stderr 'no valuation'
+
+# link / unlink
+exec fui account add Checking --kind checking --currency EUR --opening-balance 1000
+exec fui loan add 'Car Loan' --kind loan --principal 12000 --disbursed 2026-01-01 --term-months 60 --rate-type fixed --rate 4,00 --debit Checking --computed
+! exec fui asset unlink Auto
+stderr 'no linked loan'
+exec fui asset link Auto 'Car Loan' --dry-run
+stdout 'link asset'
+exec fui asset link Auto 'Car Loan' --json
+stdout '"action":"linked"'
+exec fui asset list --json
+stdout '"loan":"Car Loan"'
+exec fui asset show Auto
+stdout 'loan: Car Loan'
+exec fui asset unlink Auto
+exec fui asset list
+! stdout 'Car Loan'
+
+# rm needs confirmation
+! exec fui asset rm Auto
+stderr 'yes'
+exec fui asset rm Auto --dry-run
+stdout 'delete asset'
+exec fui asset rm Auto --yes
+exec fui asset list --json
+! stdout 'Auto'

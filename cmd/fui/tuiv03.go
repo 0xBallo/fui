@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/investing"
+	"github.com/0xballo/fui/internal/app/lending"
 	"github.com/0xballo/fui/internal/app/recurring"
 	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/app/simulating"
@@ -28,6 +32,54 @@ func (u positionsUseCases) PlanSetPrice(ctx context.Context, req investing.SetPr
 
 func (u positionsUseCases) ApplySetPrice(ctx context.Context, p investing.SetPricePlan) error {
 	return u.build().ApplySetPrice(ctx, p)
+}
+
+func (u positionsUseCases) PlanAddSecurity(ctx context.Context, req investing.AddSecurityRequest) (investing.AddSecurityPlan, error) {
+	return u.build().PlanAddSecurity(ctx, req)
+}
+
+func (u positionsUseCases) ApplyAddSecurity(ctx context.Context, p investing.AddSecurityPlan) (domain.Security, error) {
+	return u.build().ApplyAddSecurity(ctx, p)
+}
+
+func (u positionsUseCases) PlanBuy(ctx context.Context, req investing.OpRequest) (investing.OpPlan, error) {
+	return u.build().PlanBuy(ctx, req)
+}
+
+func (u positionsUseCases) PlanSell(ctx context.Context, req investing.OpRequest) (investing.OpPlan, error) {
+	return u.build().PlanSell(ctx, req)
+}
+
+func (u positionsUseCases) PlanDividend(ctx context.Context, req investing.OpRequest) (investing.OpPlan, error) {
+	return u.build().PlanDividend(ctx, req)
+}
+
+func (u positionsUseCases) PlanCoupon(ctx context.Context, req investing.OpRequest) (investing.OpPlan, error) {
+	return u.build().PlanCoupon(ctx, req)
+}
+
+func (u positionsUseCases) ApplyOp(ctx context.Context, p investing.OpPlan) (domain.SecurityOp, error) {
+	return u.build().ApplyOp(ctx, p)
+}
+
+func (u positionsUseCases) ListOps(ctx context.Context, req investing.ListOpsRequest) ([]investing.OpLine, error) {
+	return u.build().ListOps(ctx, req)
+}
+
+func (u positionsUseCases) PlanEditOp(ctx context.Context, req investing.EditOpRequest) (investing.EditOpPlan, error) {
+	return u.build().PlanEditOp(ctx, req)
+}
+
+func (u positionsUseCases) ApplyEditOp(ctx context.Context, p investing.EditOpPlan) (domain.SecurityOp, error) {
+	return u.build().ApplyEditOp(ctx, p)
+}
+
+func (u positionsUseCases) PlanRemoveOp(ctx context.Context, id domain.SecurityOpID) (investing.RemoveOpPlan, error) {
+	return u.build().PlanRemoveOp(ctx, id)
+}
+
+func (u positionsUseCases) ApplyRemoveOp(ctx context.Context, p investing.RemoveOpPlan) error {
+	return u.build().ApplyRemoveOp(ctx, p)
 }
 
 // netWorthUseCases adapts reporting.Analytics to dashboard.NetWorthUseCases.
@@ -82,6 +134,14 @@ func (u simUseCases) List(ctx context.Context) ([]app.SavedSimulation, error) {
 	return u.svc.List(ctx, u.modules())
 }
 
+func (u simUseCases) PlanRemove(ctx context.Context, ref string) (simulating.RemovePlan, error) {
+	return u.svc.PlanRemove(ctx, u.modules(), ref)
+}
+
+func (u simUseCases) ApplyRemove(ctx context.Context, p simulating.RemovePlan) error {
+	return u.svc.ApplyRemove(ctx, p)
+}
+
 func (u simUseCases) Rerun(ctx context.Context, ref string) (simulating.RerunResult, error) {
 	return u.svc.Rerun(ctx, u.modules(), ref)
 }
@@ -109,4 +169,105 @@ type recurrenceAlerts struct {
 
 func (u recurrenceAlerts) ListRecurrences(ctx context.Context) ([]app.Recurrence, error) {
 	return u.svc.List(ctx, u.modules())
+}
+
+// pendingRecurring and pendingLoans are the parts of recurring.Service and lending.Service that
+// resolve pending transactions, so the dispatch can be tested without a store.
+type pendingRecurring interface {
+	PlanConfirm(ctx context.Context, enabled module.Set, id domain.TransactionID) (recurring.ConfirmPlan, error)
+	ApplyConfirm(ctx context.Context, p recurring.ConfirmPlan) error
+}
+
+type pendingLoans interface {
+	ConfirmPending(ctx context.Context, enabled module.Set, id domain.TransactionID) (lending.PendingConfirmed, error)
+}
+
+type pendingTxLookup interface {
+	ShowTx(ctx context.Context, id domain.TransactionID) (app.TxView, error)
+	PlanRemoveTx(ctx context.Context, req app.RemoveTxRequest) (app.RemoveTxPlan, error)
+	ApplyRemoveTx(ctx context.Context, p app.RemoveTxPlan) error
+}
+
+// pendingActions adapts the recurring and lending services to transactions.PendingActions: a
+// pending transaction is confirmed by the module that created it, found from its recurrence link
+// or, failing that, from the loan schedule.
+type pendingActions struct {
+	txs       pendingTxLookup
+	recurring pendingRecurring
+	loans     pendingLoans
+	modules   func() module.Set
+}
+
+const (
+	noticeNotPending  = "not a recurring or loan pending transaction"
+	noticeNoSkip      = "skip is only supported for recurring transactions (loan installments cannot be skipped yet)"
+	noticeRecurBooked = "recurring transaction confirmed"
+	noticeLoanBooked  = "loan installment confirmed"
+	noticeRecurSkip   = "pending recurring transaction skipped"
+)
+
+// Confirm books the pending transaction through the module it belongs to.
+func (a pendingActions) Confirm(ctx context.Context, id domain.TransactionID) (string, error) {
+	view, err := a.txs.ShowTx(ctx, id)
+	if err != nil {
+		return "", fmt.Errorf("show transaction %d: %w", id, err)
+	}
+	enabled := a.modules()
+	if view.Transaction.RecurrenceID != 0 {
+		plan, err := a.recurring.PlanConfirm(ctx, enabled, id)
+		if err != nil {
+			return "", fmt.Errorf("confirm recurring transaction: %w", err)
+		}
+		if err := a.recurring.ApplyConfirm(ctx, plan); err != nil {
+			return "", fmt.Errorf("confirm recurring transaction: %w", err)
+		}
+		return noticeRecurBooked, nil
+	}
+	done, err := a.loans.ConfirmPending(ctx, enabled, id)
+	if err != nil {
+		if notLoanInstallment(err) {
+			return noticeNotPending, nil
+		}
+		return "", fmt.Errorf("confirm loan installment: %w", err)
+	}
+	if len(done.Warnings) > 0 {
+		return noticeLoanBooked + " (" + strings.Join(done.Warnings, "; ") + ")", nil
+	}
+	return noticeLoanBooked, nil
+}
+
+// Skip discards the pending transaction of a recurrence, like tx rm, leaving the recurrence
+// untouched: catch-up has already advanced its next date past this occurrence. Loan installments
+// have no skip yet, and the loan link is only visible to lending, so any transaction without a
+// recurrence gets the same notice.
+func (a pendingActions) Skip(ctx context.Context, id domain.TransactionID) (string, error) {
+	view, err := a.txs.ShowTx(ctx, id)
+	if err != nil {
+		return "", fmt.Errorf("show transaction %d: %w", id, err)
+	}
+	if view.Transaction.RecurrenceID == 0 {
+		return noticeNoSkip, nil
+	}
+	if err := app.WrapModuleError(a.modules().Require(module.Recurring)); err != nil {
+		return "", fmt.Errorf("skip recurring transaction: %w", err)
+	}
+	plan, err := a.txs.PlanRemoveTx(ctx, app.RemoveTxRequest{ID: id})
+	if err != nil {
+		return "", fmt.Errorf("skip recurring transaction: %w", err)
+	}
+	if err := a.txs.ApplyRemoveTx(ctx, plan); err != nil {
+		return "", fmt.Errorf("skip recurring transaction: %w", err)
+	}
+	return noticeRecurSkip, nil
+}
+
+// notLoanInstallment reports whether lending rejected the transaction for not being a pending loan
+// payment, as opposed to a real failure.
+func notLoanInstallment(err error) bool {
+	var de *domain.Error
+	if !errors.As(err, &de) || de.Code != domain.CodeInvalidValue {
+		return false
+	}
+	field, _ := de.Details["field"].(string)
+	return field == "transaction" || field == "status"
 }

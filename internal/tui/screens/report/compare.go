@@ -22,7 +22,7 @@ type CompareUseCases interface {
 
 // compareKeys are the bindings of the compare view.
 type compareKeys struct {
-	Open, Params, ByCategory, Refresh, Back key.Binding
+	Open, Params, ByCategory, Refresh, Drill, Back key.Binding
 }
 
 func defaultCompareKeys() compareKeys {
@@ -30,7 +30,8 @@ func defaultCompareKeys() compareKeys {
 		Open:       key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "compare periods")),
 		Params:     key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "change periods")),
 		ByCategory: key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "toggle by category")),
-		Refresh:    key.NewBinding(key.WithKeys("r", "enter"), key.WithHelp("r/enter", "run")),
+		Refresh:    key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "run")),
+		Drill:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "transactions")),
 		Back:       key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 	}
 }
@@ -111,6 +112,8 @@ func (m *Model) handleCompareKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		return m, m.runCompare()
 	case key.Matches(msg, m.cmp.km.Refresh):
 		return m, m.runCompare()
+	case key.Matches(msg, m.cmp.km.Drill):
+		return m, m.drillCompare()
 	case key.Matches(msg, m.cmp.km.Params):
 		m.openCompareForm()
 	}
@@ -217,7 +220,7 @@ func (m *Model) viewCompare() string {
 		lines = append(lines, "", bars)
 	}
 	lines = append(lines, "",
-		m.th.Base.Render("p periods   t by category: "+onOff(m.cmp.req.ByCategory)+"   r refresh   esc back"))
+		m.th.Base.Render("p periods   t by category: "+onOff(m.cmp.req.ByCategory)+"   enter transactions   r refresh   esc back"))
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
 

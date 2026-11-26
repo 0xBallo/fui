@@ -1,7 +1,9 @@
 package importing
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -23,6 +25,7 @@ func (b *builder) addRow(ctx context.Context, rec *fuiproto.TransactionRecord) e
 		Line: line, Class: domain.DedupNew, Include: true, AccountRef: rec.Account, Tx: tx,
 		Category: strings.TrimSpace(rec.Category), Transfer: strings.TrimSpace(rec.Transfer),
 		Splits: parseSplits(rec.Splits), Payee: strings.TrimSpace(rec.Payee), Tags: sanitizeTags(rec.Tags),
+		Hint: strings.TrimSpace(rec.CategoryHint),
 	}
 	if err := validateCategoryName(row.Category); err != nil {
 		b.plan.Errors = append(b.plan.Errors, RowError{Line: line, Message: err.Error()})
@@ -84,6 +87,10 @@ func (b *builder) addSecurityOp(_ context.Context, rec *fuiproto.SecurityOpRecor
 		return nil
 	}
 	sec = b.resolveSecurity(sec)
+	if err := domain.CheckOpAccount(info.kind, sec.Kind); err != nil {
+		b.err(line, "security_op on account %q: %v", rec.Account, err)
+		return nil
+	}
 
 	op, err := parseSecurityOp(rec, info.id, sec)
 	if err != nil {
@@ -211,7 +218,12 @@ func parseSecurityOp(rec *fuiproto.SecurityOpRecord, accountID domain.AccountID,
 	if err != nil {
 		return domain.SecurityOp{}, fmt.Errorf("quantity: %w", err)
 	}
-	price, err := domain.NewMoney(rec.UnitPrice, sec.Currency)
+	priceMoney, err := domain.NewMoney(rec.UnitPrice, sec.Currency)
+	if err != nil {
+		return domain.SecurityOp{}, fmt.Errorf("unit price: %w", err)
+	}
+	// Records carry the price in minor units of the currency; rescale exactly to the security's precision.
+	price, err := domain.ParsePrice(domain.FormatMachine(priceMoney), sec.Currency, sec.PriceScale, domain.LocaleENUS)
 	if err != nil {
 		return domain.SecurityOp{}, fmt.Errorf("unit price: %w", err)
 	}
@@ -269,11 +281,52 @@ func convert(rec *fuiproto.TransactionRecord, info *acctInfo) (domain.Transactio
 	if t.Kind, err = domain.ParseTxKind(orDefault(string(rec.Kind), string(domain.KindOther))); err != nil {
 		return domain.Transaction{}, fmt.Errorf("kind: %w", err)
 	}
+	if rec.Original != nil {
+		ocur, err := domain.ParseCurrency(rec.Original.Currency)
+		if err != nil {
+			return domain.Transaction{}, fmt.Errorf("original currency: %w", err)
+		}
+		om, err := domain.NewMoney(rec.Original.Amount, ocur)
+		if err != nil {
+			return domain.Transaction{}, fmt.Errorf("original amount: %w", err)
+		}
+		t.Original = &om
+	}
+	if t.Raw, err = compactRaw(rec.Raw); err != nil {
+		return domain.Transaction{}, err
+	}
 	t, err = domain.NewTransaction(t)
 	if err != nil {
 		return domain.Transaction{}, fmt.Errorf("transaction: %w", err)
 	}
 	return t, nil
+}
+
+// compactRaw encodes the source record as compact JSON; encoding/json sorts map keys, so the
+// text is deterministic.
+func compactRaw(raw map[string]any) (string, error) {
+	if len(raw) == 0 {
+		return "", nil
+	}
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return "", fmt.Errorf("raw record: %w", err)
+	}
+	return string(data), nil
+}
+
+// parseRaw is the inverse of compactRaw; numbers keep their exact text.
+func parseRaw(raw string) map[string]any {
+	if raw == "" {
+		return nil
+	}
+	dec := json.NewDecoder(bytes.NewReader([]byte(raw)))
+	dec.UseNumber()
+	var out map[string]any
+	if err := dec.Decode(&out); err != nil {
+		return nil
+	}
+	return out
 }
 
 func orDefault(s, def string) string {
@@ -516,6 +569,76 @@ func (b *builder) finishAccounts(balances []fuiproto.BalanceRecord) error {
 		na.Account.OpeningBalance, na.Account.OpenedOn = money, opened
 	}
 	return nil
+}
+
+// checkStatementBalances compares each balance record of an account that already exists with the
+// balance the archive would have at that date once the included rows of the plan are applied,
+// and reports the mismatches with the reconcile command that settles them.
+func (b *builder) checkStatementBalances(ctx context.Context, balances []fuiproto.BalanceRecord) error {
+	for _, bal := range balances {
+		info := b.accts[bal.Account]
+		if info == nil || !info.mapped || info.id <= 0 {
+			continue
+		}
+		if err := b.checkStatementBalance(ctx, bal, info); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *builder) checkStatementBalance(ctx context.Context, bal fuiproto.BalanceRecord, info *acctInfo) error {
+	date, err := domain.ParseDate(bal.Date)
+	if err != nil {
+		return fmt.Errorf("balance of %q: %w", bal.Account, err)
+	}
+	acct, err := b.r.Accounts().Get(ctx, info.id)
+	if err != nil {
+		return fmt.Errorf("get account %q: %w", bal.Account, err)
+	}
+	sum, err := b.r.Transactions().SumUpTo(ctx, info.id, date)
+	if err != nil {
+		return fmt.Errorf("balance of %q: %w", bal.Account, err)
+	}
+	b.plan.BalanceChecks = append(b.plan.BalanceChecks, BalanceCheck{
+		AccountRef: bal.Account, AccountID: info.id, AccountName: acct.Name, Currency: info.cur,
+		Date: date, Expected: bal.Amount, Base: acct.OpeningBalance.Minor() + sum,
+	})
+	return nil
+}
+
+// refreshBalanceMismatches recomputes BalanceMismatches from BalanceChecks and the rows that are
+// currently included, so toggling a row keeps the preview coherent.
+func (p *ImportPlan) refreshBalanceMismatches() {
+	p.BalanceMismatches = nil
+	for _, c := range p.BalanceChecks {
+		computed := c.Base
+		for _, row := range p.Rows {
+			if row.AccountRef == c.AccountRef && row.Include && row.Class != domain.DedupDuplicate &&
+				row.ConfirmsPending == 0 && !row.Tx.Date.After(c.Date) {
+				computed += row.Tx.Amount.Minor()
+			}
+		}
+		if computed == c.Expected {
+			continue
+		}
+		want, err := domain.NewMoney(c.Expected, c.Currency)
+		if err != nil {
+			continue // the currency was validated when the account was resolved
+		}
+		p.BalanceMismatches = append(p.BalanceMismatches, BalanceMismatch{
+			AccountRef: c.AccountRef, AccountID: c.AccountID, Date: c.Date, Expected: c.Expected, Computed: computed,
+			Suggest: fmt.Sprintf("fui reconcile %s --date %s --balance %s", shellQuote(c.AccountName), c.Date, domain.FormatMachine(want)),
+		})
+	}
+}
+
+// shellQuote quotes s for a POSIX shell only when it needs it.
+func shellQuote(s string) string {
+	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.") == "" {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // lastBalance returns the balance record of ref with the latest date (the last one on a tie).

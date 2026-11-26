@@ -21,3 +21,17 @@ FROM reconciliations
 WHERE account_id = @account_id AND closed_at IS NOT NULL
 ORDER BY date DESC, id DESC
 LIMIT 1;
+
+-- name: ListReconcileTicks :many
+SELECT transaction_id
+FROM reconcile_ticks
+WHERE account_id = @account_id
+ORDER BY transaction_id;
+
+-- name: InsertReconcileTick :exec
+INSERT OR IGNORE INTO reconcile_ticks (account_id, transaction_id)
+VALUES (@account_id, @transaction_id);
+
+-- name: DeleteReconcileTick :exec
+DELETE FROM reconcile_ticks
+WHERE account_id = @account_id AND transaction_id = @transaction_id;

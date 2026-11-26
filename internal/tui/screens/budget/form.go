@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/0xballo/fui/internal/app/budgeting"
+	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/tui/components"
 	"github.com/0xballo/fui/internal/tui/screens"
 )
@@ -63,6 +64,11 @@ func (m *Model) otherEnvelopeNames(exclude string) []string {
 }
 
 func (m *Model) handleFormKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+	if m.mode == modeNewForm || m.mode == modeEditForm {
+		if handled, cmd := m.handlePickerKey(msg); handled {
+			return m, cmd
+		}
+	}
 	switch msg.String() {
 	case "esc":
 		m.mode = modeList
@@ -91,6 +97,8 @@ func (m *Model) submitForm() tea.Cmd {
 		return m.submitMove("", m.target)
 	case modeMoveForm:
 		return m.submitMove(m.target, m.toField.Value())
+	case modeNewForm, modeEditForm:
+		return m.submitBudget()
 	case modeSetForm, modeList, modeConfirm:
 		return m.submitSet()
 	}
@@ -114,10 +122,15 @@ func (m *Model) submitSet() tea.Cmd {
 }
 
 func (m *Model) submitMove(from, to string) tea.Cmd {
-	req := budgeting.MoveRequest{From: from, To: to, Amount: m.amountField.Value()}
+	amount, period := m.amountField.Value(), m.status.Period
 	month := m.monthIn
 	return func() tea.Msg {
 		ctx := context.Background()
+		today, err := m.uc.Today()
+		if err != nil {
+			return screens.ErrorMsg{Err: err}
+		}
+		req := budgeting.MoveRequest{From: from, To: to, Amount: amount, Date: moveDate(today, period)}
 		plan, err := m.uc.PlanMove(ctx, req)
 		if err != nil {
 			return screens.ErrorMsg{Err: err}
@@ -127,6 +140,15 @@ func (m *Model) submitMove(from, to string) tea.Cmd {
 		}
 		return m.reload(ctx, month)
 	}
+}
+
+// moveDate is the date of a move made while period is on screen: today when it falls inside the
+// period, else the period's first day, so the move always lands in the month the user is looking at.
+func moveDate(today domain.Date, period domain.Period) string {
+	if period.Contains(today) {
+		return today.String()
+	}
+	return period.From().String()
 }
 
 // reload re-fetches the status of month after a form submission, converting a lookup failure

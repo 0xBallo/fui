@@ -3,6 +3,7 @@ package reporting
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/assetting"
@@ -22,13 +23,13 @@ type NetWorthPoint struct {
 	Total     Amount  `json:"total"`
 }
 
-// NetWorthResult is the monthly net-worth series in the base currency.
+// NetWorthResult is the net-worth series in the base currency, one point per bucket end.
 type NetWorthResult struct {
 	Period string          `json:"period"`
 	Points []NetWorthPoint `json:"points"`
 }
 
-// NetWorthReport composes the month-end net worth from liquidity, security positions
+// NetWorthReport composes the net worth at the end of every req.Granularity bucket (month by default) from liquidity, security positions
 // (investments), latest asset valuations (assets) and loan debts (loans), each component
 // present only when its module is enabled. Liquidity is every non-loan account, archived
 // included; loan liability accounts count as debts, never as liquidity.
@@ -40,7 +41,7 @@ func (a *Analytics) NetWorthReport(ctx context.Context, req ReportRequest) (NetW
 	if err != nil {
 		return NetWorthResult{}, err
 	}
-	ends, err := a.monthEnds(p)
+	ends, err := a.bucketEnds(p, req.Granularity)
 	if err != nil {
 		return NetWorthResult{}, err
 	}
@@ -53,6 +54,41 @@ func (a *Analytics) NetWorthReport(ctx context.Context, req ReportRequest) (NetW
 		out.Points = append(out.Points, point)
 	}
 	return out, nil
+}
+
+// bucketEnds lists the bucket ends of p; the zero granularity means accounting months.
+func (a *Analytics) bucketEnds(p domain.Period, g domain.Granularity) ([]domain.Date, error) {
+	if g == "" || g == domain.GranMonth {
+		return a.monthEnds(p)
+	}
+	ends, err := g.BucketEnds(p, a.cfg.MonthStartDay)
+	if err != nil {
+		return nil, fmt.Errorf("bucket ends: %w", err)
+	}
+	return ends, nil
+}
+
+// moduleAccountKinds maps a module to the account kinds that only exist while it is enabled;
+// supporting another module (e.g. crypto wallets) is one more entry.
+var moduleAccountKinds = map[module.ID][]domain.AccountKind{
+	module.Investments: {domain.AccountInvestment},
+	module.Crypto:      {domain.AccountWallet},
+}
+
+// accountEnabled reports whether accounts of kind take part in net worth and runway under the
+// enabled modules; account lists elsewhere keep showing them.
+func (a *Analytics) accountEnabled(kind domain.AccountKind) bool {
+	return accountKindEnabled(a.cfg.Modules, kind)
+}
+
+// accountKindEnabled is false when kind belongs to a module that is not in set.
+func accountKindEnabled(set module.Set, kind domain.AccountKind) bool {
+	for id, kinds := range moduleAccountKinds {
+		if !set.Has(id) && slices.Contains(kinds, kind) {
+			return false
+		}
+	}
+	return true
 }
 
 // NetWorthAt composes the net worth at date; a zero date means today.
@@ -140,7 +176,7 @@ func (a *Analytics) liquidityAndDebts(ctx context.Context, r app.Repos, at domai
 	}
 	liquid := make([]domain.Account, 0, len(accts))
 	for _, acct := range accts {
-		if acct.Kind != domain.AccountLoan {
+		if acct.Kind != domain.AccountLoan && a.accountEnabled(acct.Kind) {
 			liquid = append(liquid, acct)
 		}
 	}
@@ -215,4 +251,13 @@ func (a *Analytics) assetInputs(ctx context.Context, at domain.Date) ([]domain.N
 		return nil
 	})
 	return out, err
+}
+
+// Series is the total-only view of r, for renderers that draw a plain date/amount series.
+func (r NetWorthResult) Series() SeriesResult {
+	out := SeriesResult{Period: r.Period, Points: make([]Point, len(r.Points))}
+	for i, p := range r.Points {
+		out.Points[i] = Point{Date: p.Date, Amount: p.Total}
+	}
+	return out
 }

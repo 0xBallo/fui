@@ -65,8 +65,9 @@ type acctInfo struct {
 	rec    fuiproto.AccountRecord
 	id     domain.AccountID
 	cur    domain.Currency
-	mapped bool // bound to an existing account
-	create bool // the import creates it
+	kind   domain.AccountKind // kind of the bound or to-be-created account
+	mapped bool               // bound to an existing account
+	create bool               // the import creates it
 }
 
 // resolved reports whether the account is known, or will be once the import is applied.
@@ -124,19 +125,12 @@ func (b *builder) build(ctx context.Context, plan *ImportPlan) error {
 	}
 	var balances []fuiproto.BalanceRecord
 	for _, rec := range b.st.result.Records {
-		switch {
-		case rec.Transaction != nil:
-			if err := b.addRow(ctx, rec.Transaction); err != nil {
-				return err
-			}
-		case rec.Error != nil:
-			plan.Errors = append(plan.Errors, RowError{Line: rec.Error.Line, Message: "source: " + rec.Error.Message})
-		case rec.Balance != nil:
+		if rec.Balance != nil {
 			balances = append(balances, *rec.Balance)
-		case rec.SecurityOp != nil:
-			if err := b.addSecurityOp(ctx, rec.SecurityOp); err != nil {
-				return err
-			}
+			continue
+		}
+		if err := b.addRecord(ctx, rec); err != nil {
+			return err
 		}
 	}
 	for _, e := range b.st.result.RowErrors {
@@ -152,12 +146,83 @@ func (b *builder) build(ctx context.Context, plan *ImportPlan) error {
 	if err := b.finishAccounts(balances); err != nil {
 		return err
 	}
+	// After finishAccounts, which would reset the opening balance a new loan account gets.
+	if err := b.addLoans(ctx); err != nil {
+		return err
+	}
 	b.checkTransferLabels()
 	if err := b.proposeTransfers(ctx); err != nil {
 		return err
 	}
 	b.checkBalances()
+	return b.finishChecks(ctx, balances)
+}
+
+// finishChecks runs the checks that need the final rows: statement balances, then the source digest.
+func (b *builder) finishChecks(ctx context.Context, balances []fuiproto.BalanceRecord) error {
+	if err := b.checkStatementBalances(ctx, balances); err != nil {
+		return err
+	}
 	return b.checkAlreadyImported(ctx)
+}
+
+// addRecord plans one transaction, security operation or source error record. Loan records
+// are planned together afterwards (addLoans).
+func (b *builder) addRecord(ctx context.Context, rec fuiproto.Record) error {
+	switch {
+	case rec.Transaction != nil:
+		return b.addRow(ctx, rec.Transaction)
+	case rec.Error != nil:
+		b.plan.Errors = append(b.plan.Errors, RowError{Line: rec.Error.Line, Message: "source: " + rec.Error.Message})
+	case rec.SecurityOp != nil:
+		return b.securityOp(ctx, rec.SecurityOp)
+	}
+	return nil
+}
+
+// securityOp plans a security operation. When the module it needs is disabled (investments, plus
+// crypto for crypto securities) the operation is still built, tagged with the module, so that
+// applying with that module enabled can import it.
+func (b *builder) securityOp(ctx context.Context, rec *fuiproto.SecurityOpRecord) error {
+	need := module.Investments
+	if rec.Security.Kind == fuiproto.SecurityKindCrypto && !b.req.Modules.Has(module.Crypto) {
+		need = module.Crypto // depends on investments, so enabling it covers both
+	}
+	if b.req.Modules.Has(need) {
+		return b.addSecurityOp(ctx, rec)
+	}
+	line := b.st.sec[rec]
+	with, _, err := module.Enable(b.req.Modules, need)
+	if err != nil {
+		return fmt.Errorf("enable %s: %w", need, err)
+	}
+	enabled, n := b.req.Modules, len(b.plan.SecurityOps)
+	b.req.Modules = with
+	err = b.addSecurityOp(ctx, rec)
+	b.req.Modules = enabled
+	if err != nil {
+		return err
+	}
+	for i := n; i < len(b.plan.SecurityOps); i++ {
+		b.plan.SecurityOps[i].Module = need
+	}
+	b.noteModuleRecord(need, "security_op", line)
+	b.warn(line, "security_op needs module %s: enable it or the record is skipped", need)
+	return nil
+}
+
+func (b *builder) noteModuleRecord(id module.ID, kind string, line int) {
+	i := slices.IndexFunc(b.plan.ModuleRecords, func(m ModuleRecords) bool { return m.Module == id })
+	if i < 0 {
+		b.plan.ModuleRecords = append(b.plan.ModuleRecords, ModuleRecords{Module: id})
+		i = len(b.plan.ModuleRecords) - 1
+	}
+	m := &b.plan.ModuleRecords[i]
+	m.Count++
+	m.Lines = append(m.Lines, line)
+	if !slices.Contains(m.Kinds, kind) {
+		m.Kinds = append(m.Kinds, kind)
+	}
 }
 
 // loadLookups indexes the existing categories, payees and tags by name, so that addRow can tell
@@ -256,7 +321,7 @@ func (b *builder) resolve(ctx context.Context, rec fuiproto.AccountRecord, activ
 	}
 	info := &acctInfo{rec: rec, cur: cur}
 	bind := func(a domain.Account, save bool) *acctInfo {
-		info.id, info.cur, info.mapped = a.ID, a.Currency, true
+		info.id, info.cur, info.kind, info.mapped = a.ID, a.Currency, a.Kind, true
 		if save {
 			b.plan.Bindings = append(b.plan.Bindings, Binding{Ref: rec.Ref, AccountID: a.ID})
 		}
@@ -302,7 +367,7 @@ func (b *builder) unresolved(info *acctInfo, active []domain.Account) error {
 			return fmt.Errorf("account %q: %w", rec.Ref, err)
 		}
 		b.plan.NewAccounts = append(b.plan.NewAccounts, NewAccount{Ref: rec.Ref, Account: a})
-		info.create = true
+		info.create, info.kind = true, a.Kind
 		return nil
 	}
 	b.plan.Unmapped = append(b.plan.Unmapped, UnmappedRef{

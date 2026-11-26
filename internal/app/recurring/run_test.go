@@ -8,6 +8,7 @@ import (
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/recurring"
 	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 )
 
 func TestRunCreatesOccurrencesAndAdvances(t *testing.T) {
@@ -240,4 +241,31 @@ func (e env) listTx(t *testing.T) []domain.Transaction {
 		t.Fatalf("list transactions: %v", err)
 	}
 	return out
+}
+
+func TestCatchUp(t *testing.T) {
+	today := must(domain.ParseDate("2026-03-15"))
+	tests := []struct {
+		name    string
+		enabled func(env) module.Set
+		want    []int // created by each successive CatchUp
+	}{
+		{"enabled is idempotent", func(e env) module.Set { return e.all }, []int{3, 0}},
+		{"module off creates nothing", func(e env) module.Set { return e.none }, []int{0, 0}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := newEnv(t)
+			e.addRecurrence(t, nil) // monthly from 2026-01-01
+			for i, want := range tt.want {
+				got, err := e.svc.CatchUp(context.Background(), tt.enabled(e), today)
+				if err != nil || got != want {
+					t.Fatalf("CatchUp #%d = %d, %v, want %d", i+1, got, err, want)
+				}
+			}
+			if n := len(e.listTx(t)); n != tt.want[0] {
+				t.Errorf("pending rows = %d, want %d", n, tt.want[0])
+			}
+		})
+	}
 }

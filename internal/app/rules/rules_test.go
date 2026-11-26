@@ -3,7 +3,9 @@ package rules_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 
@@ -195,7 +197,8 @@ func TestTest(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	got, err := e.svc.Test(ctx, rules.TestRequest{Text: "Bar Roma", Account: "main", AmountMinor: -250})
+	amt := int64(-250)
+	got, err := e.svc.Test(ctx, rules.TestRequest{Text: "Bar Roma", Account: "main", AmountMinor: &amt})
 	if err != nil || got.CategoryID != e.food.ID || got.CategoryRule != "coffee" {
 		t.Fatalf("Test text = %+v, %v", got, err)
 	}
@@ -209,6 +212,18 @@ func TestTest(t *testing.T) {
 	}
 	if _, err := e.svc.Test(ctx, rules.TestRequest{Text: "x", Account: "zzz"}); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("Test unknown account: %v", err)
+	}
+	// Account and amount are optional: their conditions are skipped and reported.
+	got, err = e.svc.Test(ctx, rules.TestRequest{Text: "Bar Roma"})
+	if err != nil || got.CategoryRule != "coffee" || !slices.Equal(got.NotEvaluated, []string{"account", "amount"}) {
+		t.Fatalf("Test text only = %+v, %v", got, err)
+	}
+	got, err = e.svc.Test(ctx, rules.TestRequest{Text: "Bar Roma", Account: "main"})
+	if err != nil || !slices.Equal(got.NotEvaluated, []string{"amount"}) {
+		t.Fatalf("Test without amount = %+v, %v", got, err)
+	}
+	if _, err := e.svc.Test(ctx, rules.TestRequest{Text: "x", AmountMinor: &amt}); !errors.Is(err, domain.ErrMissingField) {
+		t.Fatalf("Test amount without account: %v", err)
 	}
 }
 
@@ -276,5 +291,120 @@ func TestPlanApplyDoesNotWrite(t *testing.T) {
 	}
 	if e.store.Snapshot() != before {
 		t.Fatal("PlanApply wrote")
+	}
+}
+
+func TestHintConditionsCarriedThroughAddEdit(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	r := e.add(t, rules.AddRequest{
+		Name: "hinted", Priority: 1,
+		Conditions: rules.ConditionsSpec{HintContains: " Gro ", HintEquals: "Groceries"},
+		Actions:    rules.ActionsSpec{Category: "food"},
+	})
+	if r.Conditions.HintContains != "gro" || r.Conditions.HintEquals != "groceries" {
+		t.Fatalf("hint conditions = %+v, want normalized gro/groceries", r.Conditions)
+	}
+
+	newConds := rules.ConditionsSpec{HintEquals: "Transport"}
+	p, err := e.svc.PlanEdit(ctx, rules.EditRequest{Name: "hinted", Conditions: &newConds})
+	if err != nil {
+		t.Fatalf("PlanEdit: %v", err)
+	}
+	if err := e.svc.ApplyEdit(ctx, p); err != nil {
+		t.Fatalf("ApplyEdit: %v", err)
+	}
+	list, err := e.svc.List(ctx)
+	if err != nil || len(list) != 1 {
+		t.Fatalf("List = %v, %v", list, err)
+	}
+	if c := list[0].Conditions; c.HintContains != "" || c.HintEquals != "transport" {
+		t.Fatalf("edited hint conditions = %+v", c)
+	}
+}
+
+func TestTestSkipsMissingInputs(t *testing.T) {
+	e := newEnv(t)
+	e.add(t, rules.AddRequest{
+		Name: "outflow-main", Priority: 1,
+		Conditions: rules.ConditionsSpec{DescriptionContains: "bar", Sign: "Outflow", Accounts: []string{"main"}},
+		Actions:    rules.ActionsSpec{Category: "food"},
+	})
+	ctx := context.Background()
+	inflow := int64(500)
+
+	// An inflow on the account does not match the outflow-only rule.
+	got, err := e.svc.Test(ctx, rules.TestRequest{Text: "Bar Roma", Account: "main", AmountMinor: &inflow})
+	if err != nil || got.CategoryRule != "" || len(got.NotEvaluated) != 0 {
+		t.Fatalf("inflow = %+v, %v", got, err)
+	}
+	// Leaving the amount out skips the sign condition, so the rule matches.
+	got, err = e.svc.Test(ctx, rules.TestRequest{Text: "Bar Roma", Account: "main"})
+	if err != nil || got.CategoryRule != "outflow-main" || !slices.Equal(got.NotEvaluated, []string{"amount"}) {
+		t.Fatalf("no amount = %+v, %v", got, err)
+	}
+	// Leaving the account out skips the account condition too.
+	got, err = e.svc.Test(ctx, rules.TestRequest{Text: "Bar Roma"})
+	if err != nil || got.CategoryRule != "outflow-main" || !slices.Equal(got.NotEvaluated, []string{"account", "amount"}) {
+		t.Fatalf("text only = %+v, %v", got, err)
+	}
+}
+
+type fixedClock struct{ t time.Time }
+
+func (c fixedClock) Now() time.Time { return c.t }
+
+func TestApplyJournalsOneUndoableEntry(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)
+	e := newEnv(t)
+	e.svc = e.svc.WithClock(fixedClock{now})
+	e.add(t, rules.AddRequest{
+		Name: "bar", Priority: 1, Conditions: rules.ConditionsSpec{DescriptionContains: "bar"},
+		Actions: rules.ActionsSpec{Category: "food", Payee: "shop", Tags: []string{"weekly"}},
+	})
+	a := e.tx(t, "Bar Roma", -300, nil)
+	b := e.tx(t, "Bar Milano", -300, func(x *domain.Transaction) { x.CategoryID = e.other.ID })
+	e.tx(t, "Cinema", -300, nil)
+	beforeA, beforeTagsA := e.get(t, a.ID)
+	beforeB, beforeTagsB := e.get(t, b.ID)
+
+	p, err := e.svc.PlanApply(ctx, rules.ApplyRequest{Filter: filter(t, domain.TxFilterSpec{})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.ApplyApply(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	// An apply with nothing to do must not add an entry on top of the real one.
+	empty, err := e.svc.PlanApply(ctx, rules.ApplyRequest{Filter: filter(t, domain.TxFilterSpec{})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.ApplyApply(ctx, empty); err != nil {
+		t.Fatal(err)
+	}
+
+	core := app.New(e.store, fixedClock{now}, e.backup, app.Config{Locale: domain.LocaleENUS, Location: time.UTC})
+	up, err := core.PlanUndo(ctx)
+	if err != nil {
+		t.Fatalf("PlanUndo: %v", err)
+	}
+	if err := core.ApplyUndo(ctx, up); err != nil {
+		t.Fatalf("ApplyUndo: %v", err)
+	}
+	for _, c := range []struct {
+		id   domain.TransactionID
+		want domain.Transaction
+		tags []domain.Tag
+	}{{a.ID, beforeA, beforeTagsA}, {b.ID, beforeB, beforeTagsB}} {
+		got, tags := e.get(t, c.id)
+		if got.CategoryID != c.want.CategoryID || got.PayeeID != c.want.PayeeID {
+			t.Fatalf("transaction %d = category %d payee %d, want %d/%d",
+				c.id, got.CategoryID, got.PayeeID, c.want.CategoryID, c.want.PayeeID)
+		}
+		if len(tags) != len(c.tags) {
+			t.Fatalf("transaction %d tags = %v, want %v", c.id, tags, c.tags)
+		}
 	}
 }

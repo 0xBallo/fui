@@ -57,7 +57,16 @@ func (s *Service) PlanConfirm(ctx context.Context, enabled module.Set, txID doma
 	return out, err
 }
 
-// ApplyConfirm stores the transaction of the plan as booked.
+// ApplyConfirm stores the transaction of the plan as booked and journals it so it can be undone.
 func (s *Service) ApplyConfirm(ctx context.Context, p ConfirmPlan) error {
-	return s.write(ctx, func(r app.Repos) error { return r.Transactions().Update(ctx, p.Tx) })
+	return s.write(ctx, func(r app.Repos) error {
+		j, err := app.BeginJournal(ctx, r, p.Tx.ID)
+		if err != nil {
+			return err
+		}
+		if err := r.Transactions().Update(ctx, p.Tx); err != nil {
+			return err
+		}
+		return j.Commit(ctx, r, s.clock, app.OpKindRecurConfirm, app.UndoFieldStatus)
+	})
 }

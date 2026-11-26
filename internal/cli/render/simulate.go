@@ -175,7 +175,14 @@ func writeCashFlow(w io.Writer, f Format, color bool, m *simMoney, c simulating.
 	if m.err != nil {
 		return m.err
 	}
+	acc := accountRows(m, c.Accounts)
+	if m.err != nil {
+		return m.err
+	}
 	if f == CSV {
+		if len(c.Accounts) > 0 {
+			return WriteCSV(w, accountCSV(m, c))
+		}
 		return WriteCSV(w, months)
 	}
 	if chart {
@@ -200,7 +207,55 @@ func writeCashFlow(w io.Writer, f Format, color bool, m *simMoney, c simulating.
 	if _, err := fmt.Fprintln(w); err != nil {
 		return fmt.Errorf("write simulation: %w", err)
 	}
-	return WriteTable(w, months, color)
+	if err := WriteTable(w, months, color); err != nil || len(c.Accounts) == 0 {
+		return err
+	}
+	if _, err := fmt.Fprintln(w); err != nil {
+		return fmt.Errorf("write simulation: %w", err)
+	}
+	return WriteTable(w, acc, color)
+}
+
+// accountRows is the per-account table: one row per month end, one SCENARIO column per account.
+func accountRows(m *simMoney, accounts []simulating.CashFlowAccount) Rows {
+	if len(accounts) == 0 {
+		return Rows{}
+	}
+	t := Rows{Header: []string{"MONTH END"}}
+	for i, a := range accounts {
+		t.Header = append(t.Header, a.Account)
+		t.MoneyCols = append(t.MoneyCols, i+1)
+	}
+	for i, mo := range accounts[0].Months {
+		row := []string{mo.End}
+		for _, a := range accounts {
+			if i < len(a.Months) {
+				row = append(row, m.fmt(a.Months[i].ScenarioMinor))
+			} else {
+				row = append(row, "")
+			}
+		}
+		t.Body = append(t.Body, row)
+	}
+	return t
+}
+
+// accountCSV is the long-form CSV used when accounts are selected: the total series first,
+// then one series per account.
+func accountCSV(m *simMoney, c simulating.CashFlowResult) Rows {
+	t := Rows{Header: []string{"ACCOUNT", "MONTH END", "BASE", "SCENARIO", "DELTA"}, MoneyCols: []int{2, 3, 4}}
+	add := func(name string, months []simulating.CashFlowMonth) {
+		for _, mo := range months {
+			t.Body = append(t.Body, []string{
+				name, mo.End, m.fmt(mo.BaseMinor), m.fmt(mo.ScenarioMinor), m.fmt(mo.ScenarioMinor - mo.BaseMinor),
+			})
+		}
+	}
+	add("total", c.Months)
+	for _, a := range c.Accounts {
+		add(a.Account, a.Months)
+	}
+	return t
 }
 
 func orDash(s string) string {

@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -152,52 +153,59 @@ func (r transactionRepo) insertParams(ctx context.Context, t domain.Transaction)
 }
 
 func toInsertTransactionParams(t domain.Transaction, payeeName string) gen.InsertTransactionParams {
+	original := toNullOriginal(t.Original)
 	return gen.InsertTransactionParams{
-		AccountID:       int64(t.AccountID),
-		Date:            t.Date.String(),
-		OperationDate:   toNullDate(t.OperationDate),
-		ValueDate:       toNullDate(t.ValueDate),
-		AmountMinor:     t.Amount.Minor(),
-		Currency:        t.Amount.Currency().Code(),
-		PayeeID:         toNullInt64(t.PayeeID),
-		Description:     t.Description,
-		CategoryID:      toNullInt64(t.CategoryID),
-		Notes:           t.Notes,
-		Status:          string(t.Status),
-		Kind:            string(t.Kind),
-		ExternalID:      toNullString(t.ExternalID),
-		Fingerprint:     t.Fingerprint,
-		ImportBatchID:   toNullInt64(t.ImportBatchID),
-		TransferGroupID: toNullInt64(t.TransferGroupID),
-		RecurrenceID:    toNullInt64(t.RecurrenceID),
-		DueDate:         toNullDate(t.DueDate),
-		SearchText:      textnorm.SearchText(t.Description, payeeName, t.Notes),
+		AccountID:           int64(t.AccountID),
+		Date:                t.Date.String(),
+		OperationDate:       toNullDate(t.OperationDate),
+		ValueDate:           toNullDate(t.ValueDate),
+		AmountMinor:         t.Amount.Minor(),
+		Currency:            t.Amount.Currency().Code(),
+		PayeeID:             toNullInt64(t.PayeeID),
+		Description:         t.Description,
+		CategoryID:          toNullInt64(t.CategoryID),
+		Notes:               t.Notes,
+		Status:              string(t.Status),
+		Kind:                string(t.Kind),
+		ExternalID:          toNullString(t.ExternalID),
+		Fingerprint:         t.Fingerprint,
+		ImportBatchID:       toNullInt64(t.ImportBatchID),
+		TransferGroupID:     toNullInt64(t.TransferGroupID),
+		RecurrenceID:        toNullInt64(t.RecurrenceID),
+		DueDate:             toNullDate(t.DueDate),
+		OriginalAmountMinor: original.minor,
+		OriginalCurrency:    original.currency,
+		Raw:                 toNullString(t.Raw),
+		SearchText:          textnorm.SearchText(t.Description, payeeName, t.Notes),
 	}
 }
 
 func toUpdateTransactionParams(t domain.Transaction, searchText string) gen.UpdateTransactionParams {
 	params := toInsertTransactionParams(t, "")
 	return gen.UpdateTransactionParams{
-		ID:              int64(t.ID),
-		AccountID:       params.AccountID,
-		Date:            params.Date,
-		OperationDate:   params.OperationDate,
-		ValueDate:       params.ValueDate,
-		AmountMinor:     params.AmountMinor,
-		Currency:        params.Currency,
-		PayeeID:         params.PayeeID,
-		Description:     params.Description,
-		CategoryID:      params.CategoryID,
-		Notes:           params.Notes,
-		Status:          params.Status,
-		Kind:            params.Kind,
-		ExternalID:      params.ExternalID,
-		Fingerprint:     params.Fingerprint,
-		ImportBatchID:   params.ImportBatchID,
-		TransferGroupID: params.TransferGroupID,
-		RecurrenceID:    params.RecurrenceID,
-		DueDate:         params.DueDate,
-		SearchText:      searchText,
+		ID:                  int64(t.ID),
+		AccountID:           params.AccountID,
+		Date:                params.Date,
+		OperationDate:       params.OperationDate,
+		ValueDate:           params.ValueDate,
+		AmountMinor:         params.AmountMinor,
+		Currency:            params.Currency,
+		PayeeID:             params.PayeeID,
+		Description:         params.Description,
+		CategoryID:          params.CategoryID,
+		Notes:               params.Notes,
+		Status:              params.Status,
+		Kind:                params.Kind,
+		ExternalID:          params.ExternalID,
+		Fingerprint:         params.Fingerprint,
+		ImportBatchID:       params.ImportBatchID,
+		TransferGroupID:     params.TransferGroupID,
+		RecurrenceID:        params.RecurrenceID,
+		DueDate:             params.DueDate,
+		OriginalAmountMinor: params.OriginalAmountMinor,
+		OriginalCurrency:    params.OriginalCurrency,
+		Raw:                 params.Raw,
+		SearchText:          searchText,
 	}
 }
 
@@ -320,4 +328,20 @@ func mapTransactions(rows []gen.Transaction) ([]domain.Transaction, error) {
 		out = append(out, tx)
 	}
 	return out, nil
+}
+
+type nullOriginal struct {
+	minor    sql.NullInt64
+	currency sql.NullString
+}
+
+// toNullOriginal maps the optional original amount to its two nullable columns, set or null together.
+func toNullOriginal(m *domain.Money) nullOriginal {
+	if m == nil {
+		return nullOriginal{}
+	}
+	return nullOriginal{
+		minor:    sql.NullInt64{Int64: m.Minor(), Valid: true},
+		currency: sql.NullString{String: m.Currency().Code(), Valid: true},
+	}
 }

@@ -2,9 +2,11 @@ package importing_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/pkg/fuiproto"
 )
@@ -157,4 +159,92 @@ func TestTransferProposals(t *testing.T) {
 			t.Fatalf("proposals = %+v", plan.Transfers)
 		}
 	})
+}
+
+func TestAcceptTransfers(t *testing.T) {
+	recs := append(twoAccounts(),
+		txRec("a", "out1", "2026-10-01", -5000, "to B", kind(fuiproto.TransactionKindTransfer)),
+		txRec("b", "in1", "2026-10-01", 5000, "from A", kind(fuiproto.TransactionKindTransfer)),
+		txRec("a", "out2", "2026-10-10", -700, "to B", kind(fuiproto.TransactionKindTransfer)),
+		txRec("b", "in2", "2026-10-10", 700, "from A", kind(fuiproto.TransactionKindTransfer)),
+	)
+	linked := func(e env, ext string) bool { return groupOf(t, e, ext).TransferGroupID != 0 }
+	cases := []struct {
+		name       string
+		apply      func(p *importing.ImportPlan) importing.ApplyOptions
+		wantLinked [2]bool
+	}{
+		{"none", func(*importing.ImportPlan) importing.ApplyOptions { return importing.ApplyOptions{} }, [2]bool{false, false}},
+		{"all", func(*importing.ImportPlan) importing.ApplyOptions {
+			return importing.ApplyOptions{AcceptTransfers: true}
+		}, [2]bool{true, true}},
+		{"some", func(p *importing.ImportPlan) importing.ApplyOptions {
+			must(0, p.SetAcceptTransfer(1, true))
+			return importing.ApplyOptions{}
+		}, [2]bool{false, true}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(nil)
+			plan := e.plan(t, stream("bank", "", recs...), createAccounts)
+			if len(plan.Transfers) != 2 {
+				t.Fatalf("proposals = %+v", plan.Transfers)
+			}
+			// Proposals follow the date order of the rows: 0 is the first pair.
+			opts := tc.apply(&plan)
+			must(e.svc.ApplyImportWith(context.Background(), plan, opts))
+			got := [2]bool{linked(e, "out1"), linked(e, "out2")}
+			if got != tc.wantLinked {
+				t.Fatalf("linked = %v, want %v", got, tc.wantLinked)
+			}
+		})
+	}
+	t.Run("out of range", func(t *testing.T) {
+		var p importing.ImportPlan
+		if err := p.SetAcceptTransfer(0, true); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("err = %v", err)
+		}
+	})
+	t.Run("row with an archived movement", func(t *testing.T) {
+		e := newEnv(nil)
+		b := e.seedAccount(t, "Account B", "bank", "b")
+		e.seedTx(t, domain.Transaction{
+			AccountID: b.ID, Date: date("2026-10-02"), Amount: money(5000), Description: "from A",
+			Status: domain.StatusBooked, Kind: domain.KindTransfer, ExternalID: "bank-in",
+		})
+		only := []fuiproto.Record{
+			account("a", "Account A", "EUR"),
+			txRec("a", "out", "2026-10-01", -5000, "to B", kind(fuiproto.TransactionKindTransfer)),
+		}
+		plan := e.plan(t, stream("bank", "", only...), createAccounts)
+		res := must(e.svc.ApplyImportWith(context.Background(), plan, importing.ApplyOptions{AcceptTransfers: true}))
+		if res.Transfers != 1 || groupOf(t, e, "bank-in").TransferGroupID == 0 {
+			t.Fatalf("result = %+v", res)
+		}
+		if plan.Transfers[0].Accept {
+			t.Fatal("AcceptTransfers mutated the caller's plan")
+		}
+	})
+}
+
+func TestReimportIsIdempotent(t *testing.T) {
+	recs := append(twoAccounts(),
+		txRec("a", "out", "2026-10-01", -5000, "to B", kind(fuiproto.TransactionKindTransfer)),
+		txRec("b", "in", "2026-10-01", 5000, "from A", kind(fuiproto.TransactionKindTransfer)),
+		txRec("a", "coffee", "2026-10-02", -300, "coffee"),
+	)
+	e := newEnv(nil)
+	opts := importing.ApplyOptions{AcceptTransfers: true}
+	first := must(e.svc.ApplyImportWith(context.Background(), e.plan(t, stream("bank", "sha", recs...), createAccounts), opts))
+	if first.Transactions != 3 || first.Transfers != 1 {
+		t.Fatalf("first = %+v", first)
+	}
+	before := snapshot(e.store)
+	second := must(e.svc.ApplyImportWith(context.Background(), e.plan(t, stream("bank", "sha", recs...), createAccounts), opts))
+	if second.Transactions != 0 || second.Transfers != 0 || second.SecurityOps != 0 {
+		t.Fatalf("second = %+v, want nothing", second)
+	}
+	if after := snapshot(e.store); after != before {
+		t.Fatalf("second import changed the archive\nbefore %s\nafter  %s", before, after)
+	}
 }

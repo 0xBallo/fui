@@ -13,6 +13,7 @@ import (
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/module"
 	"github.com/0xballo/fui/internal/tui"
+	"github.com/0xballo/fui/internal/tui/screens/accounts"
 	"github.com/0xballo/fui/internal/tui/screens/report"
 	"github.com/0xballo/fui/internal/tui/screens/screentest"
 )
@@ -35,7 +36,7 @@ func (v03Insights) AcceptSubscription(context.Context, string) (reporting.Accept
 	return reporting.AcceptResult{}, nil
 }
 
-type v03Positions struct{}
+type v03Positions struct{ accounts.PositionsUseCases }
 
 func (v03Positions) ListPositions(context.Context, investing.PositionsRequest) ([]investing.PositionLine, error) {
 	return []investing.PositionLine{{Security: domain.Security{ID: 1, Name: "VWCE ETF"}}}, nil
@@ -60,8 +61,8 @@ func (v03Report) ListAccounts(context.Context, app.ListAccountsRequest) ([]app.A
 	return nil, nil
 }
 
-func (v03Report) NetWorth(context.Context, reporting.ReportRequest) (reporting.SeriesResult, error) {
-	return reporting.SeriesResult{}, nil
+func (v03Report) NetWorth(context.Context, reporting.ReportRequest) (reporting.NetWorthResult, error) {
+	return reporting.NetWorthResult{}, nil
 }
 
 func (v03Report) Today() (domain.Date, error) { return domain.NewDate(2026, 6, 15) }

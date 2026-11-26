@@ -27,6 +27,8 @@ type SimUseCases interface {
 	PlanSave(ctx context.Context, name string, req simulating.RunRequest) (simulating.SavePlan, error)
 	ApplySave(ctx context.Context, p simulating.SavePlan) (app.SavedSimulation, error)
 	List(ctx context.Context) ([]app.SavedSimulation, error)
+	PlanRemove(ctx context.Context, ref string) (simulating.RemovePlan, error)
+	ApplyRemove(ctx context.Context, p simulating.RemovePlan) error
 	Rerun(ctx context.Context, ref string) (simulating.RerunResult, error)
 	Compare(ctx context.Context, refs []string) (simulating.CompareResult, error)
 	BaseCurrency() domain.Currency
@@ -34,8 +36,8 @@ type SimUseCases interface {
 
 // simKeys are the bindings of the simulations view.
 type simKeys struct {
-	Open, Params, Save, Saved, Run, Compare, Toggle, Back key.Binding
-	PrevKind, NextKind                                    key.Binding
+	Open, Params, Save, Saved, Run, Compare, Toggle, Remove, Back key.Binding
+	PrevKind, NextKind                                            key.Binding
 }
 
 func defaultSimKeys() simKeys {
@@ -49,6 +51,7 @@ func defaultSimKeys() simKeys {
 		Saved:    key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "saved simulations")),
 		Compare:  key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "compare selected")),
 		Toggle:   key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "select")),
+		Remove:   key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete saved simulation")),
 		Back:     key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 	}
 }
@@ -62,6 +65,7 @@ const (
 	simPanelSave
 	simPanelSaved
 	simPanelCompare
+	simPanelConfirm
 )
 
 // simKinds are the simulation types in the order they are cycled.
@@ -129,6 +133,9 @@ func (m *Model) simBindings() []key.Binding {
 	if !m.simEnabled() {
 		return nil
 	}
+	if m.mode == modeSim && m.sim.panel == simPanelSaved {
+		return []key.Binding{m.sim.km.Open, m.sim.km.Remove}
+	}
 	return []key.Binding{m.sim.km.Open}
 }
 
@@ -189,6 +196,8 @@ func (m *Model) handleSimKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		return m.handleSimSaveKey(msg)
 	case simPanelSaved:
 		return m.handleSimSavedKey(msg)
+	case simPanelConfirm:
+		return m.handleSimConfirmKey(msg)
 	case simPanelCompare:
 		if key.Matches(msg, m.sim.km.Back) {
 			m.sim.panel = simPanelSaved
@@ -274,8 +283,45 @@ func (m *Model) handleSimSavedKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		if row := t.SelectedRow(); row != nil {
 			return m, m.rerunSim(row.ID)
 		}
+	case key.Matches(msg, k.Remove):
+		if row := t.SelectedRow(); row != nil {
+			m.confirm.Show("Delete simulation", "Delete saved simulation \""+row.ID+"\"?")
+			m.sim.panel = simPanelConfirm
+		}
 	}
 	return m, nil
+}
+
+func (m *Model) handleSimConfirmKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+	yes, no := m.confirm.HandleKey(msg)
+	switch {
+	case yes:
+		m.sim.panel = simPanelSaved
+		return m, m.removeSim(m.sim.savedTable.SelectedRow().ID)
+	case no:
+		m.sim.panel = simPanelSaved
+	}
+	return m, nil
+}
+
+// removeSim deletes a saved simulation and reloads the list.
+func (m *Model) removeSim(ref string) tea.Cmd {
+	uc := m.sim.uc
+	return func() tea.Msg {
+		ctx := context.Background()
+		plan, err := uc.PlanRemove(ctx, ref)
+		if err != nil {
+			return screens.ErrorMsg{Err: err}
+		}
+		if err := uc.ApplyRemove(ctx, plan); err != nil {
+			return screens.ErrorMsg{Err: err}
+		}
+		rows, err := uc.List(ctx)
+		if err != nil {
+			return screens.ErrorMsg{Err: err}
+		}
+		return simListMsg{rows: rows}
+	}
 }
 
 func (m *Model) compareSim(refs []string) tea.Cmd {

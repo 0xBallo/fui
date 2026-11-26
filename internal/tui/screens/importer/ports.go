@@ -8,6 +8,7 @@ import (
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/importing"
+	"github.com/0xballo/fui/internal/tui/screens/settings/lists"
 )
 
 // UseCases is the subset of the importing service (plus the account listing this screen needs
@@ -16,6 +17,13 @@ import (
 type UseCases interface {
 	ListConnectors(ctx context.Context) ([]importing.ConnectorInfo, error)
 	PlanImport(ctx context.Context, req importing.PlanRequest) (importing.ImportPlan, error)
-	ApplyImport(ctx context.Context, p importing.ImportPlan) (importing.ImportResult, error)
+	ApplyImportWith(ctx context.Context, p importing.ImportPlan, opts importing.ApplyOptions) (importing.ImportResult, error)
+	DetectCSV(ctx context.Context, file string) (importing.CSVSuggestion, error)
 	ListAccounts(ctx context.Context, req app.ListAccountsRequest) ([]app.AccountBalance, error)
+}
+
+// ProfileSaver persists a CSV import profile built by the column mapper; the settings import-
+// profiles list uses the same shape, so one configuration adapter serves both.
+type ProfileSaver interface {
+	SaveProfile(p lists.Profile) error
 }

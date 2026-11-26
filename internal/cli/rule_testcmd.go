@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -23,8 +24,8 @@ func newRuleTestCmd(deps *Deps) *cobra.Command {
 		},
 	}
 	cmd.Flags().Int64("tx", 0, "existing transaction id to test")
-	cmd.Flags().String("account", "", "account name (required unless --tx is set)")
-	cmd.Flags().String("amount", "", "transaction amount (required unless --tx is set)")
+	cmd.Flags().String("account", "", "account name (optional; account conditions are not evaluated without it)")
+	cmd.Flags().String("amount", "", "transaction amount (optional; amount conditions are not evaluated without it)")
 	return cmd
 }
 
@@ -36,20 +37,26 @@ func runRuleTest(cmd *cobra.Command, deps *Deps, args []string) error {
 	if err != nil {
 		return err
 	}
+	ctx := cmd.Context()
 	req, err := ruleTestRequest(cmd, deps, args)
 	if err != nil {
 		return err
 	}
-	ctx := cmd.Context()
 	res, err := deps.Rules.Test(ctx, req)
 	if err != nil {
 		return err
+	}
+	if len(res.NotEvaluated) > 0 {
+		if _, err := fmt.Fprintf(deps.Stderr, "note: %s conditions not evaluated (not given); the other conditions were checked\n",
+			strings.Join(res.NotEvaluated, "/")); err != nil {
+			return fmt.Errorf("write rule-test note: %w", err)
+		}
 	}
 	lookup, err := loadRuleLookup(ctx, deps)
 	if err != nil {
 		return err
 	}
-	return render.WriteRuleTestResult(deps.Stdout, rt.format, res, lookup)
+	return render.WriteRuleTestResult(deps.Stdout, rt.format, res.RuleApplyResult, lookup)
 }
 
 func ruleTestRequest(cmd *cobra.Command, deps *Deps, args []string) (rules.TestRequest, error) {
@@ -65,8 +72,12 @@ func ruleTestRequest(cmd *cobra.Command, deps *Deps, args []string) (rules.TestR
 	}
 	account, _ := cmd.Flags().GetString("account")
 	amount, _ := cmd.Flags().GetString("amount")
-	if account == "" || amount == "" {
-		return rules.TestRequest{}, missingFieldError("account/amount")
+	req := rules.TestRequest{Text: args[0], Account: account}
+	if amount == "" {
+		return req, nil
+	}
+	if account == "" {
+		return rules.TestRequest{}, missingFieldError("account")
 	}
 	cur, err := currencyOfAccount(cmd.Context(), deps, account)
 	if err != nil {
@@ -79,7 +90,9 @@ func ruleTestRequest(cmd *cobra.Command, deps *Deps, args []string) (rules.TestR
 	if m.Minor() == math.MinInt64 {
 		return rules.TestRequest{}, fmt.Errorf("amount: invalid value")
 	}
-	return rules.TestRequest{Text: args[0], Account: account, AmountMinor: m.Minor()}, nil
+	minor := m.Minor()
+	req.AmountMinor = &minor
+	return req, nil
 }
 
 func currencyOfAccount(ctx context.Context, deps *Deps, ref string) (domain.Currency, error) {

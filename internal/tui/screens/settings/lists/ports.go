@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/assetting"
 	"github.com/0xballo/fui/internal/app/recurring"
 	"github.com/0xballo/fui/internal/app/rules"
 	"github.com/0xballo/fui/internal/domain"
@@ -46,7 +47,7 @@ type RulesUseCases interface {
 	ApplyEdit(ctx context.Context, p rules.RulePlan) error
 	PlanRemove(ctx context.Context, name string) (rules.RulePlan, error)
 	ApplyRemove(ctx context.Context, p rules.RulePlan) error
-	Test(ctx context.Context, req rules.TestRequest) (domain.RuleApplyResult, error)
+	Test(ctx context.Context, req rules.TestRequest) (rules.TestResult, error)
 	ListAccounts(ctx context.Context) ([]domain.Account, error)
 	ListCategories(ctx context.Context) ([]domain.Category, error)
 	ListPayees(ctx context.Context) ([]domain.Payee, error)
@@ -63,8 +64,32 @@ type RecurrencesUseCases interface {
 	ApplyEdit(ctx context.Context, p recurring.RecurrencePlan) error
 	PlanRemove(ctx context.Context, enabled module.Set, id app.RecurrenceID) (recurring.RecurrencePlan, error)
 	ApplyRemove(ctx context.Context, p recurring.RecurrencePlan) error
+	PlanRun(ctx context.Context, enabled module.Set, req recurring.RunRequest) (recurring.RunPlan, error)
+	ApplyRun(ctx context.Context, p recurring.RunPlan) (int, error)
 	ListAccounts(ctx context.Context) ([]domain.Account, error)
 	ListCategories(ctx context.Context) ([]domain.Category, error)
+}
+
+// AssetsUseCases is the subset of assetting.Service the assets sub-view needs, plus the loan
+// names offered when linking an asset to a loan.
+type AssetsUseCases interface {
+	List(ctx context.Context, enabled module.Set, at string) ([]assetting.Item, error)
+	Show(ctx context.Context, enabled module.Set, ref, at string) (assetting.View, error)
+	PlanAdd(ctx context.Context, enabled module.Set, req assetting.AddRequest) (assetting.AddPlan, error)
+	ApplyAdd(ctx context.Context, p assetting.AddPlan) (domain.Asset, error)
+	PlanEdit(ctx context.Context, enabled module.Set, req assetting.EditRequest) (assetting.EditPlan, error)
+	ApplyEdit(ctx context.Context, p assetting.EditPlan) (domain.Asset, error)
+	PlanRemove(ctx context.Context, enabled module.Set, ref string) (assetting.RemovePlan, error)
+	ApplyRemove(ctx context.Context, p assetting.RemovePlan) error
+	PlanValue(ctx context.Context, enabled module.Set, req assetting.ValueRequest) (assetting.ValuePlan, error)
+	ApplyValue(ctx context.Context, p assetting.ValuePlan) error
+	PlanRemoveValuation(ctx context.Context, enabled module.Set, ref, date string) (assetting.RemoveValuationPlan, error)
+	ApplyRemoveValuation(ctx context.Context, p assetting.RemoveValuationPlan) error
+	PlanLink(ctx context.Context, enabled module.Set, assetRef, loanRef string) (assetting.LinkPlan, error)
+	ApplyLink(ctx context.Context, p assetting.LinkPlan) error
+	PlanUnlink(ctx context.Context, enabled module.Set, assetRef string) (assetting.UnlinkPlan, error)
+	ApplyUnlink(ctx context.Context, p assetting.UnlinkPlan) error
+	ListLoanNames(ctx context.Context, enabled module.Set) ([]string, error)
 }
 
 // Profile is the user-facing shape of a CSV import profile, independent from internal/config's

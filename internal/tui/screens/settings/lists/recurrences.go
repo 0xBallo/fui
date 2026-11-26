@@ -2,6 +2,7 @@ package lists
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -24,6 +25,7 @@ const (
 	recurrencesListMode recurrencesMode = iota
 	recurrencesForm
 	recurrencesConfirm
+	recurrencesRun
 )
 
 // Recurrences is the settings sub-view that lists recurring transaction templates and lets the
@@ -49,6 +51,8 @@ type Recurrences struct {
 
 	confirm components.ConfirmDialog
 	pending recurring.RecurrencePlan
+
+	run runState
 
 	err error // last submit error, shown inline until the next state change
 }
@@ -91,10 +95,12 @@ func (m *Recurrences) SetSize(w, h int) {
 func (m *Recurrences) Title() string { return "Recurrences" }
 
 // KeyMap exposes the bindings for the global help view.
-func (m *Recurrences) KeyMap() []key.Binding { return m.km.Bindings() }
+func (m *Recurrences) KeyMap() []key.Binding { return m.km.BindingsWithRun() }
 
 // InputActive reports whether the add/edit form is capturing keystrokes.
-func (m *Recurrences) InputActive() bool { return m.mode == recurrencesForm }
+func (m *Recurrences) InputActive() bool {
+	return m.mode == recurrencesForm || m.mode == recurrencesRun
+}
 
 type recurrencesLoadedMsg struct {
 	recs       []app.Recurrence
@@ -136,6 +142,17 @@ func (m *Recurrences) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		m.confirm.Show("Delete recurrence", "Delete this recurrence?")
 		m.mode = recurrencesConfirm
 		return m, nil
+	case recurrenceRunPlannedMsg:
+		m.err = nil
+		m.run.preview, m.run.until = &msg.plan, msg.until
+		return m, nil
+	case recurrenceRunAppliedMsg:
+		m.err = nil
+		m.recs, m.accounts, m.categories = msg.loaded.recs, msg.loaded.accounts, msg.loaded.categories
+		m.table.SetRows(m.rows())
+		m.mode = recurrencesListMode
+		text := fmt.Sprintf("Created %d pending transaction(s)", msg.count)
+		return m, func() tea.Msg { return screens.StatusMsg{Text: text} }
 	case screens.ErrorMsg:
 		m.err = msg.Err
 		return m, nil
@@ -151,6 +168,8 @@ func (m *Recurrences) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		return m.handleFormKey(msg)
 	case recurrencesConfirm:
 		return m.handleConfirmKey(msg)
+	case recurrencesRun:
+		return m.handleRunKey(msg)
 	case recurrencesListMode:
 		return m.handleListKey(msg)
 	}
@@ -165,6 +184,8 @@ func (m *Recurrences) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 		m.table.MoveDown(1)
 	case key.Matches(msg, m.km.Add):
 		m.openForm(nil)
+	case key.Matches(msg, m.km.Run):
+		return m, m.openRun()
 	case key.Matches(msg, m.km.Edit):
 		if row := m.table.SelectedRow(); row != nil {
 			m.openForm(m.recByRowID(row.ID))
@@ -222,6 +243,8 @@ func (m *Recurrences) View() string {
 		body = components.Modal(m.th, m.width, m.height, m.viewForm())
 	case recurrencesConfirm:
 		body = components.Modal(m.th, m.width, m.height, m.confirm.View())
+	case recurrencesRun:
+		body = components.Modal(m.th, m.width, m.height, m.viewRun())
 	case recurrencesListMode:
 		body = m.viewList()
 	default:

@@ -2,7 +2,7 @@ CREATE TABLE accounts (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
     description TEXT NOT NULL DEFAULT '',
-    kind TEXT NOT NULL CHECK (kind IN ('cash', 'checking', 'credit_card', 'savings', 'investment', 'loan')),
+    kind TEXT NOT NULL CHECK (kind IN ('cash', 'checking', 'credit_card', 'savings', 'investment', 'loan', 'wallet')),
     currency TEXT NOT NULL CHECK (length(currency) = 3),
     opening_balance_minor INTEGER NOT NULL,
     opened_on TEXT NOT NULL CHECK (length(opened_on) = 10),
@@ -74,6 +74,7 @@ CREATE TABLE securities (
     kind TEXT NOT NULL CHECK (kind IN ('stock', 'etf', 'bond', 'fund', 'crypto')),
     currency TEXT NOT NULL CHECK (length(currency) = 3),
     quantity_scale INTEGER NOT NULL CHECK (quantity_scale >= 0 AND quantity_scale <= 8),
+    price_scale INTEGER NOT NULL DEFAULT 0 CHECK (price_scale BETWEEN 0 AND 8),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     CHECK (
@@ -118,7 +119,7 @@ CREATE TABLE security_ops (
     fees_currency TEXT NOT NULL CHECK (length(fees_currency) = 3),
     cash_tx_id INTEGER REFERENCES transactions (id) ON DELETE SET NULL,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), import_batch_id INTEGER REFERENCES import_batches (id) ON DELETE SET NULL,
     CHECK (fees_currency = unit_price_currency)
 ) STRICT;
 
@@ -131,6 +132,9 @@ CREATE INDEX idx_security_ops_account_date_id
 CREATE INDEX idx_security_ops_cash_tx
     ON security_ops (cash_tx_id) WHERE cash_tx_id IS NOT NULL;
 
+CREATE INDEX idx_security_ops_import_batch
+    ON security_ops (import_batch_id) WHERE import_batch_id IS NOT NULL;
+
 CREATE TABLE connector_account_refs (
     id INTEGER PRIMARY KEY,
     connector TEXT NOT NULL,
@@ -138,6 +142,14 @@ CREATE TABLE connector_account_refs (
     account_id INTEGER NOT NULL REFERENCES accounts (id) ON DELETE RESTRICT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE (connector, ref)
+) STRICT;
+
+CREATE TABLE connector_ref_pending (
+    id INTEGER PRIMARY KEY,
+    connector TEXT NOT NULL,
+    ref TEXT NOT NULL,
+    account_name TEXT NOT NULL COLLATE NOCASE,
     UNIQUE (connector, ref)
 ) STRICT;
 
@@ -275,6 +287,12 @@ CREATE TABLE dismissed_insights (
     dismissed_at TEXT NOT NULL CHECK (length(dismissed_at) >= 20)
 ) STRICT;
 
+CREATE TABLE reconcile_ticks (
+    account_id INTEGER NOT NULL REFERENCES accounts (id) ON DELETE CASCADE,
+    transaction_id INTEGER NOT NULL REFERENCES transactions (id) ON DELETE CASCADE,
+    PRIMARY KEY (account_id, transaction_id)
+) STRICT, WITHOUT ROWID;
+
 CREATE TABLE reconciliations (
     id INTEGER PRIMARY KEY,
     account_id INTEGER NOT NULL REFERENCES accounts (id) ON DELETE RESTRICT,
@@ -312,7 +330,7 @@ CREATE TABLE transactions (
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     search_text TEXT NOT NULL DEFAULT '', -- appended last by 0003; later migrations append new columns
     recurrence_id INTEGER REFERENCES recurrences (id) ON DELETE SET NULL,
-    due_date TEXT CHECK (due_date IS NULL OR length(due_date) = 10),
+    due_date TEXT CHECK (due_date IS NULL OR length(due_date) = 10), original_amount_minor INTEGER, original_currency TEXT CHECK ((original_currency IS NULL) = (original_amount_minor IS NULL) AND (original_currency IS NULL OR length(original_currency) = 3)), raw TEXT CHECK (raw IS NULL OR json_valid(raw)),
     UNIQUE (account_id, external_id)
 ) STRICT;
 
@@ -365,7 +383,8 @@ CREATE TABLE budgets (
     threshold_warn INTEGER NOT NULL DEFAULT 80 CHECK (threshold_warn >= 1),
     threshold_over INTEGER NOT NULL DEFAULT 100 CHECK (threshold_over >= threshold_warn),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    period TEXT NOT NULL DEFAULT 'month' CHECK (period IN ('month', 'year'))
 ) STRICT;
 
 CREATE TABLE budget_targets (

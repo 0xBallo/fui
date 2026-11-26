@@ -1,0 +1,106 @@
+# investing management: security edit/rm, invest list/edit/rm/coupon, position --by-security, crypto gating.
+exec fui init --preset expense --currency EUR
+
+exec fui module enable investments
+exec fui module enable crypto
+
+exec fui account add Broker --kind investment --currency EUR
+exec fui account add Ledger --kind wallet --currency EUR
+exec fui account add Cash --kind checking --currency EUR --opening-balance 10000
+
+exec fui security add 'Old Co' --kind stock --ticker OLD --currency EUR
+exec fui security add 'BTP 2030' --kind bond --ticker BTP --currency EUR
+exec fui security add Bitcoin --kind crypto --ticker BTC --currency EUR
+exec fui security price BTC 0,00001234 --date 2026-01-02
+stdout '0,00001234'
+
+# operations
+exec fui invest buy OLD --account Broker --cash-account Cash --quantity 10 --price 100 --fees 1 --date 2026-01-05
+exec fui invest buy BTP --account Broker --quantity 10 --price 100 --date 2026-01-05
+exec fui invest coupon BTP --account Broker --quantity 10 --price 1,5 --date 2026-01-10 --dry-run
+stdout 'coupon'
+exec fui invest coupon BTP --account Broker --quantity 10 --price 1,5 --date 2026-01-10
+exec fui invest dividend OLD --account Broker --quantity 10 --price 0,5 --date 2026-01-11
+exec fui invest buy BTC --account Ledger --quantity 1000000 --price 0,00001234 --date 2026-01-06
+exec fui invest sell OLD --account Broker --quantity 2 --price 110 --date 2026-01-12
+
+# list
+exec fui invest list
+stdout 'OLD|Old Co'
+stdout '0,00001234'
+exec fui invest list --kind buy --csv
+stdout '2026-01-05,buy,Broker,Old Co,10,100.00'
+! stdout 'coupon'
+exec fui invest list --account Broker --security BTP --json
+stdout '"kind":"coupon"'
+stdout '"account":"Broker"'
+! exec fui invest list --kind nope
+stderr 'nope'
+
+# position totals across accounts
+exec fui position list --by-security --date 2026-01-15
+stdout 'Old Co'
+stdout 'Bitcoin'
+exec fui position list --by-security --json
+stdout '"security":"BTP 2030"'
+! exec fui position list --by-security --account Broker
+stderr 'by-security'
+
+# invest edit
+! exec fui invest edit 1
+stderr 'nothing to change'
+exec fui invest edit 1 --quantity 12 --dry-run
+stdout 'update'
+exec fui invest edit 1 --quantity 12 --price 101 --json
+stdout '"quantity":"12"'
+stdout '"unit_price":10100'
+! exec fui invest edit 1 --quantity 1
+stderr 'held'
+
+# security edit
+! exec fui security edit OLD
+stderr 'nothing to change'
+exec fui security edit OLD --name 'New Co' --dry-run
+stdout 'update security'
+exec fui security edit OLD --name 'New Co' --json
+stdout '"name":"New Co"'
+! exec fui security edit BTP --name 'New Co'
+stderr 'already exists'
+
+# security rm is refused while operations exist
+! exec fui security rm BTP --yes
+stderr 'operations'
+! exec fui security rm BTP --dry-run
+stderr 'operations'
+
+# invest rm removes the linked cash transaction too, and is refused while a later sell needs it
+! exec fui invest rm 1 --dry-run
+stderr 'held'
+exec fui invest rm 6 --yes
+exec fui invest rm 1 --dry-run
+stdout 'transaction'
+exec fui invest list --kind buy --csv
+stdout 'New Co'
+exec fui invest rm 5 --yes
+exec fui invest rm 3 --yes
+exec fui invest rm 4 --yes
+exec fui invest rm 2 --yes --json
+stdout '"removed":2'
+exec fui invest rm 1 --yes
+stdout 'cash transaction'
+! exec fui invest rm 99 --yes
+exec fui security rm BTP --dry-run
+stdout 'delete security'
+exec fui security rm BTP --yes
+stdout 'Removed security'
+! exec fui security rm BTP --yes
+
+# crypto module off: BTC hidden, wallets and BTC operations refused
+exec fui module disable crypto
+exec fui security list
+! stdout 'Bitcoin'
+stdout 'New Co'
+! exec fui account add Ledger2 --kind wallet --currency EUR
+stderr 'crypto'
+! exec fui invest buy BTC --account Broker --quantity 1 --price 1
+stderr 'crypto'

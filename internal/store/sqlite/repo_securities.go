@@ -28,6 +28,7 @@ func (r securityRepo) Insert(ctx context.Context, s domain.Security) (domain.Sec
 		Kind:          string(norm.Kind),
 		Currency:      norm.Currency.Code(),
 		QuantityScale: int64(norm.QuantityScale),
+		PriceScale:    int64(norm.PriceScale),
 	})
 	if err != nil {
 		return domain.Security{}, mapConstraint(err)
@@ -39,6 +40,11 @@ func (r securityRepo) Update(ctx context.Context, s domain.Security) error {
 	if err := r.repos.writable(); err != nil {
 		return err
 	}
+	existing, err := r.Get(ctx, s.ID)
+	if err != nil {
+		return err
+	}
+	s.PriceScale = existing.PriceScale // fixed at creation: stored prices depend on it
 	norm, err := domain.NewSecurity(s)
 	if err != nil {
 		return err
@@ -122,6 +128,9 @@ func (r securityRepo) UpsertPrice(ctx context.Context, p domain.SecurityPrice) e
 	if p.Price.Currency() != security.Currency {
 		return fmt.Errorf("security price currency mismatch: %w", domain.ErrCurrencyMismatch)
 	}
+	if p.Price.Scale() != security.PriceScale {
+		return fmt.Errorf("security price scale %d, want %d: %w", p.Price.Scale(), security.PriceScale, domain.ErrInvalidValue)
+	}
 	err = r.repos.queries.UpsertSecurityPrice(ctx, gen.UpsertSecurityPriceParams{
 		SecurityID: int64(p.Security),
 		Date:       p.Date.String(),
@@ -165,9 +174,14 @@ func (r securityRepo) ListPrices(ctx context.Context, securityID domain.Security
 	if err != nil {
 		return nil, mapSQLError(err)
 	}
+	scales := r.newScaleLookup(ctx)
 	out := make([]domain.SecurityPrice, 0, len(rows))
 	for _, row := range rows {
-		price, convErr := toSecurityPrice(row)
+		scale, scaleErr := scales.get(row.SecurityID)
+		if scaleErr != nil {
+			return nil, scaleErr
+		}
+		price, convErr := toSecurityPrice(row, scale)
 		if convErr != nil {
 			return nil, convErr
 		}
@@ -192,7 +206,11 @@ func (r securityRepo) PriceOnOrBefore(
 	if err != nil {
 		return domain.SecurityPrice{}, mapNotFound(mapSQLError(err), "security price on or before")
 	}
-	return toSecurityPrice(row)
+	scale, err := r.newScaleLookup(ctx).get(row.SecurityID)
+	if err != nil {
+		return domain.SecurityPrice{}, err
+	}
+	return toSecurityPrice(row, scale)
 }
 
 func (r securityRepo) InsertOp(ctx context.Context, op domain.SecurityOp) (domain.SecurityOp, error) {
@@ -207,7 +225,11 @@ func (r securityRepo) InsertOp(ctx context.Context, op domain.SecurityOp) (domai
 	if err != nil {
 		return domain.SecurityOp{}, mapConstraint(err)
 	}
-	return toSecurityOp(row)
+	scale, err := r.newScaleLookup(ctx).get(row.SecurityID)
+	if err != nil {
+		return domain.SecurityOp{}, err
+	}
+	return toSecurityOp(row, scale)
 }
 
 func (r securityRepo) UpdateOp(ctx context.Context, op domain.SecurityOp) error {
@@ -231,6 +253,7 @@ func (r securityRepo) UpdateOp(ctx context.Context, op domain.SecurityOp) error 
 		FeesMinor:         norm.Fees.Minor(),
 		FeesCurrency:      norm.Fees.Currency().Code(),
 		CashTxID:          toNullInt64(norm.CashTx),
+		ImportBatchID:     toNullInt64(norm.ImportBatchID),
 	})
 	if err != nil {
 		return mapConstraint(err)
@@ -260,7 +283,11 @@ func (r securityRepo) GetOp(ctx context.Context, id domain.SecurityOpID) (domain
 	if err != nil {
 		return domain.SecurityOp{}, mapNotFound(mapSQLError(err), "security operation")
 	}
-	return toSecurityOp(row)
+	scale, err := r.newScaleLookup(ctx).get(row.SecurityID)
+	if err != nil {
+		return domain.SecurityOp{}, err
+	}
+	return toSecurityOp(row, scale)
 }
 
 func (r securityRepo) ListOpsBySecurity(
@@ -280,9 +307,35 @@ func (r securityRepo) ListOpsBySecurity(
 	if err != nil {
 		return nil, mapSQLError(err)
 	}
+	scales := r.newScaleLookup(ctx)
 	out := make([]domain.SecurityOp, 0, len(rows))
 	for _, row := range rows {
-		op, convErr := toSecurityOp(row)
+		scale, scaleErr := scales.get(row.SecurityID)
+		if scaleErr != nil {
+			return nil, scaleErr
+		}
+		op, convErr := toSecurityOp(row, scale)
+		if convErr != nil {
+			return nil, convErr
+		}
+		out = append(out, op)
+	}
+	return out, nil
+}
+
+func (r securityRepo) ListOpsByBatch(ctx context.Context, batch domain.ImportBatchID) ([]domain.SecurityOp, error) {
+	rows, err := r.repos.queries.ListSecurityOpsByBatch(ctx, toNullInt64(batch))
+	if err != nil {
+		return nil, mapSQLError(err)
+	}
+	scales := r.newScaleLookup(ctx)
+	out := make([]domain.SecurityOp, 0, len(rows))
+	for _, row := range rows {
+		scale, scaleErr := scales.get(row.SecurityID)
+		if scaleErr != nil {
+			return nil, scaleErr
+		}
+		op, convErr := toSecurityOp(row, scale)
 		if convErr != nil {
 			return nil, convErr
 		}
@@ -302,6 +355,10 @@ func (r securityRepo) normalizeSecurityOp(ctx context.Context, op domain.Securit
 	security, err := r.Get(ctx, norm.Security)
 	if err != nil {
 		return domain.SecurityOp{}, err
+	}
+	if norm.UnitPrice.Scale() != security.PriceScale {
+		return domain.SecurityOp{}, fmt.Errorf("security operation unit price scale %d, want %d: %w",
+			norm.UnitPrice.Scale(), security.PriceScale, domain.ErrInvalidValue)
 	}
 	if norm.Quantity.Scale() != security.QuantityScale {
 		return domain.SecurityOp{}, fmt.Errorf("security operation quantity scale mismatch: %w", domain.ErrInvalidValue)
@@ -330,7 +387,32 @@ func toInsertSecurityOpParams(op domain.SecurityOp) gen.InsertSecurityOpParams {
 		FeesMinor:         op.Fees.Minor(),
 		FeesCurrency:      op.Fees.Currency().Code(),
 		CashTxID:          toNullInt64(op.CashTx),
+		ImportBatchID:     toNullInt64(op.ImportBatchID),
 	}
+}
+
+// scaleLookup resolves the price scale of a security, caching it for the
+// duration of one repository call.
+type scaleLookup struct {
+	ctx   context.Context
+	repo  securityRepo
+	cache map[int64]int
+}
+
+func (r securityRepo) newScaleLookup(ctx context.Context) *scaleLookup {
+	return &scaleLookup{ctx: ctx, repo: r, cache: map[int64]int{}}
+}
+
+func (l *scaleLookup) get(id int64) (int, error) {
+	if scale, ok := l.cache[id]; ok {
+		return scale, nil
+	}
+	sec, err := l.repo.Get(l.ctx, domain.SecurityID(id))
+	if err != nil {
+		return 0, err
+	}
+	l.cache[id] = sec.PriceScale
+	return sec.PriceScale, nil
 }
 
 func dateOrEmpty(d domain.Date) string {
@@ -357,6 +439,7 @@ func toSecurity(row gen.Security) (domain.Security, error) {
 		Kind:          kind,
 		Currency:      cur,
 		QuantityScale: int(row.QuantityScale),
+		PriceScale:    int(row.PriceScale),
 	})
 	if err != nil {
 		return domain.Security{}, fmt.Errorf("parse security row: %w", err)
@@ -364,7 +447,7 @@ func toSecurity(row gen.Security) (domain.Security, error) {
 	return security, nil
 }
 
-func toSecurityPrice(row gen.SecurityPrice) (domain.SecurityPrice, error) {
+func toSecurityPrice(row gen.SecurityPrice, scale int) (domain.SecurityPrice, error) {
 	cur, err := domain.ParseCurrency(row.Currency)
 	if err != nil {
 		return domain.SecurityPrice{}, fmt.Errorf("parse security price currency %q: %w", row.Currency, err)
@@ -373,7 +456,7 @@ func toSecurityPrice(row gen.SecurityPrice) (domain.SecurityPrice, error) {
 	if err != nil {
 		return domain.SecurityPrice{}, fmt.Errorf("parse security price date %q: %w", row.Date, err)
 	}
-	price, err := domain.NewMoney(row.PriceMinor, cur)
+	price, err := domain.NewPrice(row.PriceMinor, scale, cur)
 	if err != nil {
 		return domain.SecurityPrice{}, fmt.Errorf("parse security price amount: %w", err)
 	}
@@ -387,7 +470,7 @@ func toSecurityPrice(row gen.SecurityPrice) (domain.SecurityPrice, error) {
 	}, nil
 }
 
-func toSecurityOp(row gen.SecurityOp) (domain.SecurityOp, error) {
+func toSecurityOp(row gen.SecurityOp, priceScale int) (domain.SecurityOp, error) {
 	date, err := domain.ParseDate(row.Date)
 	if err != nil {
 		return domain.SecurityOp{}, fmt.Errorf("parse security operation date %q: %w", row.Date, err)
@@ -404,7 +487,7 @@ func toSecurityOp(row gen.SecurityOp) (domain.SecurityOp, error) {
 	if err != nil {
 		return domain.SecurityOp{}, fmt.Errorf("parse security operation unit price currency %q: %w", row.UnitPriceCurrency, err)
 	}
-	unitPrice, err := domain.NewMoney(row.UnitPriceMinor, unitPriceCurrency)
+	unitPrice, err := domain.NewPrice(row.UnitPriceMinor, priceScale, unitPriceCurrency)
 	if err != nil {
 		return domain.SecurityOp{}, fmt.Errorf("parse security operation unit price: %w", err)
 	}
@@ -417,15 +500,16 @@ func toSecurityOp(row gen.SecurityOp) (domain.SecurityOp, error) {
 		return domain.SecurityOp{}, fmt.Errorf("parse security operation fees: %w", err)
 	}
 	op, err := domain.NewSecurityOp(domain.SecurityOp{
-		ID:        domain.SecurityOpID(row.ID),
-		Date:      date,
-		Account:   domain.AccountID(row.AccountID),
-		Security:  domain.SecurityID(row.SecurityID),
-		Kind:      kind,
-		Quantity:  quantity,
-		UnitPrice: unitPrice,
-		Fees:      fees,
-		CashTx:    domain.TransactionID(nullInt64OrZero(row.CashTxID)),
+		ID:            domain.SecurityOpID(row.ID),
+		Date:          date,
+		Account:       domain.AccountID(row.AccountID),
+		Security:      domain.SecurityID(row.SecurityID),
+		Kind:          kind,
+		Quantity:      quantity,
+		UnitPrice:     unitPrice,
+		Fees:          fees,
+		CashTx:        domain.TransactionID(nullInt64OrZero(row.CashTxID)),
+		ImportBatchID: domain.ImportBatchID(nullInt64OrZero(row.ImportBatchID)),
 	})
 	if err != nil {
 		return domain.SecurityOp{}, fmt.Errorf("parse security operation row: %w", err)

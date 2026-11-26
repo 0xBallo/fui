@@ -36,10 +36,11 @@ func TestNormalizeSavedKind(t *testing.T) {
 func TestReportPeriodValue(t *testing.T) {
 	cmd := &cobra.Command{Use: "report"}
 	reportKindPeriodFlag(cmd)
+	deps := newTestDeps(t)
 
 	t.Run("month", func(t *testing.T) {
 		mustSetFlag(t, cmd, "period", "2026-11")
-		p, err := reportPeriodValue(cmd, 1)
+		p, err := reportPeriodValue(cmd, deps)
 		if err != nil {
 			t.Fatalf("reportPeriodValue month: %v", err)
 		}
@@ -50,7 +51,7 @@ func TestReportPeriodValue(t *testing.T) {
 
 	t.Run("range", func(t *testing.T) {
 		mustSetFlag(t, cmd, "period", "2026-11-05..2026-11-20")
-		p, err := reportPeriodValue(cmd, 1)
+		p, err := reportPeriodValue(cmd, deps)
 		if err != nil {
 			t.Fatalf("reportPeriodValue range: %v", err)
 		}
@@ -59,16 +60,26 @@ func TestReportPeriodValue(t *testing.T) {
 		}
 	})
 
-	t.Run("relative unsupported", func(t *testing.T) {
-		mustSetFlag(t, cmd, "period", "this-month")
-		if _, err := reportPeriodValue(cmd, 1); err == nil {
-			t.Fatal("relative period accepted, want invalid_value")
-		}
-	})
+	for in, want := range map[string]string{
+		"last-month": "2026-10-01..2026-10-31",
+		"2026-Q4":    "2026-10-01..2026-12-31",
+		"2025":       "2025-01-01..2025-12-31",
+	} {
+		t.Run(in, func(t *testing.T) {
+			mustSetFlag(t, cmd, "period", in)
+			p, err := reportPeriodValue(cmd, deps)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := p.From().String() + ".." + p.To().String(); got != want {
+				t.Fatalf("period = %s, want %s", got, want)
+			}
+		})
+	}
 
 	t.Run("invalid", func(t *testing.T) {
 		mustSetFlag(t, cmd, "period", "bad-period")
-		if _, err := reportPeriodValue(cmd, 1); err == nil {
+		if _, err := reportPeriodValue(cmd, deps); err == nil {
 			t.Fatal("invalid period accepted")
 		}
 	})
@@ -97,6 +108,9 @@ func TestReportKindLabels(t *testing.T) {
 		"forecast":         true,
 		"spending":         true,
 		"cash-flow":        true,
+	}
+	if len(labels) != len(want) {
+		t.Fatalf("labels = %v, want each of %d kinds once", labels, len(want))
 	}
 	for _, label := range labels {
 		delete(want, label)

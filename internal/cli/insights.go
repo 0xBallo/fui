@@ -44,6 +44,15 @@ func InsightConfigFrom(cfg *config.Config) domain.InsightConfig {
 	if in.TrendMinMinor > 0 {
 		out.TrendMinMinor = in.TrendMinMinor
 	}
+	if in.AnomalyWindowMonths > 0 {
+		out.AnomalyWindowMonths = in.AnomalyWindowMonths
+	}
+	if in.AnomalyMinHistory > 0 {
+		out.AnomalyMinHistory = in.AnomalyMinHistory
+	}
+	if in.TrendPeriods > 0 {
+		out.TrendPeriods = in.TrendPeriods
+	}
 	return out
 }
 
@@ -108,11 +117,14 @@ func runInsights(cmd *cobra.Command, deps *Deps) error {
 			}, "Accepted insight %s as recurrence #%d.\n", accept, int64(res.Recurrence.ID))
 		})
 	}
-	views, err := svc.Run(cmd.Context())
+	rep, err := svc.Report(cmd.Context())
 	if err != nil {
 		return err
 	}
-	return writeInsights(deps, rt, views)
+	if err := writeUndoWarnings(deps, rep.Warnings); err != nil {
+		return err
+	}
+	return writeInsights(deps, rt, rep.Insights)
 }
 
 func insightWrite(cmd *cobra.Command, deps *Deps, rt runtimeFlags, key, verb string, apply func() error) error {

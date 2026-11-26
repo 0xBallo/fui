@@ -76,6 +76,7 @@ type exportData struct {
 	tags       map[domain.TransactionID][]domain.Tag
 	securities map[domain.SecurityID]domain.Security
 	secOps     []domain.SecurityOp
+	loans      []exportLoan
 	balances   map[domain.AccountID]domain.Money // final balance of the accounts involved
 	balDate    domain.Date
 }
@@ -101,6 +102,9 @@ func (s *Service) loadExport(ctx context.Context, r app.Repos, f domain.TxFilter
 		return d, err
 	}
 	if err := d.loadSecurityOps(ctx, r); err != nil {
+		return d, err
+	}
+	if err := d.loadLoans(ctx, r, f); err != nil {
 		return d, err
 	}
 	if d.balDate.IsZero() {
@@ -324,11 +328,18 @@ func (d exportData) writeFUI(w io.Writer) error {
 			involved = append(involved, d.accounts[op.Account])
 		}
 	}
-	for _, a := range involved {
+	written := slices.Clone(involved)
+	for _, a := range d.loanAccounts() {
+		if !slices.ContainsFunc(written, func(w domain.Account) bool { return w.ID == a.ID }) {
+			written = append(written, a)
+		}
+	}
+	for _, a := range written {
 		recs = append(recs, fuiproto.Record{Type: fuiproto.RecordTypeAccount, Account: &fuiproto.AccountRecord{
 			Ref: accountRef(a), Name: a.Name, Currency: a.Currency.Code(), Kind: protoKind(a.Kind),
 		}})
 	}
+	recs = append(recs, d.loanRecords()...)
 	for _, t := range d.txs {
 		recs = append(recs, fuiproto.Record{Type: fuiproto.RecordTypeTransaction, Transaction: d.fuiTx(t)})
 	}
@@ -389,6 +400,10 @@ func (d exportData) fuiTx(t domain.Transaction) *fuiproto.TransactionRecord {
 		Status: fuiproto.TransactionStatus(t.Status), Kind: fuiproto.TransactionKind(t.Kind),
 		Category: d.category(t), Notes: t.Notes, Payee: d.payee(t), Tags: d.tagNames(t),
 	}
+	if t.Original != nil {
+		rec.Original = &fuiproto.OriginalAmount{Amount: t.Original.Minor(), Currency: t.Original.Currency().Code()}
+	}
+	rec.Raw = parseRaw(t.Raw)
 	if rec.ID == "" {
 		rec.ID = "fui-" + strconv.FormatInt(int64(t.ID), 10)
 	}

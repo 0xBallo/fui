@@ -30,6 +30,8 @@ func barItems(th theme.Theme, fmtAmt amountFormatter, data any) []components.Bar
 	switch d := data.(type) {
 	case reporting.BudgetResult:
 		return budgetBars(th, fmtAmt, d)
+	case reporting.GroupedResult:
+		return groupedBars(th, fmtAmt, d)
 	case reporting.PayeesResult:
 		items := make([]components.BarItem, len(d.Rows))
 		for i, r := range d.Rows {
@@ -46,6 +48,30 @@ func barItems(th theme.Theme, fmtAmt amountFormatter, data any) []components.Bar
 		return items
 	}
 	return nil
+}
+
+// isCashFlow reports whether g is a cash-flow result: only its rows carry inflow and outflow.
+func isCashFlow(g reporting.GroupedResult) bool {
+	return len(g.Rows) > 0 && g.Rows[0].Inflow != nil
+}
+
+// groupedBars draws one bar per spending row; a cash-flow row gets an inflow and an outflow bar.
+func groupedBars(th theme.Theme, fmtAmt amountFormatter, g reporting.GroupedResult) []components.BarItem {
+	if !isCashFlow(g) {
+		items := make([]components.BarItem, len(g.Rows))
+		for i, r := range g.Rows {
+			items[i] = components.BarItem{Label: r.Key, Value: r.Total.Minor, DisplayValue: fmtAmt(r.Total)}
+		}
+		return items
+	}
+	items := make([]components.BarItem, 0, 2*len(g.Rows))
+	for _, r := range g.Rows {
+		items = append(items,
+			components.BarItem{Label: r.Key, Value: r.Inflow.Minor, DisplayValue: fmtAmt(*r.Inflow), Style: th.Positive},
+			components.BarItem{Value: r.Outflow.Minor, DisplayValue: fmtAmt(*r.Outflow), Style: th.Negative},
+		)
+	}
+	return items
 }
 
 // budgetBars draws two bars per budget: the budgeted amount in the muted color and the spending
@@ -136,8 +162,13 @@ type legendEntry struct {
 
 // barLegend is the legend of the paired-bar charts of data, or "" for the others.
 func (m *Model) barLegend(data any) string {
-	if _, ok := data.(reporting.BudgetResult); ok {
+	switch d := data.(type) {
+	case reporting.BudgetResult:
 		return legendOf(legendEntry{"budgeted", m.th.Muted}, legendEntry{"spent", m.th.Positive})
+	case reporting.GroupedResult:
+		if isCashFlow(d) {
+			return legendOf(legendEntry{"inflow", m.th.Positive}, legendEntry{"outflow", m.th.Negative})
+		}
 	}
 	return ""
 }

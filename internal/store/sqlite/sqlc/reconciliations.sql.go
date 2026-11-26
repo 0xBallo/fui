@@ -32,6 +32,21 @@ func (q *Queries) CloseReconciliation(ctx context.Context, arg CloseReconciliati
 	return result.RowsAffected()
 }
 
+const deleteReconcileTick = `-- name: DeleteReconcileTick :exec
+DELETE FROM reconcile_ticks
+WHERE account_id = ?1 AND transaction_id = ?2
+`
+
+type DeleteReconcileTickParams struct {
+	AccountID     int64
+	TransactionID int64
+}
+
+func (q *Queries) DeleteReconcileTick(ctx context.Context, arg DeleteReconcileTickParams) error {
+	_, err := q.db.ExecContext(ctx, deleteReconcileTick, arg.AccountID, arg.TransactionID)
+	return err
+}
+
 const getReconciliation = `-- name: GetReconciliation :one
 SELECT id, account_id, date, statement_balance_minor, currency, closed_at, created_at, updated_at
 FROM reconciliations
@@ -57,6 +72,21 @@ func (q *Queries) GetReconciliation(ctx context.Context, arg GetReconciliationPa
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const insertReconcileTick = `-- name: InsertReconcileTick :exec
+INSERT OR IGNORE INTO reconcile_ticks (account_id, transaction_id)
+VALUES (?1, ?2)
+`
+
+type InsertReconcileTickParams struct {
+	AccountID     int64
+	TransactionID int64
+}
+
+func (q *Queries) InsertReconcileTick(ctx context.Context, arg InsertReconcileTickParams) error {
+	_, err := q.db.ExecContext(ctx, insertReconcileTick, arg.AccountID, arg.TransactionID)
+	return err
 }
 
 const insertReconciliation = `-- name: InsertReconciliation :one
@@ -117,4 +147,34 @@ func (q *Queries) LastClosedReconciliation(ctx context.Context, accountID int64)
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listReconcileTicks = `-- name: ListReconcileTicks :many
+SELECT transaction_id
+FROM reconcile_ticks
+WHERE account_id = ?1
+ORDER BY transaction_id
+`
+
+func (q *Queries) ListReconcileTicks(ctx context.Context, accountID int64) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listReconcileTicks, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var transaction_id int64
+		if err := rows.Scan(&transaction_id); err != nil {
+			return nil, err
+		}
+		items = append(items, transaction_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

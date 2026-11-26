@@ -81,7 +81,7 @@ func (s *Store) ListTransactions(ctx context.Context, filter reporting.Transacti
 	s.mu.RUnlock()
 
 	q := gen.New(db)
-	rows, err := q.ListTransactionsForReport(ctx, gen.ListTransactionsForReportParams{
+	rows, err := q.ListTransactionsWithSplitsForReport(ctx, gen.ListTransactionsWithSplitsForReportParams{
 		FromDate:       filter.Period.From().String(),
 		ToDate:         filter.Period.To().String(),
 		AccountIdsJson: accountIDsJSON,
@@ -89,7 +89,25 @@ func (s *Store) ListTransactions(ctx context.Context, filter reporting.Transacti
 	if err != nil {
 		return nil, mapSQLError(err)
 	}
-	return mapTransactions(rows)
+	out := make([]domain.Transaction, 0, len(rows))
+	for _, row := range rows {
+		tx, convErr := toTransaction(row.Transaction)
+		if convErr != nil {
+			return nil, convErr
+		}
+		if row.SplitAmountMinor.Valid {
+			// A split transaction is reported as one transaction per split row, so each row
+			// counts in its own category and the parent amount is not counted twice.
+			amount, amountErr := domain.NewMoney(row.SplitAmountMinor.Int64, tx.Amount.Currency())
+			if amountErr != nil {
+				return nil, amountErr
+			}
+			tx.Amount = amount
+			tx.CategoryID = domain.CategoryID(row.SplitCategoryID.Int64)
+		}
+		out = append(out, tx)
+	}
+	return out, nil
 }
 
 // BalanceAt implements reporting.Source.

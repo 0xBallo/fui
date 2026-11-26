@@ -72,10 +72,16 @@ func applyReset(cmd *cobra.Command, deps *Deps, rt runtimeFlags, plan app.ResetP
 	}
 	if rt.format == render.JSON {
 		return render.WriteJSON(deps.Stdout, struct {
-			Reset        bool `json:"reset"`
-			KeepSettings bool `json:"keep_settings"`
-			Initialized  bool `json:"initialized"`
-		}{!res.Initialized, plan.KeepSettings, res.Initialized})
+			Reset        bool     `json:"reset"`
+			KeepSettings bool     `json:"keep_settings"`
+			Initialized  bool     `json:"initialized"`
+			Warnings     []string `json:"warnings"`
+		}{!res.Initialized, plan.KeepSettings, res.Initialized, append([]string{}, res.Warnings...)})
+	}
+	for _, w := range res.Warnings {
+		if _, err := fmt.Fprintf(deps.Stderr, "warning: %s\n", w); err != nil {
+			return fmt.Errorf("write reset warning: %w", err)
+		}
 	}
 	msg := "Archive reset."
 	if res.Initialized {

@@ -2,6 +2,7 @@ package reporting
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -47,16 +48,29 @@ type found struct {
 	dismissed bool
 }
 
+// InsightReport is the result of Report: the current insights plus warnings about data that
+// could not be analysed (rows without an exchange rate).
+type InsightReport struct {
+	Insights []InsightView `json:"insights"`
+	Warnings []string      `json:"warnings,omitempty"`
+}
+
 // Run returns the current insights that were not dismissed.
 func (i *Insights) Run(ctx context.Context) ([]InsightView, error) {
-	all, err := i.detect(ctx)
+	rep, err := i.Report(ctx)
+	return rep.Insights, err
+}
+
+// Report is Run plus the warnings of the analysis.
+func (i *Insights) Report(ctx context.Context) (InsightReport, error) {
+	all, warnings, err := i.detect(ctx, hideCovered)
 	if err != nil {
-		return nil, err
+		return InsightReport{}, err
 	}
-	out := []InsightView{}
+	out := InsightReport{Insights: []InsightView{}, Warnings: warnings}
 	for _, f := range all {
 		if !f.dismissed {
-			out = append(out, view(f))
+			out.Insights = append(out.Insights, view(f))
 		}
 	}
 	return out, nil
@@ -65,7 +79,7 @@ func (i *Insights) Run(ctx context.Context) ([]InsightView, error) {
 // Dismiss hides the insight with key for good. Dismissing twice is a no-op; an unknown key
 // (not currently detected) fails with not_found.
 func (i *Insights) Dismiss(ctx context.Context, key string) error {
-	all, err := i.detect(ctx)
+	all, _, err := i.detect(ctx, keepCovered)
 	if err != nil {
 		return err
 	}
@@ -94,7 +108,7 @@ func (i *Insights) AcceptSubscription(ctx context.Context, key string) (AcceptRe
 	if err := i.a.gate(module.Recurring); err != nil {
 		return AcceptResult{}, err
 	}
-	all, err := i.detect(ctx)
+	all, _, err := i.detect(ctx, keepCovered)
 	if err != nil {
 		return AcceptResult{}, err
 	}
@@ -213,32 +227,46 @@ func view(f found) InsightView {
 	}
 }
 
+// coverMode tells detect whether subscriptions already covered by a recurrence are dropped. Accept and
+// Dismiss keep them so that repeating an accept still resolves its key (idempotency).
+type coverMode int
+
+const (
+	hideCovered coverMode = iota
+	keepCovered
+)
+
 // detect runs every analysis over the booked history and marks the dismissed ones.
-func (i *Insights) detect(ctx context.Context) ([]found, error) {
+func (i *Insights) detect(ctx context.Context, mode coverMode) ([]found, []string, error) {
 	if err := i.a.gate(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	today, err := i.a.today()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	cur, err := domain.MonthPeriod(today, i.a.cfg.MonthStartDay)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	txs, dismissed, payees, cats, err := i.load(ctx)
+	ld, err := i.load(ctx, today)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	txs, dismissed, payees, cats := ld.txs, ld.dismissed, ld.payees, ld.cats
+	known := ld.known
+	if mode == keepCovered {
+		known = nil
 	}
 	var ins []domain.Insight
 	for _, run := range []func() ([]domain.Insight, error){
 		func() ([]domain.Insight, error) { return domain.DetectAnomalies(i.cfg, cur, txs) },
-		func() ([]domain.Insight, error) { return domain.DetectSubscriptions(i.cfg, txs) },
+		func() ([]domain.Insight, error) { return domain.DetectSubscriptions(i.cfg, txs, known) },
 		func() ([]domain.Insight, error) { return domain.DetectTrends(i.cfg, cur, txs) },
 	} {
 		got, err := run()
 		if err != nil {
-			return nil, fmt.Errorf("detect insights: %w", err)
+			return nil, nil, fmt.Errorf("detect insights: %w", err)
 		}
 		ins = append(ins, got...)
 	}
@@ -247,7 +275,7 @@ func (i *Insights) detect(ctx context.Context) ([]found, error) {
 		out[j] = found{Insight: in, label: subjectLabel(in.Subject, payees, cats), dismissed: dismissed[in.Key]}
 		out[j].lastTx = lastOfSubject(txs, in)
 	}
-	return out, nil
+	return out, ld.warnings(), nil
 }
 
 // subjectLabel resolves "payee:<id>" / "category:<id>" to a name; descriptions are shown as typed.
@@ -322,30 +350,121 @@ func bookedSplit(ctx context.Context, r app.Repos, spec domain.TxFilterSpec) ([]
 	return out, nil
 }
 
-// load reads the booked history, the dismissed keys and the payee and category names.
-func (i *Insights) load(ctx context.Context) (txs []domain.Transaction, dismissed map[string]bool, payees map[domain.PayeeID]string, cats map[domain.CategoryID]string, err error) {
-	dismissed, payees, cats = map[string]bool{}, map[domain.PayeeID]string{}, map[domain.CategoryID]string{}
-	err = i.a.store.Read(ctx, func(r app.Repos) error {
-		var err error
-		if txs, err = bookedSplit(ctx, r, domain.TxFilterSpec{}); err != nil {
+// loaded is the data the analyses run over.
+type loaded struct {
+	txs       []domain.Transaction // booked history converted to the base currency
+	dismissed map[string]bool
+	payees    map[domain.PayeeID]string
+	cats      map[domain.CategoryID]string
+	known     []domain.KnownRecurrence
+	noRate    int
+	noRateCur map[string]bool
+}
+
+// warnings describes the rows excluded for lack of an exchange rate.
+func (l loaded) warnings() []string {
+	if l.noRate == 0 {
+		return nil
+	}
+	cur := make([]string, 0, len(l.noRateCur))
+	for c := range l.noRateCur {
+		cur = append(cur, c)
+	}
+	slices.Sort(cur)
+	return []string{fmt.Sprintf("%d transactions excluded from insights: missing exchange rate for %s", l.noRate, strings.Join(cur, ", "))}
+}
+
+// load reads the booked history converted to the base currency at each transaction date (rows
+// without a rate are excluded and counted), the dismissed keys, the payee and category names and
+// the existing recurrences.
+func (i *Insights) load(ctx context.Context, today domain.Date) (loaded, error) {
+	l := loaded{dismissed: map[string]bool{}, payees: map[domain.PayeeID]string{}, cats: map[domain.CategoryID]string{}, noRateCur: map[string]bool{}}
+	err := i.a.store.Read(ctx, func(r app.Repos) error {
+		rows, err := bookedSplit(ctx, r, domain.TxFilterSpec{})
+		if err != nil {
 			return err
+		}
+		l.txs = make([]domain.Transaction, 0, len(rows))
+		for _, tx := range rows {
+			amt, err := i.a.toBase(ctx, r, tx.Amount, tx.Date)
+			if errors.Is(err, app.ErrRateMissing) {
+				l.noRate++
+				l.noRateCur[tx.Amount.Currency().Code()] = true
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			tx.Amount = amt
+			l.txs = append(l.txs, tx)
 		}
 		ds, err := r.DismissedInsights().List(ctx)
 		if err != nil {
 			return fmt.Errorf("list dismissed insights: %w", err)
 		}
 		for _, d := range ds {
-			dismissed[d.Key] = true
+			l.dismissed[d.Key] = true
 		}
 		ps, err := r.Payees().List(ctx)
 		if err != nil {
 			return fmt.Errorf("list payees: %w", err)
 		}
 		for _, p := range ps {
-			payees[p.ID] = p.Name
+			l.payees[p.ID] = p.Name
 		}
-		cats, err = categoryNames(ctx, r)
+		if l.cats, err = categoryNames(ctx, r); err != nil {
+			return err
+		}
+		recs, err := r.Recurrences().List(ctx)
+		if err != nil {
+			return fmt.Errorf("list recurrences: %w", err)
+		}
+		l.known, err = i.knownRecurrences(ctx, r, recs, ps, today)
 		return err
 	})
-	return txs, dismissed, payees, cats, err
+	return l, err
+}
+
+// knownRecurrences maps recurrences with a weekly, monthly or yearly cadence to the subjects the
+// subscription detection groups by; a recurrence whose amount has no rate today is skipped.
+func (i *Insights) knownRecurrences(ctx context.Context, r app.Repos, recs []app.Recurrence, payees []domain.Payee, today domain.Date) ([]domain.KnownRecurrence, error) {
+	var out []domain.KnownRecurrence
+	for _, rec := range recs {
+		var interval string
+		switch {
+		case rec.Rule.Unit == domain.RecurrenceWeeks && rec.Rule.Every == 1:
+			interval = "weekly"
+		case rec.Rule.Unit == domain.RecurrenceMonths && rec.Rule.Every == 1:
+			interval = "monthly"
+		case rec.Rule.Unit == domain.RecurrenceMonths && rec.Rule.Every == 12:
+			interval = "yearly"
+		default:
+			continue
+		}
+		amt, err := i.a.toBase(ctx, r, rec.Amount, today)
+		if errors.Is(err, app.ErrRateMissing) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		desc := strings.ToLower(strings.TrimSpace(rec.Description))
+		subjects := []string{"description:" + desc}
+		for _, p := range payees {
+			if strings.ToLower(strings.TrimSpace(p.Name)) == desc {
+				subjects = append(subjects, fmt.Sprintf("payee:%d", p.ID))
+			}
+		}
+		out = append(out, domain.KnownRecurrence{
+			Subjects: subjects, Amount: absMinor(amt), Currency: i.a.cfg.BaseCurrency, Interval: interval,
+		})
+	}
+	return out, nil
+}
+
+func absMinor(m domain.Money) int64 {
+	if m.Minor() < 0 {
+		return -m.Minor()
+	}
+	return m.Minor()
 }

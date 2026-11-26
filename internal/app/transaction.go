@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
+	"strings"
 
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/textnorm"
@@ -20,10 +22,15 @@ type TxView struct {
 	Transfer    *domain.TransferGroup
 	// Tags holds the tag names ordered by tag ID; ListTx fills it, other builders leave it empty.
 	Tags []string `json:"tags,omitempty"`
+	// Payee is the payee name; ShowTx fills it.
+	Payee string `json:"payee,omitempty"`
+	// Notices is set by the caller of a write to report what it created implicitly.
+	Notices []string `json:"notices,omitempty"`
 }
 
 // AddTxRequest carries user-typed values. Account and Amount are required; Date defaults to
-// today, Status to booked and Kind to payment. Category is optional.
+// today, Status to booked and Kind to payment. Category is optional. Payee and Tags are matched
+// by exact name, case-insensitively; one that does not exist yet is created with the transaction.
 type AddTxRequest struct {
 	Account     string
 	Amount      string
@@ -33,12 +40,15 @@ type AddTxRequest struct {
 	Status      string
 	Kind        string
 	Notes       string
+	Payee       string
+	Tags        []string
 }
 
 // AddTxPlan is the plan to create Tx.
 type AddTxPlan struct {
 	Plan
-	Tx domain.Transaction
+	Tx    domain.Transaction
+	Links txLinks
 }
 
 // PlanAddTx resolves names, parses the amount in the account currency and plans the creation.
@@ -53,7 +63,14 @@ func (s *Service) PlanAddTx(ctx context.Context, req AddTxRequest) (AddTxPlan, e
 		if err != nil {
 			return err
 		}
-		out = AddTxPlan{Plan: Plan{Changes: []Change{txChange(OpCreate, tx, acct.Name, cat)}}, Tx: tx}
+		l, err := planLinks(ctx, r, linkRequest{Payee: &req.Payee, Add: req.Tags})
+		if err != nil {
+			return err
+		}
+		tx.PayeeID = l.PayeeID
+		ch := txChange(OpCreate, tx, acct.Name, cat)
+		l.annotate(&ch, nil)
+		out = AddTxPlan{Plan: l.plan(ch), Tx: tx, Links: l}
 		return nil
 	})
 	return out, err
@@ -103,14 +120,21 @@ func (s *Service) newTx(req AddTxRequest, accts []domain.Account, cats []domain.
 func (s *Service) ApplyAddTx(ctx context.Context, p AddTxPlan) (domain.Transaction, error) {
 	var out domain.Transaction
 	err := s.apply(ctx, p.Bulk, func(r Repos) (err error) {
-		if out, err = r.Transactions().Insert(ctx, p.Tx); err != nil {
+		tx := p.Tx
+		if err := p.Links.createPayee(ctx, r, &tx); err != nil {
+			return err
+		}
+		if out, err = r.Transactions().Insert(ctx, tx); err != nil {
+			return err
+		}
+		if err := p.Links.storeTags(ctx, r, out.ID); err != nil {
 			return err
 		}
 		after, err := snapshot(ctx, r, out.ID)
 		if err != nil {
 			return err
 		}
-		return s.journal(ctx, r, OpKindTxAdd, undoPayload{After: after})
+		return s.journal(ctx, r, OpKindTxAdd, undoPayload{After: after, CreatedPayee: createdPayee(p.Links, tx)})
 	})
 	return out, err
 }
@@ -119,9 +143,8 @@ func (s *Service) ApplyAddTx(ctx context.Context, p AddTxPlan) (domain.Transacti
 // formats as input dates. The amount range is parsed in the currency of the filtered accounts
 // (every account when none is given), which must then share one currency. The period is given
 // either as From/To, or as the convenience Month ("YYYY-MM") or Year, mutually exclusive (an
-// invalid_filter error otherwise, same as domain.TxFilterSpec). Payees is a placeholder: the
-// payees archive does not exist yet, so any name given here fails with not_found. Tags OR among
-// themselves and AND with every other field, same as domain.TxFilter.
+// invalid_filter error otherwise, same as domain.TxFilterSpec). Payees are
+// resolved by name or alias. Tags OR among themselves and AND with every other field, same as domain.TxFilter.
 type ListTxRequest struct {
 	From, To      string
 	Month         string
@@ -157,15 +180,7 @@ type TxPage struct {
 func (s *Service) ResolveTxFilter(ctx context.Context, req ListTxRequest) (domain.TxFilter, error) {
 	var f domain.TxFilter
 	err := s.store.Read(ctx, func(r Repos) error {
-		accts, cats, err := loadNames(ctx, r)
-		if err != nil {
-			return err
-		}
-		tags, err := s.loadTagsIfNeeded(ctx, r, req.Tags)
-		if err != nil {
-			return err
-		}
-		spec, err := s.txFilterSpec(req, accts, cats, tags)
+		spec, err := s.resolveTxSpec(ctx, r, req)
 		if err != nil {
 			return err
 		}
@@ -173,6 +188,32 @@ func (s *Service) ResolveTxFilter(ctx context.Context, req ListTxRequest) (domai
 		return err
 	})
 	return f, err
+}
+
+// ResolveTxFilterSpec resolves req into a TxFilterSpec inside an existing read, exactly like
+// Service.ResolveTxFilter does, for use cases that have no Service (the analytics reports). The
+// spec is returned unvalidated so the caller can adjust it before domain.NewTxFilter.
+func ResolveTxFilterSpec(ctx context.Context, r Repos, clock Clock, cfg Config, req ListTxRequest) (domain.TxFilterSpec, error) {
+	return New(nil, clock, nil, cfg).resolveTxSpec(ctx, r, req)
+}
+
+// resolveTxSpec loads what the names in req refer to and resolves them.
+func (s *Service) resolveTxSpec(ctx context.Context, r Repos, req ListTxRequest) (domain.TxFilterSpec, error) {
+	accts, cats, err := loadNames(ctx, r)
+	if err != nil {
+		return domain.TxFilterSpec{}, err
+	}
+	tags, err := s.loadTagsIfNeeded(ctx, r, req.Tags)
+	if err != nil {
+		return domain.TxFilterSpec{}, err
+	}
+	var payees []domain.Payee
+	if len(req.Payees) > 0 {
+		if payees, err = r.Payees().List(ctx); err != nil {
+			return domain.TxFilterSpec{}, fmt.Errorf("list payees: %w", err)
+		}
+	}
+	return s.txFilterSpec(req, accts, cats, tags, payees)
 }
 
 // ListTx returns one page of the matching transactions.
@@ -187,11 +228,7 @@ func (s *Service) ListTx(ctx context.Context, req ListTxRequest) (TxPage, error)
 		if err != nil {
 			return err
 		}
-		tags, err := s.loadTagsIfNeeded(ctx, r, req.Tags)
-		if err != nil {
-			return err
-		}
-		spec, err := s.txFilterSpec(req, accts, cats, tags)
+		spec, err := s.resolveTxSpec(ctx, r, req)
 		if err != nil {
 			return err
 		}
@@ -242,11 +279,7 @@ func (s *Service) loadTagsIfNeeded(ctx context.Context, r Repos, names []string)
 	return tags, nil
 }
 
-func (s *Service) txFilterSpec(req ListTxRequest, accts []domain.Account, cats []domain.Category, tags []domain.Tag) (domain.TxFilterSpec, error) {
-	if len(req.Payees) > 0 {
-		return domain.TxFilterSpec{}, newError(domain.ErrNotFound,
-			map[string]any{"field": "payee"}, "payee filter: no payees archive yet")
-	}
+func (s *Service) txFilterSpec(req ListTxRequest, accts []domain.Account, cats []domain.Category, tags []domain.Tag, payees []domain.Payee) (domain.TxFilterSpec, error) {
 	spec := domain.TxFilterSpec{
 		Text: textnorm.Normalize(req.Text), Year: req.Year, Uncategorized: req.Uncategorized,
 		ImportBatchID: domain.ImportBatchID(req.Batch), Sign: req.Sign, Sort: req.Sort, Desc: req.Desc,
@@ -286,6 +319,13 @@ func (s *Service) txFilterSpec(req ListTxRequest, accts []domain.Account, cats [
 			return domain.TxFilterSpec{}, err
 		}
 		spec.TagIDs = append(spec.TagIDs, tg.ID)
+	}
+	for _, ref := range req.Payees {
+		py, err := pickPayee(payees, ref)
+		if err != nil {
+			return domain.TxFilterSpec{}, err
+		}
+		spec.PayeeIDs = append(spec.PayeeIDs, py.ID)
 	}
 	if err := s.applyStatusAndKind(req, &spec); err != nil {
 		return domain.TxFilterSpec{}, err
@@ -394,6 +434,9 @@ func (s *Service) ShowTx(ctx context.Context, id domain.TransactionID) (TxView, 
 			return fmt.Errorf("get transaction %d: %w", id, err)
 		}
 		out = newViewer(accts, cats).view(t)
+		if err := fillLinkNames(ctx, r, &out); err != nil {
+			return err
+		}
 		if t.TransferGroupID != 0 {
 			g, err := r.Transfers().Get(ctx, t.TransferGroupID)
 			if err != nil {
@@ -406,7 +449,9 @@ func (s *Service) ShowTx(ctx context.Context, id domain.TransactionID) (TxView, 
 	return out, err
 }
 
-// EditTxRequest changes the non-nil fields of transaction ID. An empty Category clears it.
+// EditTxRequest changes the non-nil fields of transaction ID. An empty Category or Payee clears
+// it. Payee, AddTags and RemoveTags follow the matching rules of AddTxRequest; RemoveTags names
+// must exist.
 // Editing a reconciled transaction needs ConfirmReconciled; the amount of a transfer leg
 // cannot be edited (edit by removing and re-creating the transfer).
 type EditTxRequest struct {
@@ -418,13 +463,23 @@ type EditTxRequest struct {
 	Category          *string
 	Status            *string
 	Kind              *string
+	Payee             *string
+	AddTags           []string
+	RemoveTags        []string
 	ConfirmReconciled bool
+}
+
+func (r EditTxRequest) empty() bool {
+	return r.Amount == nil && r.Date == nil && r.Description == nil && r.Notes == nil &&
+		r.Category == nil && r.Status == nil && r.Kind == nil && r.Payee == nil &&
+		len(r.AddTags) == 0 && len(r.RemoveTags) == 0
 }
 
 // EditTxPlan is the plan to store Tx.
 type EditTxPlan struct {
 	Plan
-	Tx domain.Transaction
+	Tx    domain.Transaction
+	Links txLinks
 }
 
 // PlanEditTx plans the edit of a transaction.
@@ -456,16 +511,24 @@ func (s *Service) PlanEditTx(ctx context.Context, req EditTxRequest) (EditTxPlan
 					"transaction %d is split: unsplit it before changing the amount", cur.ID)
 			}
 		}
+		l, err := planLinks(ctx, r, linkRequest{ID: cur.ID, Payee: req.Payee, Add: req.AddTags, Remove: req.RemoveTags})
+		if err != nil {
+			return err
+		}
+		if req.Payee != nil {
+			edited.PayeeID = l.PayeeID
+		}
 		v := newViewer(accts, cats).view(edited)
-		out = EditTxPlan{Plan: Plan{Changes: []Change{txChange(OpUpdate, edited, v.Account, v.Category)}}, Tx: edited}
+		ch := txChange(OpUpdate, edited, v.Account, v.Category)
+		l.annotate(&ch, req.Payee)
+		out = EditTxPlan{Plan: l.plan(ch), Tx: edited, Links: l}
 		return nil
 	})
 	return out, err
 }
 
 func (s *Service) editedTx(t domain.Transaction, req EditTxRequest, cats []domain.Category) (domain.Transaction, error) {
-	if req.Amount == nil && req.Date == nil && req.Description == nil && req.Notes == nil &&
-		req.Category == nil && req.Status == nil && req.Kind == nil {
+	if req.empty() {
 		return domain.Transaction{}, newError(domain.ErrMissingField, map[string]any{"field": "changes"}, "nothing to change")
 	}
 	if req.Amount != nil {
@@ -532,14 +595,21 @@ func (s *Service) ApplyEditTx(ctx context.Context, p EditTxPlan) (domain.Transac
 		if err != nil {
 			return err
 		}
-		if err := r.Transactions().Update(ctx, p.Tx); err != nil {
+		tx := p.Tx
+		if err := p.Links.createPayee(ctx, r, &tx); err != nil {
+			return err
+		}
+		if err := r.Transactions().Update(ctx, tx); err != nil {
 			return fmt.Errorf("update transaction %d: %w", p.Tx.ID, err)
+		}
+		if err := p.Links.storeTags(ctx, r, p.Tx.ID); err != nil {
+			return err
 		}
 		after, err := snapshot(ctx, r, p.Tx.ID)
 		if err != nil {
 			return err
 		}
-		return s.journal(ctx, r, OpKindTxEdit, undoPayload{Before: before, After: after})
+		return s.journal(ctx, r, OpKindTxEdit, undoPayload{Before: before, After: after, CreatedPayee: createdPayee(p.Links, tx)})
 	})
 	return p.Tx, err
 }
@@ -607,13 +677,21 @@ func (s *Service) PlanCategorizeTx(ctx context.Context, req CategorizeTxRequest)
 // ApplyCategorizeTx stores every transaction of the plan in a single transaction, taking one
 // backup first since it is a bulk change.
 func (s *Service) ApplyCategorizeTx(ctx context.Context, p CategorizeTxPlan) error {
+	ids := make([]domain.TransactionID, len(p.Txs))
+	for i, t := range p.Txs {
+		ids[i] = t.ID
+	}
 	return s.apply(ctx, p.Bulk, func(r Repos) error {
+		j, err := BeginJournal(ctx, r, ids...)
+		if err != nil {
+			return err
+		}
 		for _, t := range p.Txs {
 			if err := r.Transactions().Update(ctx, t); err != nil {
 				return fmt.Errorf("update transaction %d: %w", t.ID, err)
 			}
 		}
-		return nil
+		return j.Commit(ctx, r, s.clock, OpKindCategorize, UndoFieldCategory)
 	})
 }
 
@@ -750,4 +828,178 @@ func txChange(op Op, t domain.Transaction, account, category string) Change {
 		Op: op, Entity: EntityTransaction, Fields: f,
 		Summary: fmt.Sprintf("%s transaction %s %s %q on %s", op, t.Date, t.Amount, t.Description, account),
 	}
+}
+
+// linkRequest asks planLinks to resolve the payee and tag references of a transaction write.
+// Payee nil leaves the payee alone, empty clears it. ID is zero for a transaction not yet stored.
+type linkRequest struct {
+	ID     domain.TransactionID
+	Payee  *string
+	Add    []string
+	Remove []string
+}
+
+// txLinks is the resolved payee and tag state of a transaction write, including the payee and
+// tags it creates; Apply* writes them in the same store transaction as the row itself.
+type txLinks struct {
+	PayeeID  domain.PayeeID
+	NewPayee *domain.Payee
+	// TagIDs is the final tag set made of existing tags; NewTags are added once created.
+	TagIDs  []domain.TagID
+	NewTags []domain.Tag
+	// SetTags is false when the tag set is unchanged.
+	SetTags bool
+	// TagNames is the final tag set, for the plan summary.
+	TagNames []string
+	notices  []string
+	creates  []Change
+}
+
+func planLinks(ctx context.Context, r Repos, req linkRequest) (txLinks, error) {
+	var l txLinks
+	if req.Payee != nil && *req.Payee != "" {
+		payees, err := r.Payees().List(ctx)
+		if err != nil {
+			return l, fmt.Errorf("list payees: %w", err)
+		}
+		if i := slices.IndexFunc(payees, func(p domain.Payee) bool { return p.MatchesAlias(*req.Payee) }); i >= 0 {
+			l.PayeeID = payees[i].ID
+		} else {
+			p, err := domain.NewPayee(*req.Payee)
+			if err != nil {
+				return l, fmt.Errorf("payee: %w", err)
+			}
+			l.NewPayee = &p
+			l.notices = append(l.notices, fmt.Sprintf("created payee %s", p.Name))
+			l.creates = append(l.creates, Change{
+				Op: OpCreate, Entity: EntityPayee, Summary: fmt.Sprintf("add payee %q", p.Name),
+				Fields: map[string]any{"name": p.Name},
+			})
+		}
+	}
+	if len(req.Add) == 0 && len(req.Remove) == 0 {
+		return l, nil
+	}
+	return l, l.planTags(ctx, r, req)
+}
+
+func (l *txLinks) planTags(ctx context.Context, r Repos, req linkRequest) error {
+	tags, err := r.Tags().List(ctx)
+	if err != nil {
+		return fmt.Errorf("list tags: %w", err)
+	}
+	var cur []domain.Tag
+	if req.ID != 0 {
+		if cur, err = r.Tags().TagsOf(ctx, req.ID); err != nil {
+			return fmt.Errorf("tags of transaction %d: %w", req.ID, err)
+		}
+	}
+	add, created, err := resolveTagNames(tags, req.Add)
+	if err != nil {
+		return err
+	}
+	final := slices.Clone(cur)
+	for _, tg := range add {
+		if !slices.ContainsFunc(final, func(x domain.Tag) bool { return x.ID == tg.ID }) {
+			final = append(final, tg)
+		}
+	}
+	for _, ref := range req.Remove {
+		tg, err := pickTag(tags, ref)
+		if err != nil {
+			return err
+		}
+		final = slices.DeleteFunc(final, func(x domain.Tag) bool { return x.ID == tg.ID })
+	}
+	l.SetTags = true
+	for _, tg := range final {
+		l.TagIDs = append(l.TagIDs, tg.ID)
+		l.TagNames = append(l.TagNames, tg.Name)
+	}
+	for _, tg := range created {
+		l.NewTags = append(l.NewTags, tg)
+		l.TagNames = append(l.TagNames, tg.Name)
+		l.notices = append(l.notices, fmt.Sprintf("created tag %s", tg.Name))
+		l.creates = append(l.creates, Change{
+			Op: OpCreate, Entity: EntityTag, Summary: fmt.Sprintf("add tag %q", tg.Name),
+			Fields: map[string]any{"name": tg.Name},
+		})
+	}
+	return nil
+}
+
+// annotate adds the payee and tags to the transaction change ch; payee is the edit request's
+// payee (nil on add, where an unset payee has nothing to show).
+func (l txLinks) annotate(ch *Change, payee *string) {
+	if payee != nil && *payee != "" {
+		ch.Fields["payee"] = strings.TrimSpace(*payee)
+		if l.NewPayee != nil {
+			ch.Fields["payee"] = l.NewPayee.Name
+		}
+	}
+	if l.SetTags {
+		ch.Fields["tags"] = l.TagNames
+	}
+}
+
+// plan builds the Plan: the creations first, then the transaction change.
+func (l txLinks) plan(ch Change) Plan {
+	return Plan{Changes: append(slices.Clone(l.creates), ch), Notices: l.notices}
+}
+
+func (l txLinks) createPayee(ctx context.Context, r Repos, tx *domain.Transaction) error {
+	if l.NewPayee == nil {
+		return nil
+	}
+	p, err := r.Payees().Insert(ctx, *l.NewPayee)
+	if err != nil {
+		return fmt.Errorf("insert payee %q: %w", l.NewPayee.Name, err)
+	}
+	tx.PayeeID = p.ID
+	return nil
+}
+
+// createdPayee is the ID of the payee createPayee just inserted for tx, 0 when none.
+func createdPayee(l txLinks, tx domain.Transaction) int64 {
+	if l.NewPayee == nil {
+		return 0
+	}
+	return int64(tx.PayeeID)
+}
+
+func (l txLinks) storeTags(ctx context.Context, r Repos, id domain.TransactionID) error {
+	if !l.SetTags {
+		return nil
+	}
+	ids := slices.Clone(l.TagIDs)
+	for _, tg := range l.NewTags {
+		ins, err := r.Tags().Insert(ctx, tg)
+		if err != nil {
+			return fmt.Errorf("insert tag %q: %w", tg.Name, err)
+		}
+		ids = append(ids, ins.ID)
+	}
+	if err := r.Tags().SetTags(ctx, id, ids); err != nil {
+		return fmt.Errorf("set tags of transaction %d: %w", id, err)
+	}
+	return nil
+}
+
+// fillLinkNames sets the payee name and the tag names of v.
+func fillLinkNames(ctx context.Context, r Repos, v *TxView) error {
+	if id := v.Transaction.PayeeID; id != 0 {
+		p, err := r.Payees().Get(ctx, id)
+		if err != nil {
+			return fmt.Errorf("get payee %d: %w", id, err)
+		}
+		v.Payee = p.Name
+	}
+	tags, err := r.Tags().TagsOf(ctx, v.Transaction.ID)
+	if err != nil {
+		return fmt.Errorf("tags of transaction %d: %w", v.Transaction.ID, err)
+	}
+	for _, tg := range tags {
+		v.Tags = append(v.Tags, tg.Name)
+	}
+	return nil
 }

@@ -1,0 +1,18 @@
+# G08: a security_op can only be imported into an investment or wallet account.
+exec fui init --preset expense --currency EUR
+exec fui module enable investments
+exec fui account add Checking --kind checking --currency EUR
+
+exec fui import ops.fui.jsonl --map a=Checking --dry-run
+stdout 'cannot be held in a checking account'
+
+exec fui import ops.fui.jsonl --map a=Checking --yes
+exec fui position list
+! stdout 'ACME'
+
+-- ops.fui.jsonl --
+{"type":"meta","protocol":"fui/1","connector":"bank","version":"1","source":{"file":"ops.fui.jsonl"}}
+{"type":"account","ref":"a","name":"Checking","currency":"EUR","kind":"checking"}
+{"type":"transaction","account":"a","id":"t1","date":"2026-10-01","amount":-1000,"currency":"EUR","description":"buy","status":"booked","kind":"investment"}
+{"type":"security_op","account":"a","date":"2026-10-01","kind":"buy","quantity":10,"unit_price":100,"security":{"name":"ACME","ticker":"ACME","currency":"EUR","kind":"stock","quantity_scale":0}}
+{"type":"end","transactions":1,"errors":0}

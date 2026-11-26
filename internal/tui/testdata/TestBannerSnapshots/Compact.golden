@@ -2,13 +2,13 @@
 │1 Dashboard││Transactions││Accounts││Budget││Reports││Import││Settings│        
 ┘           └┴────────────┴┴────────┴┴──────┴┴───────┴┴──────┴┴────────┴────────
 
-loading…                                                                        
+                                    loading…                                    
                                                                                 
 Net worth                                                                       
 n/a (missing field "currency")                                                  
                                                                                 
+Alerts                                                                          
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│Alerts                                                                        │
 │all clear                                                                     │
 └──────────────────────────────────────────────────────────────────────────────┘
                                                                                 

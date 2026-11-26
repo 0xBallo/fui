@@ -55,6 +55,7 @@ type Budget struct {
 	ThresholdOver int64
 	CreatedAt     string
 	UpdatedAt     string
+	Period        string
 }
 
 type BudgetAmount struct {
@@ -97,6 +98,13 @@ type ConnectorAccountRef struct {
 	AccountID int64
 	CreatedAt string
 	UpdatedAt string
+}
+
+type ConnectorRefPending struct {
+	ID          int64
+	Connector   string
+	Ref         string
+	AccountName string
 }
 
 type DismissedInsight struct {
@@ -197,6 +205,11 @@ type PayeeAlias struct {
 	Alias   string
 }
 
+type ReconcileTick struct {
+	AccountID     int64
+	TransactionID int64
+}
+
 type Reconciliation struct {
 	ID                    int64
 	AccountID             int64
@@ -261,6 +274,7 @@ type Security struct {
 	Kind          string
 	Currency      string
 	QuantityScale int64
+	PriceScale    int64
 	CreatedAt     string
 	UpdatedAt     string
 }
@@ -280,6 +294,7 @@ type SecurityOp struct {
 	CashTxID          sql.NullInt64
 	CreatedAt         string
 	UpdatedAt         string
+	ImportBatchID     sql.NullInt64
 }
 
 type SecurityPrice struct {
@@ -300,28 +315,31 @@ type Tag struct {
 }
 
 type Transaction struct {
-	ID              int64
-	AccountID       int64
-	Date            string
-	OperationDate   sql.NullString
-	ValueDate       sql.NullString
-	AmountMinor     int64
-	Currency        string
-	PayeeID         sql.NullInt64
-	Description     string
-	CategoryID      sql.NullInt64
-	Notes           string
-	Status          string
-	Kind            string
-	ExternalID      sql.NullString
-	Fingerprint     string
-	ImportBatchID   sql.NullInt64
-	TransferGroupID sql.NullInt64
-	CreatedAt       string
-	UpdatedAt       string
-	SearchText      string
-	RecurrenceID    sql.NullInt64
-	DueDate         sql.NullString
+	ID                  int64
+	AccountID           int64
+	Date                string
+	OperationDate       sql.NullString
+	ValueDate           sql.NullString
+	AmountMinor         int64
+	Currency            string
+	PayeeID             sql.NullInt64
+	Description         string
+	CategoryID          sql.NullInt64
+	Notes               string
+	Status              string
+	Kind                string
+	ExternalID          sql.NullString
+	Fingerprint         string
+	ImportBatchID       sql.NullInt64
+	TransferGroupID     sql.NullInt64
+	CreatedAt           string
+	UpdatedAt           string
+	SearchText          string
+	RecurrenceID        sql.NullInt64
+	DueDate             sql.NullString
+	OriginalAmountMinor sql.NullInt64
+	OriginalCurrency    sql.NullString
+	Raw                 sql.NullString
 }
 
 type TransactionSplit struct {

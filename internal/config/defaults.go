@@ -8,18 +8,20 @@ import (
 
 // Default values for standard FUI configuration.
 const (
-	DefaultCurrency      = "EUR"
-	DefaultLocale        = LocaleIT
-	DefaultMonthStartDay = 1
-	DefaultWeekStart     = WeekStartMonday
-	DefaultTheme         = ThemeAuto
-	DefaultThemeLight    = ThemeLatte
-	DefaultThemeDark     = ThemeMocha
-	DefaultBackupKeep    = 10
-	DefaultTimeout       = 120 * time.Second
-	DefaultForecastDays  = 90
-	DefaultLogLevel      = "warn"
-	DefaultBudgetMode    = BudgetModeCap
+	DefaultCurrency        = "EUR"
+	DefaultLocale          = LocaleIT
+	DefaultMonthStartDay   = 1
+	DefaultWeekStart       = WeekStartMonday
+	DefaultTheme           = ThemeAuto
+	DefaultThemeLight      = ThemeLatte
+	DefaultThemeDark       = ThemeMocha
+	DefaultBackupKeep      = 10
+	DefaultTimeout         = 120 * time.Second
+	DefaultForecastHorizon = "6m"
+	// DefaultForecastDays is the pre-unit default horizon, kept for callers that still count days.
+	DefaultForecastDays = 90
+	DefaultLogLevel     = "warn"
+	DefaultBudgetMode   = BudgetModeCap
 )
 
 // Defaults returns a new Config instance initialized with code-defined defaults.
@@ -47,7 +49,7 @@ func Defaults() Config {
 			Timeout: Duration(DefaultTimeout),
 		},
 		Forecast: ForecastConfig{
-			Horizon: DefaultForecastDays,
+			Horizon: DefaultForecastHorizon,
 		},
 		Insights: defaultInsights(),
 		Import: ImportConfig{

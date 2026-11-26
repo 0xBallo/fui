@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -52,7 +51,8 @@ var simulateExamples = map[string]string{
 	simulating.KindPAC: "  fui simulate pac --monthly 200 --years 20 --rate 4,5\n" +
 		"  fui simulate pac --quarterly 600 --initial 1000 --years 10 --rate 5 --tax 26 --inflation 2",
 	simulating.KindCashFlow: "  fui simulate cashflow --months 12 --one-off 2027-03-01:-5000\n" +
-		"  fui simulate cashflow --stop-income 2027-01-01 --loan 2027-02-01:20000:4,5:5",
+		"  fui simulate cashflow --stop-income 2027-01-01 --loan 2027-02-01:20000:4,5:5\n" +
+		"  fui simulate cashflow --months 6 --account Checking --account Savings --json",
 }
 
 var simulateShorts = map[string]string{
@@ -105,7 +105,8 @@ func newSimulateSaveCmd(deps *Deps, svc *simulating.Service) *cobra.Command {
 		Use:   "save NAME KIND",
 		Short: "Save a simulation scenario (KIND: investment, pac or cashflow)",
 		Example: "  fui simulate save retirement pac --monthly 200 --years 20 --rate 4,5\n" +
-			"  fui simulate save sabbatical cashflow --stop-income 2027-01-01",
+			"  fui simulate save sabbatical cashflow --stop-income 2027-01-01\n" +
+			"  fui simulate save checking-only cashflow --account Checking --months 6",
 		Args: exactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rt, err := runtimeOf(cmd, deps)
@@ -249,6 +250,7 @@ func registerSimulateFlags(cmd *cobra.Command, kind string) {
 		f.StringArray("change", nil, "monthly change from a date `DATE:AMOUNT` (e.g. a raise); repeatable")
 		f.StringArray("stop-income", nil, "stop all income from `DATE`; repeatable")
 		f.StringArray("loan", nil, "new loan `DATE:AMOUNT:RATE:YEARS`; repeatable")
+		f.StringArray("account", nil, "restrict to this account (name or ID) and show a per-account series; repeatable")
 		return
 	}
 	if f.Lookup("years") == nil {
@@ -352,19 +354,22 @@ func (p simFlagParser) pac(in simulating.InvestmentParams) (simulating.PACParams
 func (p simFlagParser) cashFlow() (simulating.CashFlowParams, error) {
 	var out simulating.CashFlowParams
 	out.Months, _ = p.cmd.Flags().GetInt("months")
-	specs := []struct {
-		flag, kind string
-		fields     int
-	}{
-		{"one-off", "one_off", 2},
-		{"change", "recurring_change", 2},
-		{"stop-income", "stop_income", 1},
-		{"loan", "new_loan", 4},
+	accounts, _ := p.cmd.Flags().GetStringArray("account")
+	for _, a := range accounts {
+		if a = strings.TrimSpace(a); a != "" {
+			out.Accounts = append(out.Accounts, a)
+		}
+	}
+	specs := []struct{ flag, kind string }{
+		{"one-off", simulating.EventOneOff},
+		{"change", simulating.EventRecurringChange},
+		{"stop-income", simulating.EventStopIncome},
+		{"loan", simulating.EventNewLoan},
 	}
 	for _, spec := range specs {
 		values, _ := p.cmd.Flags().GetStringArray(spec.flag)
 		for _, v := range values {
-			ev, err := p.event(spec.flag, spec.kind, spec.fields, v)
+			ev, err := p.event(spec.flag, spec.kind, v)
 			if err != nil {
 				return out, err
 			}
@@ -374,29 +379,10 @@ func (p simFlagParser) cashFlow() (simulating.CashFlowParams, error) {
 	return out, nil
 }
 
-func (p simFlagParser) event(flag, kind string, fields int, value string) (simulating.CashFlowEvent, error) {
-	parts := strings.Split(value, ":")
-	if len(parts) != fields {
-		return simulating.CashFlowEvent{}, invalidFlag(flag, value)
-	}
-	ev := simulating.CashFlowEvent{Kind: kind, Date: strings.TrimSpace(parts[0])}
-	if fields > 1 {
-		m, err := domain.ParseAmount(parts[1], p.loc, p.cur)
-		if err != nil {
-			return ev, fmt.Errorf("--%s %q: %w", flag, value, err)
-		}
-		ev.AmountMinor = m.Minor()
-	}
-	if fields == 4 {
-		bp, err := parsePercentBP(parts[2])
-		if err != nil {
-			return ev, invalidFlag(flag, value)
-		}
-		years, err := strconv.Atoi(strings.TrimSpace(parts[3]))
-		if err != nil {
-			return ev, invalidFlag(flag, value)
-		}
-		ev.RateBP, ev.Years = bp, years
+func (p simFlagParser) event(flag, kind, value string) (simulating.CashFlowEvent, error) {
+	ev, err := simulating.ParseEvent(kind, value, p.loc, p.cur)
+	if err != nil {
+		return ev, fmt.Errorf("--%s: %w", flag, err)
 	}
 	return ev, nil
 }
@@ -463,34 +449,4 @@ func invalidFlag(flag, value string) error {
 
 // parsePercentBP converts a percentage such as "4,5", "4.5" or "-1.25%" to basis points. Both
 // decimal separators are accepted whatever the locale, since a percentage has no grouping.
-func parsePercentBP(in string) (int64, error) {
-	s := strings.TrimSuffix(strings.TrimSpace(in), "%")
-	s = strings.ReplaceAll(s, ",", ".")
-	neg := strings.HasPrefix(s, "-")
-	s = strings.TrimPrefix(strings.TrimPrefix(s, "-"), "+")
-	whole, frac, _ := strings.Cut(s, ".")
-	if whole == "" && frac == "" || len(frac) > 2 {
-		return 0, fmt.Errorf("invalid percentage %q", in)
-	}
-	frac += strings.Repeat("0", 2-len(frac))
-	w, err := strconv.ParseInt(orZero(whole), 10, 64)
-	if err != nil || w < 0 {
-		return 0, fmt.Errorf("invalid percentage %q", in)
-	}
-	f, err := strconv.ParseInt(frac, 10, 64)
-	if err != nil || f < 0 {
-		return 0, fmt.Errorf("invalid percentage %q", in)
-	}
-	bp := w*100 + f
-	if neg {
-		bp = -bp
-	}
-	return bp, nil
-}
-
-func orZero(s string) string {
-	if s == "" {
-		return "0"
-	}
-	return s
-}
+func parsePercentBP(in string) (int64, error) { return simulating.ParsePercentBP(in) }

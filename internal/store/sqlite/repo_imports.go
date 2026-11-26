@@ -2,6 +2,8 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -81,8 +83,29 @@ func (r importRepo) AccountRef(ctx context.Context, connector, ref string) (doma
 		Connector: connector,
 		Ref:       ref,
 	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return r.pendingAccountRef(ctx, connector, ref)
+	}
 	if err != nil {
 		return 0, mapNotFound(mapSQLError(err), "get connector account ref")
+	}
+	return domain.AccountID(id), nil
+}
+
+// pendingAccountRef resolves an association kept by a reset: when an account named as the kept
+// one exists it is bound for good (in a writable transaction) and the pending row is consumed.
+func (r importRepo) pendingAccountRef(ctx context.Context, connector, ref string) (domain.AccountID, error) {
+	id, err := r.repos.queries.GetPendingConnectorRefAccount(ctx, gen.GetPendingConnectorRefAccountParams{
+		Connector: connector,
+		Ref:       ref,
+	})
+	if err != nil {
+		return 0, mapNotFound(mapSQLError(err), "get connector account ref")
+	}
+	if r.repos.writable() == nil {
+		if err := r.SetAccountRef(ctx, connector, ref, domain.AccountID(id)); err != nil {
+			return 0, err
+		}
 	}
 	return domain.AccountID(id), nil
 }
@@ -100,6 +123,12 @@ func (r importRepo) SetAccountRef(ctx context.Context, connector, ref string, id
 		AccountID: int64(id),
 	}); err != nil {
 		return mapConstraint(err)
+	}
+	if err := r.repos.queries.DeletePendingConnectorRef(ctx, gen.DeletePendingConnectorRefParams{
+		Connector: connector,
+		Ref:       ref,
+	}); err != nil {
+		return mapSQLError(err)
 	}
 	return nil
 }

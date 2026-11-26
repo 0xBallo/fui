@@ -19,6 +19,13 @@ type UseCases interface {
 	ApplySet(ctx context.Context, p budgeting.SetPlan) (domain.Budget, error)
 	PlanMove(ctx context.Context, req budgeting.MoveRequest) (budgeting.MovePlan, error)
 	ApplyMove(ctx context.Context, p budgeting.MovePlan) error
-	PlanCopyPrevious(ctx context.Context, month string) (budgeting.CopyPlan, error)
+	PlanCopy(ctx context.Context, req budgeting.CopyRequest) (budgeting.CopyPlan, error)
 	ApplyCopyPrevious(ctx context.Context, p budgeting.CopyPlan) error
+	// Categories and Tags list the existing names the new/edit form suggests for targets.
+	Categories(ctx context.Context) ([]string, error)
+	Tags(ctx context.Context) ([]string, error)
+	// Today dates assignments and moves made while the month on screen contains it.
+	Today() (domain.Date, error)
+	// TargetNames resolves the category and tag ids of budget targets to their names.
+	TargetNames(ctx context.Context, targets []domain.BudgetTarget) (cats, tags []string, err error)
 }

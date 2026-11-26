@@ -179,9 +179,16 @@ func TestPropertyFUIExportRoundTrips(t *testing.T) {
 			if err != nil {
 				return err
 			}
+			// Operations are only valid on investment accounts: hold the position in a dedicated one.
+			broker, err := r.Accounts().Insert(context.Background(), domain.Account{
+				Name: "Broker", Kind: domain.AccountInvestment, Currency: eur(), OpeningBalance: money(0), OpenedOn: date("2026-01-01"),
+			})
+			if err != nil {
+				return err
+			}
 			_, err = r.Securities().InsertOp(context.Background(), domain.SecurityOp{
-				Account: accts[0].ID, Security: sec.ID, Date: date("2026-11-01"),
-				Kind: domain.OpBuy, Quantity: must(domain.NewQuantity(1000000, 6)), UnitPrice: money(100), Fees: money(1),
+				Account: broker.ID, Security: sec.ID, Date: date("2026-11-01"),
+				Kind: domain.OpBuy, Quantity: must(domain.NewQuantity(1000000, 6)), UnitPrice: price(100), Fees: money(1),
 			})
 			return err
 		})
@@ -301,4 +308,20 @@ func (e env) view(t tb) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+func TestPropertyRejectingAllTransfersChangesNothing(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		src, _ := drawStream(t, false)
+		plain, rejected := newEnv(nil), newEnv(nil)
+		must(plain.svc.ApplyImport(context.Background(), plain.plan(t, src, createAccounts)))
+		plan := rejected.plan(t, src, createAccounts)
+		for i := range plan.Transfers {
+			must(0, plan.SetAcceptTransfer(i, false))
+		}
+		must(rejected.svc.ApplyImportWith(context.Background(), plan, importing.ApplyOptions{}))
+		if a, b := snapshot(plain.store), snapshot(rejected.store); a != b {
+			t.Fatalf("rejecting every proposal differs from ApplyImport\n%s\n%s", a, b)
+		}
+	})
 }

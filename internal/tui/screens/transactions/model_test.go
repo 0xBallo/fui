@@ -2,10 +2,12 @@ package transactions_test
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/google/go-cmp/cmp"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -76,7 +78,9 @@ func TestTransactionsAddForm(t *testing.T) {
 	scr, _ = sendKey(scr, tea.KeyEnter) // date -> description
 	scr, _ = sendRunes(scr, "Train ticket")
 	scr, _ = sendKey(scr, tea.KeyEnter) // description -> category
-	scr, _ = sendKey(scr, tea.KeyEnter) // category -> notes (left empty)
+	scr, _ = sendKey(scr, tea.KeyEnter) // category -> payee (left empty)
+	scr, _ = sendKey(scr, tea.KeyEnter) // payee -> tags (left empty)
+	scr, _ = sendKey(scr, tea.KeyEnter) // tags -> notes (left empty)
 	scr, _ = sendKey(scr, tea.KeyEnter) // notes -> status (left empty)
 	scr, _ = sendKey(scr, tea.KeyEnter) // status -> kind (left empty)
 	scr, cmd := sendKey(scr, tea.KeyEnter)
@@ -114,7 +118,9 @@ func TestTransactionsEditForm(t *testing.T) {
 	scr, _ = sendKey(scr, tea.KeyEnter) // date -> description (unchanged)
 	scr, _ = sendRunes(scr, " shop")
 	scr, _ = sendKey(scr, tea.KeyEnter) // description -> category
-	scr, _ = sendKey(scr, tea.KeyEnter) // category -> notes
+	scr, _ = sendKey(scr, tea.KeyEnter) // category -> payee
+	scr, _ = sendKey(scr, tea.KeyEnter) // payee -> tags
+	scr, _ = sendKey(scr, tea.KeyEnter) // tags -> notes
 	scr, _ = sendKey(scr, tea.KeyEnter) // notes -> status (prefilled "booked", opens its dropdown)
 	scr, _ = sendKey(scr, tea.KeyEnter) // accept the "booked" suggestion
 	scr, _ = sendKey(scr, tea.KeyEnter) // status -> kind (prefilled "payment", opens its dropdown)
@@ -146,6 +152,10 @@ func TestTransactionsDeleteWithConfirm(t *testing.T) {
 	scr, _ = sendRunes(scr, "d")
 	if !strings.Contains(scr.View(), "Delete") {
 		t.Fatalf("expected a confirm dialog, got:\n%s", scr.View())
+	}
+
+	if !scr.(*transactions.Model).InputActive() {
+		t.Fatalf("expected the confirm dialog to own the keys, so the global undo key stays inactive")
 	}
 
 	scr, _ = sendRunes(scr, "n")
@@ -560,4 +570,135 @@ func TestTransactionsTagEditing(t *testing.T) {
 	if len(page.Items) != 0 {
 		t.Fatalf("expected no trip-tagged transactions after removal, got %+v", page.Items)
 	}
+}
+
+func seedPayeeAndTags(t *testing.T, fx screentest.Fixture, payee string, tags ...string) {
+	t.Helper()
+	ctx := context.Background()
+	pp, err := fx.Service.PlanAddPayee(ctx, app.AddPayeeRequest{Name: payee})
+	if err != nil {
+		t.Fatalf("PlanAddPayee: %v", err)
+	}
+	if _, err := fx.Service.ApplyAddPayee(ctx, pp); err != nil {
+		t.Fatalf("ApplyAddPayee: %v", err)
+	}
+	for _, name := range tags {
+		p, err := fx.Service.PlanAddTag(ctx, app.AddTagRequest{Name: name})
+		if err != nil {
+			t.Fatalf("PlanAddTag: %v", err)
+		}
+		if _, err := fx.Service.ApplyAddTag(ctx, p); err != nil {
+			t.Fatalf("ApplyAddTag: %v", err)
+		}
+	}
+}
+
+// runCollect is run that also returns the status-bar texts emitted along the way.
+func runCollect(scr screens.Screen, cmd tea.Cmd) (screens.Screen, []string) {
+	var notices []string
+	for cmd != nil {
+		msg := cmd()
+		if s, ok := msg.(screens.StatusMsg); ok {
+			notices = append(notices, s.Text)
+		}
+		scr, cmd = scr.Update(msg)
+	}
+	return scr, notices
+}
+
+func TestTransactionsAddFormPayeeAndTags(t *testing.T) {
+	fx, scr := newFixture(t)
+	seedPayeeAndTags(t, fx, "Esselunga", "trip", "work")
+	scr = run(t, scr, scr.Init())
+
+	scr, _ = sendRunes(scr, "a")
+	scr, _ = sendRunes(scr, "Checking")
+	scr, _ = sendKey(scr, tea.KeyEnter) // accept account suggestion
+	scr, _ = sendKey(scr, tea.KeyEnter)
+	scr, _ = sendRunes(scr, "-5")
+	scr, _ = sendKey(scr, tea.KeyEnter)
+	scr, _ = sendRunes(scr, "2026-06-10")
+	scr, _ = sendKey(scr, tea.KeyEnter)
+	scr, _ = sendRunes(scr, "Shopping")
+	scr, _ = sendKey(scr, tea.KeyEnter) // description -> category
+	scr, _ = sendKey(scr, tea.KeyEnter) // category -> payee
+	scr, _ = sendRunes(scr, "ess")
+	scr, _ = sendKey(scr, tea.KeyEnter) // accept payee suggestion
+	scr, _ = sendKey(scr, tea.KeyEnter) // payee -> tags
+	scr, _ = sendRunes(scr, "tr")
+	scr, _ = sendKey(scr, tea.KeyEnter) // accept "trip"
+	scr, _ = sendRunes(scr, ", wo")
+	scr, _ = sendKey(scr, tea.KeyEnter) // accept "work" as the second token
+	scr, _ = sendRunes(scr, ", fresh")
+	for range 3 { // tags -> notes -> status -> kind
+		scr, _ = sendKey(scr, tea.KeyEnter)
+	}
+	scr, cmd := sendKey(scr, tea.KeyEnter) // submit
+	_, notices := runCollect(scr, cmd)
+
+	page, err := fx.Service.ListTx(context.Background(), app.ListTxRequest{})
+	if err != nil || len(page.Items) != 1 {
+		t.Fatalf("ListTx: %v %+v", err, page.Items)
+	}
+	v, err := fx.Service.ShowTx(context.Background(), page.Items[0].Transaction.ID)
+	if err != nil {
+		t.Fatalf("ShowTx: %v", err)
+	}
+	if v.Payee != "Esselunga" {
+		t.Errorf("payee = %q, want Esselunga", v.Payee)
+	}
+	if diff := cmp.Diff([]string{"fresh", "trip", "work"}, sortedCopy(v.Tags)); diff != "" {
+		t.Errorf("tags mismatch (-want +got):\n%s", diff)
+	}
+	if len(notices) != 1 || !strings.Contains(notices[0], "fresh") {
+		t.Errorf("notices = %q, want one mentioning the created tag", notices)
+	}
+}
+
+func TestTransactionsEditFormTagDiff(t *testing.T) {
+	fx, scr := newFixture(t)
+	seedPayeeAndTags(t, fx, "Esselunga", "trip", "work", "fun")
+	tx := fx.Tx(t, app.AddTxRequest{
+		Account: "Checking", Amount: "-12.50", Description: "Coffee", Date: "2026-06-01",
+		Payee: "Esselunga", Tags: []string{"trip", "work"},
+	})
+	scr = run(t, scr, scr.Init())
+
+	scr, cmd := sendKey(scr, tea.KeyEnter)
+	scr = run(t, scr, cmd)
+	view := scr.View()
+	if !strings.Contains(view, "Esselunga") || !strings.Contains(view, "trip, work") {
+		t.Fatalf("expected payee and tags prefilled, got:\n%s", view)
+	}
+
+	for range 6 { // amount, date, description, category, payee (accept prefilled), payee -> tags
+		scr, _ = sendKey(scr, tea.KeyEnter)
+	}
+	// Focus is on tags; replace its content: "trip, fun" drops work and adds fun.
+	for range 20 {
+		scr, _ = sendKey(scr, tea.KeyBackspace)
+	}
+	scr, _ = sendRunes(scr, "trip, fun")
+	for range 6 { // tags (accept the matching suggestion) -> notes -> status (accept) -> kind (accept) // tags -> notes -> status (accept) -> kind (accept)
+		scr, _ = sendKey(scr, tea.KeyEnter)
+	}
+	scr, cmd = sendKey(scr, tea.KeyEnter) // submit
+	run(t, scr, cmd)
+
+	v, err := fx.Service.ShowTx(context.Background(), tx.ID)
+	if err != nil {
+		t.Fatalf("ShowTx: %v", err)
+	}
+	if v.Payee != "Esselunga" {
+		t.Errorf("payee = %q, want unchanged Esselunga", v.Payee)
+	}
+	if diff := cmp.Diff([]string{"fun", "trip"}, sortedCopy(v.Tags)); diff != "" {
+		t.Errorf("tags mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func sortedCopy(s []string) []string {
+	out := slices.Clone(s)
+	slices.Sort(out)
+	return out
 }

@@ -50,11 +50,11 @@ func seedWealth(t *testing.T, f *fx) {
 		}
 		qty := must(domain.NewQuantity(1000, 2))
 		if _, err := r.Securities().InsertOp(ctx, domain.SecurityOp{
-			Date: date("2026-01-10"), Account: f.main.ID, Security: sec.ID, Kind: domain.OpBuy, Quantity: qty, UnitPrice: money(4_000), Fees: money(0),
+			Date: date("2026-01-10"), Account: f.main.ID, Security: sec.ID, Kind: domain.OpBuy, Quantity: qty, UnitPrice: price(4_000), Fees: money(0),
 		}); err != nil {
 			return err
 		}
-		return r.Securities().UpsertPrice(ctx, domain.SecurityPrice{Security: sec.ID, Date: date("2026-02-01"), Price: money(5_000)})
+		return r.Securities().UpsertPrice(ctx, domain.SecurityPrice{Security: sec.ID, Date: date("2026-02-01"), Price: price(5_000)})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -196,4 +196,103 @@ func balanceAt(ctx context.Context, r app.Repos, acct domain.Account, at domain.
 		return domain.Money{}, err
 	}
 	return acct.OpeningBalance.Add(money(sum))
+}
+
+func TestNetWorthReportDropsAccountsOfDisabledModules(t *testing.T) {
+	tests := []struct {
+		name string
+		mods []module.ID
+		want int64
+	}{
+		{"investments off", nil, 160_000},
+		{"investments on", []module.ID{module.Investments}, 160_000 + 70_000},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newFx(t, tt.mods...)
+			err := f.store.WithTx(context.Background(), func(r app.Repos) error {
+				_, err := r.Accounts().Insert(context.Background(), domain.Account{
+					Name: "Broker", Kind: domain.AccountInvestment, Currency: eur(), OpeningBalance: money(70_000), OpenedOn: date("2025-12-01"),
+				})
+				return err
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			p, err := f.svc.NetWorthAt(context.Background(), date("2026-03-01"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if p.Total.Minor != tt.want || p.Liquidity.Minor != tt.want {
+				t.Fatalf("total/liquidity = %d/%d, want %d", p.Total.Minor, p.Liquidity.Minor, tt.want)
+			}
+		})
+	}
+}
+
+func TestNetWorthReportDropsWalletWithoutCrypto(t *testing.T) {
+	tests := []struct {
+		name string
+		mods []module.ID
+		want int64
+	}{
+		{"crypto off", nil, 160_000},
+		{"crypto on", []module.ID{module.Investments, module.Crypto}, 160_000 + 30_000},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newFx(t, tt.mods...)
+			err := f.store.WithTx(context.Background(), func(r app.Repos) error {
+				_, err := r.Accounts().Insert(context.Background(), domain.Account{
+					Name: "Wallet", Kind: domain.AccountWallet, Currency: eur(), OpeningBalance: money(30_000), OpenedOn: date("2025-12-01"),
+				})
+				return err
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			p, err := f.svc.NetWorthAt(context.Background(), date("2026-03-01"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if p.Total.Minor != tt.want {
+				t.Fatalf("total = %d, want %d", p.Total.Minor, tt.want)
+			}
+		})
+	}
+}
+
+func TestNetWorthReportGranularity(t *testing.T) {
+	f := newFx(t)
+	period := must(domain.NewPeriod(date("2026-03-02"), date("2026-03-31")))
+	tests := []struct {
+		gran domain.Granularity
+		want int
+		last string
+	}{
+		{"", 1, "2026-03-31"},
+		{domain.GranDay, 30, "2026-03-31"},
+		{domain.GranWeek, 5, "2026-03-31"},
+		{domain.GranMonth, 1, "2026-03-31"},
+		{domain.GranYear, 1, "2026-03-31"},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.gran), func(t *testing.T) {
+			got, err := f.svc.NetWorthReport(context.Background(), reporting.ReportRequest{Period: period, Granularity: tt.gran})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got.Points) != tt.want || got.Points[len(got.Points)-1].Date != tt.last {
+				t.Fatalf("points = %d (last %s), want %d (last %s)", len(got.Points), got.Points[len(got.Points)-1].Date, tt.want, tt.last)
+			}
+		})
+	}
+}
+
+func TestNetWorthResultSeries(t *testing.T) {
+	r := reporting.NetWorthResult{Period: "p", Points: []reporting.NetWorthPoint{{Date: "2026-03-31", Total: reporting.Amount{Minor: 5, Currency: "EUR"}}}}
+	got := r.Series()
+	if got.Period != "p" || len(got.Points) != 1 || got.Points[0].Amount.Minor != 5 || got.Points[0].Date != "2026-03-31" {
+		t.Fatalf("series = %+v", got)
+	}
 }

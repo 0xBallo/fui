@@ -732,3 +732,30 @@ func TestValidateStreamAdditionalBranches(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateScheduleLoanMetadata(t *testing.T) {
+	tests := []struct {
+		name    string
+		mutate  func(*ScheduleRecord)
+		wantErr string
+	}{
+		{name: "metadata absent", mutate: func(*ScheduleRecord) {}},
+		{name: "full metadata", mutate: func(s *ScheduleRecord) {
+			s.DebitAccount, s.Kind, s.Principal, s.DisbursedOn, s.TermMonths = "acc-1", LoanKindLoan, 5000, "2025-01-31", 24
+		}},
+		{name: "bad kind", mutate: func(s *ScheduleRecord) { s.Kind = "lease" }, wantErr: "invalid loan kind"},
+		{name: "negative principal", mutate: func(s *ScheduleRecord) { s.Principal = -1 }, wantErr: "principal"},
+		{name: "bad disbursed date", mutate: func(s *ScheduleRecord) { s.DisbursedOn = "31/01/2025" }, wantErr: "disbursed_on"},
+		{name: "negative term", mutate: func(s *ScheduleRecord) { s.TermMonths = -3 }, wantErr: "term_months"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			sched := ScheduleRecord{Account: "loan-1", ValidFrom: "2026-01-01", Rate: 100, RateType: RateTypeFixed}
+			tc.mutate(&sched)
+			msg := validateSchedule(sched, AccountRecord{Kind: AccountKindLoan})
+			if tc.wantErr == "" && msg != "" || !strings.Contains(msg, tc.wantErr) {
+				t.Fatalf("message = %q, want substring %q", msg, tc.wantErr)
+			}
+		})
+	}
+}

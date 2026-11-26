@@ -13,6 +13,14 @@ type KeyMap struct {
 	Reconcile key.Binding
 	Price     key.Binding
 	Switch    key.Binding
+	Tick      key.Binding
+
+	// Investing keys of the account detail; OpEdit and OpDelete apply in the operations list.
+	Security key.Binding
+	Op       key.Binding
+	Ops      key.Binding
+	OpEdit   key.Binding
+	OpDelete key.Binding
 }
 
 // DefaultKeyMap returns the canonical key bindings for accounts.
@@ -27,10 +35,25 @@ func DefaultKeyMap() KeyMap {
 		Reconcile: key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reconcile")),
 		Price:     key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "set price")),
 		Switch:    key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch section")),
+		Tick:      key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "tick (reconcile)")),
+		Security:  key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "add security")),
+		Op:        key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "add operation")),
+		Ops:       key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "operations")),
+		OpEdit:    key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit operation")),
+		OpDelete:  key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete operation")),
 	}
 }
 
 // Bindings returns all keys as a slice for help generation and collision checks.
 func (k KeyMap) Bindings() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Open, k.Back, k.Add, k.Archive, k.Reconcile, k.Price, k.Switch}
+	return append(k.base(), k.investing()...)
+}
+
+func (k KeyMap) base() []key.Binding {
+	return []key.Binding{k.Up, k.Down, k.Open, k.Back, k.Add, k.Archive, k.Reconcile, k.Switch, k.Tick}
+}
+
+// investing lists the bindings that need the investing use cases (price entry included).
+func (k KeyMap) investing() []key.Binding {
+	return []key.Binding{k.Price, k.Security, k.Op, k.Ops, k.OpEdit, k.OpDelete}
 }

@@ -52,31 +52,59 @@ func reportAccountFlag(cmd *cobra.Command) {
 }
 
 func reportKindPeriodFlag(cmd *cobra.Command) {
-	cmd.Flags().String("period", "", "period as YYYY-MM, YYYY-MM-DD..YYYY-MM-DD, or empty for current month")
+	cmd.Flags().String("period", "", "YYYY-MM, YYYY-Qn, YYYY, FROM..TO, a relative period (last-month, this-year, ...) or empty for the current month")
 }
 
 func reportChartFlag(cmd *cobra.Command) {
 	cmd.Flags().Bool("chart", false, "render a text bar chart in table output")
 }
 
-func reportPeriodValue(cmd *cobra.Command, monthStartDay int) (domain.Period, error) {
+// reportGroupFlags registers --group-by and --granularity, shared by ad hoc and saved reports.
+func reportGroupFlags(cmd *cobra.Command) {
+	cmd.Flags().String("group-by", "", "group spending/cash-flow by category, tag, payee, account, week, month or year")
+	cmd.Flags().String("granularity", "", "series bucket: day, week, month or year")
+}
+
+// reportGrouping reads --group-by and --granularity. For cash-flow a granularity doubles as the
+// period grouping, as the report is grouped by period by default.
+func reportGrouping(cmd *cobra.Command, kind string) (domain.ReportGroup, domain.Granularity, error) {
+	groupText, _ := cmd.Flags().GetString("group-by")
+	granText, _ := cmd.Flags().GetString("granularity")
+	var group domain.ReportGroup
+	var gran domain.Granularity
+	var err error
+	if groupText != "" {
+		if group, err = domain.ParseReportGroup(groupText); err != nil {
+			return "", "", err
+		}
+	}
+	if granText != "" {
+		if gran, err = domain.ParseGranularity(granText); err != nil {
+			return "", "", err
+		}
+	}
+	if kind == "cash-flow" && group == "" && gran != "" {
+		if group, err = domain.ParseReportGroup(string(gran)); err != nil {
+			return "", "", err
+		}
+	}
+	return group, gran, nil
+}
+
+// reportPeriodValue resolves --period: FROM..TO, or any period reporting.ResolvePeriodSpec
+// understands; empty means the report's own default (the current accounting month).
+func reportPeriodValue(cmd *cobra.Command, deps *Deps) (domain.Period, error) {
 	in, _ := cmd.Flags().GetString("period")
+	return resolvePeriodText(deps, in)
+}
+
+// resolvePeriodText resolves one period input as of today.
+func resolvePeriodText(deps *Deps, in string) (domain.Period, error) {
 	in = strings.TrimSpace(in)
 	if in == "" {
 		return domain.Period{}, nil
 	}
-	if reporting.ValidRelativePeriod(in) {
-		return domain.Period{}, &domain.Error{
-			Code:    domain.CodeInvalidValue,
-			Message: fmt.Sprintf("relative period %q is supported only by saved reports", in),
-			Details: map[string]any{"field": "period", "value": in},
-		}
-	}
-	if strings.Contains(in, "..") {
-		fromText, toText, ok := strings.Cut(in, "..")
-		if !ok {
-			return domain.Period{}, invalidPeriod(in)
-		}
+	if fromText, toText, ok := strings.Cut(in, ".."); ok {
 		fromDate, err := domain.ParseDate(strings.TrimSpace(fromText))
 		if err != nil {
 			return domain.Period{}, invalidPeriod(in)
@@ -87,11 +115,11 @@ func reportPeriodValue(cmd *cobra.Command, monthStartDay int) (domain.Period, er
 		}
 		return domain.NewPeriod(fromDate, toDate)
 	}
-	day, err := domain.ParseDate(in + "-01")
+	today, err := deps.Service.Today()
 	if err != nil {
-		return domain.Period{}, invalidPeriod(in)
+		return domain.Period{}, err
 	}
-	return domain.MonthPeriod(day, monthStartDay)
+	return reporting.ResolvePeriodSpec(in, today, deps.Config.MonthStartDay)
 }
 
 func invalidPeriod(value string) error {

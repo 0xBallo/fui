@@ -14,7 +14,8 @@ import (
 const barWidth = 10
 
 // tier maps a percentage to its visual tier icon and style: green below 70, yellow 70-89, orange
-// 90-99, red from 100. The icon keeps the state readable without color; OVER stays as text.
+// 90-99, red from 100. The tiers are fixed and visual only (the budget's own thresholds drive
+// alerts and status elsewhere). The icon keeps the state readable without color; OVER stays as text.
 func tier(th theme.Theme, percent int) (string, lipgloss.Style) {
 	switch {
 	case percent >= 100:

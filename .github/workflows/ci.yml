@@ -58,6 +58,10 @@ jobs:
         os: [ubuntu-latest, macos-latest]
         go: ["1.26", "1.27"]
         tz: ["UTC", "Pacific/Kiritimati"]
+        # macOS runners are scarce: one Go version there is enough to catch OS-specific issues.
+        exclude:
+          - os: macos-latest
+            go: "1.26"
     env:
       TZ: ${{ matrix.tz }}
     steps:

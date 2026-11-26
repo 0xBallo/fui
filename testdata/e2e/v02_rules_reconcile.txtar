@@ -11,6 +11,13 @@ exec fui rule apply --account Checking --dry-run
 exec fui rule apply --account Checking --yes
 exec fui tx list --category Groceries --json
 stdout 'Supermarket'
+exec fui rule add hinted --hint-contains groc --hint-equals groceries --category Groceries --priority 20
+exec fui rule list
+stdout 'hint-contains=groc'
+stdout 'hint-equals=groceries'
+exec fui rule list --json
+stdout '"hint_contains":"groc"'
+exec fui rule rm hinted --yes
 exec fui rule edit groceries --priority 5 --disable
 exec fui rule rm groceries --yes
 

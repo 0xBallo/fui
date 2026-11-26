@@ -327,22 +327,7 @@ func WriteSavedReportResult(
 	if f == JSON {
 		return WriteJSON(w, out)
 	}
-	switch data := out.Data.(type) {
-	case reporting.SeriesResult:
-		return WriteSeriesReport(w, Table, loc, color, data, chart)
-	case reporting.DebtResult:
-		return WriteDebtReport(w, Table, loc, color, data, chart)
-	case reporting.InterestResult:
-		return WriteInterestReport(w, Table, loc, color, data, chart)
-	case reporting.PayeesResult:
-		return WritePayeesReport(w, Table, loc, color, data, chart)
-	case reporting.BudgetResult:
-		return WriteBudgetReport(w, Table, loc, color, data, chart)
-	case reporting.ForecastResult:
-		return WriteForecast(w, Table, loc, color, data, chart)
-	default:
-		return fmt.Errorf("render saved report %q (%s): unsupported type %T", out.Name, out.Kind, out.Data)
-	}
+	return writeResultData(w, f, loc, color, chart, out.Data)
 }
 
 func barsFromPoints(points []reporting.Point) []string {

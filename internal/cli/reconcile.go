@@ -3,11 +3,14 @@ package cli
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/cli/render"
+	"github.com/0xballo/fui/internal/domain"
+	"github.com/0xballo/fui/internal/module"
 )
 
 // newReconcileCmd compares one account with a statement balance at a date and closes only when
@@ -24,7 +27,22 @@ func newReconcileCmd(deps *Deps) *cobra.Command {
 	}
 	cmd.Flags().String("balance", "", "statement balance at --date")
 	cmd.Flags().String("date", "", "statement date (default: today)")
+	cmd.Flags().StringSlice("tick", nil, "mark transaction ids as matching the statement (repeatable, comma list)")
+	cmd.Flags().StringSlice("untick", nil, "remove transaction ids from the ticked set (repeatable, comma list)")
 	return cmd
+}
+
+func parseTickIDs(cmd *cobra.Command, name string) ([]domain.TransactionID, error) {
+	raw, _ := cmd.Flags().GetStringSlice(name)
+	ids := make([]domain.TransactionID, 0, len(raw))
+	for _, s := range raw {
+		id, err := parseTxID(strings.TrimSpace(s))
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 func runReconcile(cmd *cobra.Command, deps *Deps, account string) error {
@@ -36,15 +54,16 @@ func runReconcile(cmd *cobra.Command, deps *Deps, account string) error {
 	if balance, err = promptString(deps, rt, "balance", "Statement balance", balance); err != nil {
 		return err
 	}
-	date, _ := cmd.Flags().GetString("date")
 	enabled, err := enabledModulesFromDeps(deps)
 	if err != nil {
 		return err
 	}
+	req, err := reconcileRequest(cmd, account, balance)
+	if err != nil {
+		return err
+	}
 	ctx := cmd.Context()
-	plan, err := deps.Service.PlanReconcile(ctx, enabled, app.ReconcileRequest{
-		Account: account, StatementBalance: balance, Date: date,
-	})
+	plan, err := deps.Service.PlanReconcile(ctx, enabled, req)
 	if err != nil {
 		return err
 	}
@@ -55,7 +74,35 @@ func runReconcile(cmd *cobra.Command, deps *Deps, account string) error {
 	if err := render.WriteReconcile(deps.Stdout, rt.format, deps.Locale(), rt.color, plan, views); err != nil {
 		return err
 	}
-	if rt.dryRun || !plan.Difference.IsZero() {
+	if rt.dryRun {
+		return nil
+	}
+	return applyReconcile(ctx, deps, rt, enabled, plan)
+}
+
+func reconcileRequest(cmd *cobra.Command, account, balance string) (app.ReconcileRequest, error) {
+	date, _ := cmd.Flags().GetString("date")
+	tick, err := parseTickIDs(cmd, "tick")
+	if err != nil {
+		return app.ReconcileRequest{}, err
+	}
+	untick, err := parseTickIDs(cmd, "untick")
+	if err != nil {
+		return app.ReconcileRequest{}, err
+	}
+	return app.ReconcileRequest{Account: account, StatementBalance: balance, Date: date, Tick: tick, Untick: untick}, nil
+}
+
+// applyReconcile stores ticks without confirmation (not a close) and closes only on a zero
+// difference with --yes.
+func applyReconcile(ctx context.Context, deps *Deps, rt runtimeFlags, enabled module.Set, plan app.ReconcilePlan) error {
+	if plan.Ticking && !plan.Closing {
+		if err := deps.Service.ApplyReconcile(ctx, enabled, plan); err != nil {
+			return err
+		}
+		return writeReconcileNote(deps, rt, "Ticks saved.")
+	}
+	if !plan.Difference.IsZero() {
 		return nil
 	}
 	if !rt.yes {
@@ -64,10 +111,15 @@ func runReconcile(cmd *cobra.Command, deps *Deps, account string) error {
 	if err := deps.Service.ApplyReconcile(ctx, enabled, plan); err != nil {
 		return err
 	}
-	if rt.format == render.Table {
-		if _, err := fmt.Fprintln(deps.Stdout, "Reconciliation closed."); err != nil {
-			return fmt.Errorf("write reconciliation confirmation: %w", err)
-		}
+	return writeReconcileNote(deps, rt, "Reconciliation closed.")
+}
+
+func writeReconcileNote(deps *Deps, rt runtimeFlags, note string) error {
+	if rt.format != render.Table {
+		return nil
+	}
+	if _, err := fmt.Fprintln(deps.Stdout, note); err != nil {
+		return fmt.Errorf("write reconciliation confirmation: %w", err)
 	}
 	return nil
 }

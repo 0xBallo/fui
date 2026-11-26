@@ -12,20 +12,67 @@ import (
 
 func newReportSaveCmd(deps *Deps) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "save NAME KIND",
-		Short:   "Save an analytics report definition",
-		Args:    exactArgs(2),
-		Example: "  fui report save monthly-networth networth --period last-3-months",
+		Use:   "save NAME KIND",
+		Short: "Save an analytics report definition",
+		Args:  exactArgs(2),
+		Example: `  fui report save monthly-networth networth --period last-3-months
+  fui report save food-by-payee spending --period last-month --category Food --group-by payee
+  fui report save q4-vs-sep compare --a 2026-09 --b 2026-Q4 --expense
+  fui report save outlook forecast --horizon 12m --granularity week`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runReportSave(cmd, deps, args[0], args[1])
 		},
 	}
-	cmd.Flags().String("period", "", "relative period for saved report, e.g. this-month or last-3-months")
-	cmd.Flags().String("account", "", "account filter for balance/top-payees/spending/cash-flow reports")
+	cmd.Flags().String("period", "", "period to save: relative (this-month, last-3-months), YYYY-MM, YYYY-Qn or YYYY")
+	reportFilterFlags(cmd)
+	reportGroupFlags(cmd)
+	reportComparePeriodFlags(cmd)
 	cmd.Flags().String("loan", "", "loan filter for remaining-debt/interest-paid reports")
 	cmd.Flags().Int("limit", reporting.DefaultTopPayees, "row limit for top-payees")
 	cmd.Flags().String("min-balance", "", "forecast minimum balance for forecast reports")
+	cmd.Flags().String("horizon", "", "forecast horizon: Nd, Nw, Nm or a number of days")
 	return cmd
+}
+
+// savedSpecFromFlags builds the definition to save from the flags of `report save`. A lone
+// --account keeps the original (v1) field so such reports stay v1; any other filter goes into the
+// v2 filter.
+func savedSpecFromFlags(cmd *cobra.Command, kind string) (reporting.SavedSpec, error) {
+	var spec reporting.SavedSpec
+	spec.Period, _ = cmd.Flags().GetString("period")
+	spec.Loan, _ = cmd.Flags().GetString("loan")
+	spec.Limit, _ = cmd.Flags().GetInt("limit")
+	spec.MinBalance, _ = cmd.Flags().GetString("min-balance")
+	spec.Horizon, _ = cmd.Flags().GetString("horizon")
+	spec.GroupBy, _ = cmd.Flags().GetString("group-by")
+	spec.Granularity, _ = cmd.Flags().GetString("granularity")
+	if reportFilterChanged(cmd) {
+		filter, err := readReportFilter(cmd)
+		if err != nil {
+			return reporting.SavedSpec{}, err
+		}
+		if len(filter.Accounts) == 1 && onlyAccountFilterChanged(cmd) {
+			spec.Account = filter.Accounts[0]
+		} else {
+			spec.Filter = &filter
+		}
+	}
+	a, _ := cmd.Flags().GetString("a")
+	b, _ := cmd.Flags().GetString("b")
+	if a != "" || b != "" || kind == reporting.KindCompare {
+		spec.Compare = &reporting.CompareSpec{A: a, B: b}
+	}
+	return spec, nil
+}
+
+// onlyAccountFilterChanged reports whether --account is the only report filter flag given.
+func onlyAccountFilterChanged(cmd *cobra.Command) bool {
+	for _, name := range reportFilterFlagNames {
+		if f := cmd.Flags().Lookup(name); f != nil && f.Changed && name != "account" {
+			return false
+		}
+	}
+	return true
 }
 
 func runReportSave(cmd *cobra.Command, deps *Deps, name, kind string) error {
@@ -37,14 +84,12 @@ func runReportSave(cmd *cobra.Command, deps *Deps, name, kind string) error {
 	if err != nil {
 		return err
 	}
-	period, _ := cmd.Flags().GetString("period")
-	account, _ := cmd.Flags().GetString("account")
-	loan, _ := cmd.Flags().GetString("loan")
-	limit, _ := cmd.Flags().GetInt("limit")
-	minBalance, _ := cmd.Flags().GetString("min-balance")
-	plan, err := analytics.PlanSave(cmd.Context(), name, normalizeSavedKind(kind), reporting.SavedSpec{
-		Period: period, Account: account, Loan: loan, Limit: limit, MinBalance: minBalance,
-	})
+	kind = normalizeSavedKind(kind)
+	spec, err := savedSpecFromFlags(cmd, kind)
+	if err != nil {
+		return err
+	}
+	plan, err := analytics.PlanSave(cmd.Context(), name, kind, spec)
 	if err != nil {
 		return err
 	}
@@ -83,16 +128,21 @@ func newReportListCmd(deps *Deps) *cobra.Command {
 
 func newReportRunSavedCmd(deps *Deps) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "run NAME",
-		Short:   "Run a saved report (or the categories/cashflow/compare built-in reports)",
-		Args:    exactArgs(1),
-		Example: "  fui report run monthly-networth",
+		Use:   "run NAME",
+		Short: "Run a saved report (or the categories/cashflow/compare built-ins)",
+		Args:  exactArgs(1),
+		Example: `  fui report run monthly-networth
+  fui report run food-by-payee --json
+  fui report run compare --a 2026-09 --b 2026-Q4 --category Food`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if args[0] == "categories" || args[0] == "cashflow" {
 				return runLegacyReport(cmd, deps, args[0])
 			}
 			if args[0] == "compare" {
 				return RunReportCompare(cmd, deps)
+			}
+			if reportFilterChanged(cmd) {
+				return newUsageError(fmt.Errorf("filter flags do not apply to a saved report: save it with them instead"))
 			}
 			rt, err := runtimeOf(cmd, deps)
 			if err != nil {
@@ -112,7 +162,6 @@ func newReportRunSavedCmd(deps *Deps) *cobra.Command {
 	}
 	reportChartFlag(cmd)
 	reportPeriodFlags(cmd)
-	reportAccountFlag(cmd)
 	ReportCompareFlags(cmd)
 	return cmd
 }
@@ -223,5 +272,5 @@ func normalizeSavedKind(kind string) string {
 }
 
 func reportKindLabels() []string {
-	return append(append([]string{}, analyticsReportKinds...), "forecast", "spending", "cash-flow")
+	return append(append([]string{}, analyticsReportKinds...), "forecast")
 }

@@ -55,8 +55,8 @@ func TestDefaults(t *testing.T) {
 	if cfg.Connectors.Timeout.Duration() != 120*time.Second {
 		t.Errorf("connectors.timeout = %v, want 120s", cfg.Connectors.Timeout)
 	}
-	if cfg.Forecast.Horizon != 90 {
-		t.Errorf("forecast.horizon = %d, want 90", cfg.Forecast.Horizon)
+	if cfg.Forecast.Horizon != "6m" || cfg.Forecast.MinBalance != "" {
+		t.Errorf("forecast = %+v, want horizon 6m and no min_balance", cfg.Forecast)
 	}
 	if len(cfg.Import.Profiles) != 0 {
 		t.Errorf("expected empty profiles, got %d", len(cfg.Import.Profiles))
@@ -488,7 +488,7 @@ func TestGetSetAndPersistence(t *testing.T) {
 		t.Fatalf("Get(modules.enabled) = %q, err %v", val, err)
 	}
 	val, err = cfg.Get("forecast.horizon")
-	if err != nil || val != "90" {
+	if err != nil || val != "6m" {
 		t.Fatalf("Get(forecast.horizon) = %q, err %v", val, err)
 	}
 
@@ -618,8 +618,8 @@ func TestGetSetAndPersistence(t *testing.T) {
 	if reloaded.Connectors.Timeout.Duration() != 45*time.Second {
 		t.Errorf("reloaded timeout = %v, want 45s", reloaded.Connectors.Timeout)
 	}
-	if reloaded.Forecast.Horizon != 120 {
-		t.Errorf("reloaded forecast.horizon = %d, want 120", reloaded.Forecast.Horizon)
+	if reloaded.Forecast.Horizon != "120d" {
+		t.Errorf("reloaded forecast.horizon = %q, want 120d", reloaded.Forecast.Horizon)
 	}
 	p := reloaded.Import.Profiles["bank"]
 	if p.DateColumn != "Date" || p.AmountColumn != "Amount" || p.Delimiter != ";" {
@@ -907,12 +907,22 @@ func TestInsightsKeys(t *testing.T) {
 	if v, err := cfg.Get("insights.anomaly_factor_permille"); err != nil || v != "2500" {
 		t.Fatalf("default anomaly = %q, %v", v, err)
 	}
+	for key, want := range map[string]string{
+		"insights.anomaly_window_months": "6", "insights.anomaly_min_history": "3", "insights.trend_periods": "3",
+	} {
+		if v, err := cfg.Get(key); err != nil || v != want {
+			t.Fatalf("default %s = %q, %v; want %s", key, v, err, want)
+		}
+	}
 	for key, val := range map[string]string{
 		"insights.anomaly_factor_permille":         "4000",
 		"insights.subscription_tolerance_permille": "0",
 		"insights.subscription_min_occurrences":    "4",
 		"insights.trend_permille":                  "300",
 		"insights.trend_min_amount":                "7000",
+		"insights.anomaly_window_months":           "12",
+		"insights.anomaly_min_history":             "5",
+		"insights.trend_periods":                   "4",
 	} {
 		if err := cfg.Set(key, val); err != nil {
 			t.Fatalf("Set(%s) = %v", key, err)
@@ -927,6 +937,9 @@ func TestInsightsKeys(t *testing.T) {
 		"insights.trend_min_amount":             "-1",
 		"insights.trend_permille":               "x",
 		"insights.nope":                         "1",
+		"insights.anomaly_window_months":        "0",
+		"insights.anomaly_min_history":          "0",
+		"insights.trend_periods":                "0",
 	} {
 		if err := cfg.Set(key, val); err == nil {
 			t.Errorf("Set(%s,%s) must fail", key, val)
@@ -936,5 +949,65 @@ func TestInsightsKeys(t *testing.T) {
 	bad.Insights.TrendPermille = 0
 	if err := bad.Validate(); err == nil {
 		t.Error("Validate must reject zero trend")
+	}
+}
+
+func TestForecastKeys(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.ConfigFile = filepath.Join(t.TempDir(), "config.toml")
+	for _, set := range []string{"2w", "12m", "45", " 10d "} {
+		want := map[string]string{"2w": "2w", "12m": "12m", "45": "45d", " 10d ": "10d"}[set]
+		if err := cfg.Set("forecast.horizon", set); err != nil {
+			t.Fatalf("Set(%q) = %v", set, err)
+		}
+		if got, _ := cfg.Get("forecast.horizon"); got != want {
+			t.Errorf("Get after Set(%q) = %q, want %q", set, got, want)
+		}
+	}
+	for _, bad := range []string{"0", "-3", "0m", "x", "", "3y", "+5", "1.5"} {
+		if err := cfg.Set("forecast.horizon", bad); err == nil {
+			t.Errorf("Set(%q) accepted", bad)
+		}
+	}
+	if err := cfg.Set("forecast.min_balance", "250.50"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := cfg.Get("forecast.min_balance"); got != "250.50" {
+		t.Errorf("min_balance = %q", got)
+	}
+	reloaded, _, err := config.Resolve(config.ResolveOptions{HomeDir: t.TempDir(), Flags: config.Flags{ConfigFile: cfg.ConfigFile}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Forecast.Horizon != "10d" || reloaded.Forecast.MinBalance != "250.50" {
+		t.Errorf("reloaded = %+v", reloaded.Forecast)
+	}
+}
+
+func TestForecastHorizonLegacyTOML(t *testing.T) {
+	for body, want := range map[string]string{
+		"horizon = 90":    "90d",
+		`horizon = "3m"`:  "3m",
+		`horizon = '8w'`:  "8w",
+		`horizon = "120"`: "120d",
+	} {
+		file := filepath.Join(t.TempDir(), "config.toml")
+		if err := os.WriteFile(file, []byte("[forecast]\n"+body+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cfg, _, err := config.Resolve(config.ResolveOptions{HomeDir: t.TempDir(), Flags: config.Flags{ConfigFile: file}})
+		if err != nil {
+			t.Fatalf("%s: %v", body, err)
+		}
+		if cfg.Forecast.Horizon != config.ForecastHorizon(want) {
+			t.Errorf("%s: horizon = %q, want %q", body, cfg.Forecast.Horizon, want)
+		}
+	}
+	file := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(file, []byte("[forecast]\nhorizon = 0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := config.Resolve(config.ResolveOptions{HomeDir: t.TempDir(), Flags: config.Flags{ConfigFile: file}}); err == nil {
+		t.Error("horizon = 0 accepted")
 	}
 }

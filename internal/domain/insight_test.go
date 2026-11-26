@@ -152,7 +152,7 @@ func TestDetectSubscriptions(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := DetectSubscriptions(cfg, tc.txs)
+			got, err := DetectSubscriptions(cfg, tc.txs, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -285,7 +285,7 @@ func TestInsightsOrderIndependentProperty(t *testing.T) {
 		shuffled := rapid.Permutation(txs).Draw(rt, "perm")
 		for name, run := range map[string]func([]Transaction) ([]Insight, error){
 			"anomalies":     func(x []Transaction) ([]Insight, error) { return DetectAnomalies(cfg, per, x) },
-			"subscriptions": func(x []Transaction) ([]Insight, error) { return DetectSubscriptions(cfg, x) },
+			"subscriptions": func(x []Transaction) ([]Insight, error) { return DetectSubscriptions(cfg, x, nil) },
 			"trends":        func(x []Transaction) ([]Insight, error) { return DetectTrends(cfg, per, x) },
 		} {
 			a, err1 := run(txs)

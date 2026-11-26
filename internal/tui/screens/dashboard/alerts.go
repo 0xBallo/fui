@@ -299,7 +299,7 @@ func (s *alertsSection) keys() []key.Binding {
 
 func (s *alertsSection) view(width int) string {
 	inner := max(1, width-4)
-	lines := []string{s.th.Header.Render("Alerts")}
+	var lines []string
 	if len(s.entries) == 0 {
 		lines = append(lines, s.th.Muted.Render("all clear"))
 	}
@@ -314,7 +314,8 @@ func (s *alertsSection) view(width int) string {
 	if more := len(s.entries) - end; more > 0 {
 		lines = append(lines, s.th.Muted.Render(fmt.Sprintf("(+%d more)", more)))
 	}
-	return s.th.Border.Width(max(1, width-2)).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+	return s.th.Header.Render("Alerts") + "\n" +
+		s.th.Border.Width(max(1, width-2)).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 }
 
 // entryLine renders "icon level text"; the level word keeps the meaning without colour.

@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/0xballo/fui/internal/app"
+	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/app/lending"
 	"github.com/0xballo/fui/internal/cli/render"
 	"github.com/0xballo/fui/internal/domain"
@@ -49,7 +50,7 @@ func parseInstallmentsFile(path string, currency domain.Currency) ([]domain.Inst
 		if rec.Installment == nil {
 			continue
 		}
-		inst, err := installmentFromRecord(*rec.Installment, currency)
+		inst, err := importing.InstallmentFromRecord(*rec.Installment, currency)
 		if err != nil {
 			return nil, fmt.Errorf("installment in %s: %w", path, err)
 		}
@@ -82,30 +83,4 @@ func buildLoanView(ctx context.Context, deps *Deps, info lending.Info, events []
 		return render.LoanView{}, err
 	}
 	return render.LoanView{Loan: info.Loan, Account: info.Account, DebitAccountName: debitName, Events: events}, nil
-}
-
-// installmentFromRecord converts one InstallmentRecord (minor-unit int64 amounts, per the fui/1
-// protocol) into a domain.Installment in currency.
-func installmentFromRecord(r fuiproto.InstallmentRecord, currency domain.Currency) (domain.Installment, error) {
-	due, err := domain.ParseDate(r.DueDate)
-	if err != nil {
-		return domain.Installment{}, fmt.Errorf("due_date: %w", err)
-	}
-	principal, err := domain.NewMoney(r.Principal, currency)
-	if err != nil {
-		return domain.Installment{}, fmt.Errorf("principal: %w", err)
-	}
-	interest, err := domain.NewMoney(r.Interest, currency)
-	if err != nil {
-		return domain.Installment{}, fmt.Errorf("interest: %w", err)
-	}
-	fees, err := domain.NewMoney(r.Fees, currency)
-	if err != nil {
-		return domain.Installment{}, fmt.Errorf("fees: %w", err)
-	}
-	remaining, err := domain.NewMoney(r.Remaining, currency)
-	if err != nil {
-		return domain.Installment{}, fmt.Errorf("remaining: %w", err)
-	}
-	return domain.Installment{Due: due, Principal: principal, Interest: interest, Fees: fees, Remaining: remaining}, nil
 }

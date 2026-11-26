@@ -9,6 +9,7 @@ func newAddCmd(deps *Deps) *cobra.Command {
 		Use:   "add AMOUNT [DESCRIPTION...]",
 		Short: "Add a transaction",
 		Example: "  fui add -12,50 Esselunga -c Groceries -a Checking\n" +
+			"  fui add -12,50 Dinner --payee Trattoria --tag outing --tag friends -a Checking\n" +
 			"  fui add -- -12,50 Cash withdrawal -a Checking",
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -40,11 +41,11 @@ func runAdd(cmd *cobra.Command, deps *Deps, amount string, rest []string) error 
 	if err != nil {
 		return err
 	}
-	return writeChange(cmd, deps, rt, plan.Plan, func() error {
+	return writeTxChange(cmd, deps, rt, plan.Plan, func() error {
 		tx, err := deps.Service.ApplyAddTx(ctx, plan)
 		if err != nil {
 			return err
 		}
-		return renderTxByID(ctx, deps, rt, tx.ID)
+		return renderTxWithNotices(ctx, deps, rt, tx.ID, plan.Notices)
 	})
 }

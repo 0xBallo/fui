@@ -14,6 +14,9 @@ type budgets struct{ *repos }
 // cloneBudget deep-copies the target slice and override map so stored and returned values never
 // alias state a caller could mutate later.
 func cloneBudget(b domain.Budget) domain.Budget {
+	if b.Period == "" {
+		b.Period = domain.BudgetMonthly
+	}
 	b.Targets = slices.Clone(b.Targets)
 	if b.Overrides != nil {
 		b.Overrides = maps.Clone(b.Overrides)

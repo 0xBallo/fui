@@ -93,7 +93,7 @@ func seed(t tb, s *Store, accounts, salt int) {
 	exec(`INSERT INTO transaction_tags (transaction_id, tag_id) SELECT t.id, g.id FROM transactions t, tags g WHERE g.name = 'trip' LIMIT 1`)
 	exec(`INSERT INTO transaction_splits (transaction_id, category_id, amount_minor) SELECT t.id, c.id, -500 FROM transactions t, categories c LIMIT 1`)
 	exec(`INSERT INTO rules (name, priority, enabled, conditions, actions)
-		VALUES (?, 10, 1, '{}', '{"category_id":1}')`, fmt.Sprintf("Rule%d", salt))
+		VALUES (?, 10, 1, '{}', '{"payee_id":' || (SELECT id FROM payees WHERE name = 'Esselunga') || '}')`, fmt.Sprintf("Rule%d", salt))
 	exec(`INSERT INTO saved_reports (name, kind, params)
 		VALUES (?, 'cashflow', '{"period":{"kind":"last_months","value":3}}')`, fmt.Sprintf("Report%d", salt))
 	exec(`INSERT INTO saved_simulations (name, kind, params)

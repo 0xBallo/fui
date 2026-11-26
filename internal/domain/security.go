@@ -47,10 +47,13 @@ type Security struct {
 	Kind          SecurityKind
 	Currency      Currency
 	QuantityScale int
+	PriceScale    int // decimals of unit prices; fixed at creation
 }
 
 // NewSecurity validates s and returns it normalized: name trimmed, ticker and
-// ISIN upper-cased. At least one of ticker and ISIN is required.
+// ISIN upper-cased. At least one of ticker and ISIN is required. A zero
+// PriceScale defaults to MaxQuantityScale for crypto and to the currency's
+// decimals otherwise.
 func NewSecurity(s Security) (Security, error) {
 	name, err := requireName("name", s.Name)
 	if err != nil {
@@ -72,6 +75,15 @@ func NewSecurity(s Security) (Security, error) {
 		return Security{}, missingField("currency")
 	}
 	if _, err := NewQuantity(0, s.QuantityScale); err != nil {
+		return Security{}, err
+	}
+	if s.PriceScale == 0 {
+		s.PriceScale = s.Currency.Decimals()
+		if s.Kind == SecurityCrypto {
+			s.PriceScale = MaxQuantityScale
+		}
+	}
+	if _, err := NewPrice(0, s.PriceScale, s.Currency); err != nil {
 		return Security{}, err
 	}
 	return s, nil
@@ -127,9 +139,11 @@ type SecurityOp struct {
 	Security  SecurityID
 	Kind      SecurityOpKind
 	Quantity  Quantity
-	UnitPrice Money
+	UnitPrice Price
 	Fees      Money
 	CashTx    TransactionID // optional linked liquidity movement
+
+	ImportBatchID ImportBatchID // import that created the operation, 0 when none
 }
 
 // NewSecurityOp validates op: known kind, set date, account and security,
@@ -180,5 +194,5 @@ func NewSecurityOp(op SecurityOp) (SecurityOp, error) {
 type SecurityPrice struct {
 	Security SecurityID
 	Date     Date
-	Price    Money
+	Price    Price
 }

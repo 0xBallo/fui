@@ -79,6 +79,8 @@ type Transaction struct {
 	TransferGroupID TransferGroupID
 	RecurrenceID    RecurrenceID
 	DueDate         Date
+	Original        *Money // amount and currency as stated by the source, nil when none
+	Raw             string // source record as JSON text, empty when none
 }
 
 // NewTransaction validates t and returns it with text fields trimmed.

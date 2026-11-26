@@ -57,9 +57,11 @@ func (s securities) Update(_ context.Context, sec domain.Security) error {
 	if err := s.writable(); err != nil {
 		return err
 	}
-	if _, ok := s.st.Securities[sec.ID]; !ok {
+	existing, ok := s.st.Securities[sec.ID]
+	if !ok {
 		return notFound("security", sec.ID)
 	}
+	sec.PriceScale = existing.PriceScale // fixed at creation, like the store
 	sec, err := domain.NewSecurity(sec)
 	if err != nil {
 		return err
@@ -109,8 +111,15 @@ func (s securities) UpsertPrice(_ context.Context, p domain.SecurityPrice) error
 	if err := s.writable(); err != nil {
 		return err
 	}
-	if _, ok := s.st.Securities[p.Security]; !ok {
+	sec, ok := s.st.Securities[p.Security]
+	if !ok {
 		return notFound("security", p.Security)
+	}
+	if p.Price.Currency() != sec.Currency {
+		return fmt.Errorf("security price currency mismatch: %w", domain.ErrCurrencyMismatch)
+	}
+	if p.Price.Scale() != sec.PriceScale {
+		return fmt.Errorf("security price scale %d, want %d: %w", p.Price.Scale(), sec.PriceScale, domain.ErrInvalidValue)
 	}
 	s.st.SecPrices[secPriceKey{p.Security, p.Date}] = p
 	return nil
@@ -149,11 +158,16 @@ func (s securities) PriceOnOrBefore(ctx context.Context, id domain.SecurityID, d
 }
 
 func (s securities) checkOp(op domain.SecurityOp) error {
-	if _, ok := s.st.Securities[op.Security]; !ok {
+	sec, ok := s.st.Securities[op.Security]
+	if !ok {
 		return notFound("security", op.Security)
 	}
 	if _, ok := s.st.Accounts[op.Account]; !ok {
 		return notFound("account", op.Account)
+	}
+	if op.UnitPrice.Scale() != sec.PriceScale {
+		return fmt.Errorf("security operation unit price scale %d, want %d: %w",
+			op.UnitPrice.Scale(), sec.PriceScale, domain.ErrInvalidValue)
 	}
 	if op.CashTx != 0 {
 		if _, ok := s.st.Txs[op.CashTx]; !ok {
@@ -220,6 +234,19 @@ func (s securities) ListOpsBySecurity(_ context.Context, id domain.SecurityID, f
 	var out []domain.SecurityOp
 	for _, op := range s.st.SecOps {
 		if op.Security == id && (from.IsZero() || !op.Date.Before(from)) && (to.IsZero() || !op.Date.After(to)) {
+			out = append(out, op)
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.SecurityOp) int {
+		return cmp.Or(a.Date.Cmp(b.Date), cmp.Compare(a.ID, b.ID))
+	})
+	return out, nil
+}
+
+func (s securities) ListOpsByBatch(_ context.Context, batch domain.ImportBatchID) ([]domain.SecurityOp, error) {
+	var out []domain.SecurityOp
+	for _, op := range s.st.SecOps {
+		if batch != 0 && op.ImportBatchID == batch {
 			out = append(out, op)
 		}
 	}

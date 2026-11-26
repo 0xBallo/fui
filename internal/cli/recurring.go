@@ -11,6 +11,8 @@ func newRecurringCmd(deps *Deps) *cobra.Command {
 	cmd := &cobra.Command{Use: "recurring", Short: "Add, list, run, skip or confirm recurring transactions"}
 	cmd.AddCommand(
 		newRecurringAddCmd(deps),
+		newRecurringEditCmd(deps),
+		newRecurringRemoveCmd(deps),
 		newRecurringListCmd(deps),
 		newRecurringRunCmd(deps),
 		newRecurringSkipCmd(deps),

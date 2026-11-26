@@ -1,0 +1,20 @@
+Import preview
+──────────────
+connector=fui source=rich.fui.jsonl
+new=3 duplicate=0 doubtful=0 errors=1 included=3
+warnings=1 transfers=1/1 mismatches=1 modules=1
+
+  Errors (1)
+  line 9: source: bad date
+  Warnings (1)
+  line 9: security_op needs module investments: enable it or the record is skipped
+  Transfer proposals (1)
+> [x] line 4 to B <-> line 5 (amount_date)
+  Balance mismatches (1)
+  Account A 06/04/2026: statement 1.23, computed -53.00
+    fix: fui reconcile 'Account A' --date 2026-06-04 --balance 1.23
+  Disabled-module records (1)
+  investments: 1 record(s) [security_op] lines 9
+  New categories (1)
+
+j/k move · t accept transfer · m modules · tab rows · enter confirm · esc rows

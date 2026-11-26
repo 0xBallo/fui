@@ -59,7 +59,7 @@ func TestAddAccount(t *testing.T) {
 				}
 			},
 		},
-		{name: "unknown kind", req: app.AddAccountRequest{Name: "X", Kind: "wallet", Currency: "EUR"}, wantErr: domain.ErrInvalidValue},
+		{name: "unknown kind", req: app.AddAccountRequest{Name: "X", Kind: "bank", Currency: "EUR"}, wantErr: domain.ErrInvalidValue},
 		{name: "missing kind", req: app.AddAccountRequest{Name: "X", Currency: "EUR"}, wantErr: domain.ErrMissingField},
 		{name: "unknown currency", req: app.AddAccountRequest{Name: "X", Kind: "cash", Currency: "ZZZ"}, wantErr: domain.ErrInvalidValue},
 		{name: "bad opening balance", req: app.AddAccountRequest{Name: "X", Kind: "cash", Currency: "EUR", OpeningBalance: "abc"}, wantErr: domain.ErrInvalidAmount},

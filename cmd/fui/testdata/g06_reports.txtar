@@ -1,0 +1,77 @@
+# Filtered, grouped and compared reports (G06): filter flags, --group-by, --granularity, saved v2.
+exec fui init --currency EUR
+exec fui account add Checking --kind checking --currency EUR --opening-balance 1000
+exec fui add -- -40,00 Lunch -c Groceries -a Checking --payee Coop --date 2025-09-10
+exec fui add -- -20,00 Bus -c Transport -a Checking --payee Metro --date 2025-09-12
+exec fui add -- -30,00 Dinner -c Groceries -a Checking --payee Trattoria --date 2025-11-12
+exec fui add 500,00 Salary -a Checking --date 2025-11-20
+
+# spending narrowed by category, grouped by payee
+exec fui report spending --period 2025 --category Groceries --group-by payee --json
+stdout '"group_by":"payee"'
+stdout '"key":"Coop"'
+stdout '"key":"Trattoria"'
+! stdout 'Metro'
+
+# cash flow by week, via the granularity flag
+exec fui report cash-flow --period 2025-11 --granularity week --json
+stdout '"group_by":"week"'
+stdout '"inflow"'
+
+# balance and net worth series with a granularity
+exec fui report balance --account Checking --period 2025-09-01..2025-11-30 --granularity week --json
+stdout '"date":"2025-09-07"'
+exec fui report networth --period 2024-01-01..2025-12-31 --granularity year --json
+stdout '"liquidity"'
+stdout '"date":"2025-12-31"'
+! stdout '"positions"'
+
+# compare two absolute periods with a filter
+exec fui report compare --a 2025-09 --b 2025-Q4 --category Groceries --by category --json
+stdout '"category":"Groceries"'
+! stdout 'Transport'
+exec fui report compare --a 2025-09 --b 2025-Q4 --by category --chart
+stdout 'CHART'
+stdout '█'
+exec fui report compare --a 2025-09 --b 2025-Q4 --by category --chart --json
+! stdout '█'
+
+# an unknown filter value fails
+! exec fui report spending --category Nope
+stderr 'Nope'
+! exec fui report spending --income --expense
+stderr 'incompatible'
+
+# save and run a report with filter and grouping
+exec fui report save food spending --period 2025 --category Groceries --group-by payee --dry-run
+exec fui report list --json
+! stdout 'food'
+exec fui report save food spending --period 2025 --category Groceries --group-by payee
+exec fui report list --json
+stdout 'version[^0-9]+2'
+stdout 'group_by'
+exec fui report run food --json
+stdout '"key":"Coop"'
+! stdout 'Metro'
+exec fui report run food
+stdout 'TOTAL'
+! exec fui report run food --category Groceries
+exec fui report save duel compare --a 2025-09 --b 2025-Q4 --expense
+exec fui report run duel --json
+stdout '"total"'
+! exec fui report save bad spending --category Nope
+
+# forecast horizon units and weekly points
+exec fui forecast --horizon 12m --granularity week --json
+stdout '"accounts"'
+! exec fui forecast --horizon soon
+
+# split transactions count per split category (regression a2-21)
+exec fui add -- -50,00 Market -a Checking --date 2025-12-05
+exec fui tx split 5 --row 'Groceries=-30,00' --row 'Transport=-20,00'
+exec fui report spending --period 2025-12 --json
+stdout '"key":"Groceries"'
+stdout '"key":"Transport"'
+exec fui report spending --period 2025-12 --category Transport --json
+stdout '"minor":2000'
+! stdout 'Groceries'

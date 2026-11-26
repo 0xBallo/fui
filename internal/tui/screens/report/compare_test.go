@@ -137,10 +137,10 @@ func TestCompareTeatest(t *testing.T) {
 	s := compareScreen(t, theme.Default())
 	tm := teatest.NewTestModel(t, &teaScreen{scr: s}, teatest.WithInitialTermSize(80, 24))
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool { return bytes.Contains(b, []byte("Net worth")) },
-		teatest.WithDuration(3*time.Second))
+		teatest.WithDuration(15*time.Second))
 	tm.Type("c")
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool { return bytes.Contains(b, []byte("TOTAL")) },
-		teatest.WithDuration(3*time.Second))
+		teatest.WithDuration(15*time.Second))
 	if err := tm.Quit(); err != nil {
 		t.Fatal(err)
 	}

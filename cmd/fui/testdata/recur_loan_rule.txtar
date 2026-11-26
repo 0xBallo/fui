@@ -1,0 +1,50 @@
+# recurring edit/rm, loan event spec example and rule test TEXT without account/amount.
+exec fui init --preset expense --currency EUR
+exec fui account add Checking --kind checking --currency EUR --opening-balance 1000
+exec fui recurring add --account Checking --amount -9,99 --description Netflix --every 1 --unit months --start 2099-01-01
+exec fui recurring add --account Checking --amount -5 --description Gym --every 1 --unit months --start 2099-01-01
+
+# edit: dry-run changes nothing, the real edit does
+exec fui recurring edit 1 --amount -11,99 --description 'Netflix 4K' --dry-run
+stdout 'update'
+exec fui recurring list
+! stdout '4K'
+exec fui recurring edit 1 --amount -11,99 --description 'Netflix 4K' --every 2
+stdout '4K'
+exec fui recurring list
+stdout '4K'
+! exec fui recurring edit 1
+stderr 'nothing to change'
+! exec fui recurring edit 99 --description X
+! exec fui recurring edit abc --description X
+
+# rm: dry-run keeps it, --yes removes it
+exec fui recurring rm 2 --dry-run
+stdout 'delete'
+exec fui recurring list
+stdout 'Gym'
+exec fui recurring rm 2 --yes
+stdout 'Removed recurrence 2'
+exec fui recurring list
+! stdout 'Gym'
+! exec fui recurring rm 2 --yes
+
+# loan event: the spec example (no --kind, --from) works as written
+exec fui module enable loans
+exec fui loan add Mutuo --kind mortgage --principal 100000 --disbursed 2025-01-01 --term-months 120 --rate-type variable --rate 3,00 --debit Checking
+exec fui loan event Mutuo --rate 2,80 --from 2026-01-01 --dry-run
+exec fui loan event Mutuo --rate 2,80 --from 2026-01-01
+exec fui loan event Mutuo --kind rate_change --date 2026-06-01 --rate 2,50
+! exec fui loan event Mutuo --rate 2 --date 2026-01-01 --from 2026-02-01
+stderr 'differ'
+
+# rule test TEXT works without --account/--amount and says what it did not evaluate
+exec fui rule add amazon --contains AMAZON --category Groceries
+exec fui rule test AMAZON
+stdout 'amazon'
+stderr 'account/amount conditions not evaluated'
+exec fui rule test AMAZON --account Checking
+stderr 'amount conditions not evaluated'
+exec fui rule test AMAZON --account Checking --amount -12,50
+! stderr 'not evaluated'
+! exec fui rule test AMAZON --amount -12,50

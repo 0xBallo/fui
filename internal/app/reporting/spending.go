@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
 )
 
@@ -114,4 +115,61 @@ func mapSpendingRows(rows []domain.CategoryTotal, categoryNames map[domain.Categ
 		})
 	}
 	return out
+}
+
+// Spending reports what was spent in the period, in the base currency, grouped by req.GroupBy
+// (category by default) over the rows matching req.Filter. Only outflows count (refunds are not
+// netted); transfers and investments are left out; split transactions count per split row.
+// Rows are by descending total, period groupings chronologically. Grouping by tag counts a
+// transaction fully in each of its tags and in an "untagged" row, so tag rows may sum above
+// the total; the other groupings sum to it.
+func (a *Analytics) Spending(ctx context.Context, req ReportRequest) (GroupedResult, error) {
+	if err := a.gate(); err != nil {
+		return GroupedResult{}, err
+	}
+	by, err := reportGroup(req.GroupBy, domain.GroupCategory)
+	if err != nil {
+		return GroupedResult{}, err
+	}
+	p, err := a.period(req.Period)
+	if err != nil {
+		return GroupedResult{}, err
+	}
+	out := GroupedResult{Period: periodLabel(p), GroupBy: string(by), Rows: []GroupedRow{}}
+	err = a.store.Read(ctx, func(r app.Repos) error {
+		rows, err := a.reportRows(ctx, r, req, p, rowOptions{excludeKinds: transferKinds, withTags: by == domain.GroupTag})
+		if err != nil {
+			return err
+		}
+		g, err := a.newGrouper(ctx, r, by, p)
+		if err != nil {
+			return err
+		}
+		total := zeroMoney(a.cfg.BaseCurrency)
+		for _, row := range rows {
+			base, err := a.toBase(ctx, r, row.Amount, row.Date)
+			if err != nil {
+				return err
+			}
+			if base.Sign() >= 0 {
+				continue
+			}
+			spent, err := base.Neg()
+			if err != nil {
+				return err
+			}
+			if total, err = total.Add(spent); err != nil {
+				return err
+			}
+			if err := g.add(row, base); err != nil {
+				return err
+			}
+		}
+		if out.Rows, err = g.result(true); err != nil {
+			return err
+		}
+		out.Total = amountOf(total)
+		return nil
+	})
+	return out, err
 }

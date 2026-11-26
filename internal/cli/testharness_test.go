@@ -28,6 +28,7 @@ func (c fixedClock) Now() time.Time { return c.now }
 type fakeBackup struct {
 	reasons  []string
 	restored []string
+	loaded   []app.ArchiveDump
 }
 
 func (b *fakeBackup) Backup(_ context.Context, reason string) (string, error) {
@@ -37,6 +38,19 @@ func (b *fakeBackup) Backup(_ context.Context, reason string) (string, error) {
 
 func (b *fakeBackup) Restore(_ context.Context, path string) error {
 	b.restored = append(b.restored, path)
+	return nil
+}
+
+// DumpArchive returns a tiny fixed dump, enough for the dump document and restore routing.
+func (b *fakeBackup) DumpArchive(context.Context) (app.ArchiveDump, error) {
+	return app.ArchiveDump{SchemaVersion: 1, Tables: []app.TableDump{
+		{Name: "settings", Columns: []string{"key", "value"}, Rows: [][]any{{"k", "v"}}},
+	}}, nil
+}
+
+// LoadArchive records the dump it was asked to load.
+func (b *fakeBackup) LoadArchive(_ context.Context, d app.ArchiveDump) error {
+	b.loaded = append(b.loaded, d)
 	return nil
 }
 

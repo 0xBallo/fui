@@ -77,7 +77,7 @@ func seedExport(t *testing.T) env {
 		}
 		if _, err := r.Securities().InsertOp(context.Background(), domain.SecurityOp{
 			Date: date("2026-10-04"), Account: a.ID, Security: sec.ID, Kind: domain.OpBuy,
-			Quantity: must(domain.NewQuantity(1000000, 6)), UnitPrice: money(100), Fees: money(1), CashTx: firstID,
+			Quantity: must(domain.NewQuantity(1000000, 6)), UnitPrice: price(100), Fees: money(1), CashTx: firstID,
 		}); err != nil {
 			return err
 		}
@@ -240,6 +240,7 @@ func TestDump(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	e.svc = importing.New(e.store, fixedClock{time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)}, &dumpBackup{dump: fakeDump()}, nil)
 	wantFiles := []string{"accounts", "categories", "transactions", "transfers", "fx_rates", "import_batches", "saved_simulations", "dismissed_insights"}
 	t.Run("json", func(t *testing.T) {
 		files := memFiles{}

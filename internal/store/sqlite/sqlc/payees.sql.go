@@ -148,7 +148,7 @@ func (q *Queries) ListPayees(ctx context.Context) ([]Payee, error) {
 }
 
 const listTransactionsOfPayee = `-- name: ListTransactionsOfPayee :many
-SELECT id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date
+SELECT id, account_id, date, operation_date, value_date, amount_minor, currency, payee_id, description, category_id, notes, status, kind, external_id, fingerprint, import_batch_id, transfer_group_id, created_at, updated_at, search_text, recurrence_id, due_date, original_amount_minor, original_currency, raw
 FROM transactions
 WHERE payee_id = ?1
 ORDER BY id
@@ -186,6 +186,9 @@ func (q *Queries) ListTransactionsOfPayee(ctx context.Context, payeeID sql.NullI
 			&i.SearchText,
 			&i.RecurrenceID,
 			&i.DueDate,
+			&i.OriginalAmountMinor,
+			&i.OriginalCurrency,
+			&i.Raw,
 		); err != nil {
 			return nil, err
 		}

@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/budgeting"
 	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/app/reporting"
+	"github.com/0xballo/fui/internal/cli/render"
 	"github.com/0xballo/fui/internal/domain"
 )
 
@@ -16,7 +18,11 @@ import (
 // the Settings screen changes while the TUI is running.
 
 // budgetUseCases adapts budgeting.Service to budget.UseCases.
-type budgetUseCases struct{ build func() *budgeting.Service }
+type budgetUseCases struct {
+	build func() *budgeting.Service
+	today func() (domain.Date, error)
+	lists lookups // category and tag names for the new/edit form
+}
 
 func (u budgetUseCases) Status(ctx context.Context, month string) (budgeting.Status, error) {
 	return u.build().Status(ctx, month)
@@ -38,9 +44,59 @@ func (u budgetUseCases) ApplyMove(ctx context.Context, p budgeting.MovePlan) err
 	return u.build().ApplyMove(ctx, p)
 }
 
-func (u budgetUseCases) PlanCopyPrevious(ctx context.Context, month string) (budgeting.CopyPlan, error) {
-	return u.build().PlanCopyPrevious(ctx, month)
+func (u budgetUseCases) PlanCopy(ctx context.Context, req budgeting.CopyRequest) (budgeting.CopyPlan, error) {
+	return u.build().PlanCopy(ctx, req)
 }
+
+func (u budgetUseCases) Categories(ctx context.Context) ([]string, error) {
+	cats, err := u.lists.ListCategories(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list categories: %w", err)
+	}
+	out := make([]string, len(cats))
+	for i, c := range cats {
+		out[i] = c.Name
+	}
+	return out, nil
+}
+
+func (u budgetUseCases) Tags(ctx context.Context) ([]string, error) {
+	tags, err := u.lists.ListTags(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list tags: %w", err)
+	}
+	out := make([]string, len(tags))
+	for i, t := range tags {
+		out[i] = t.Name
+	}
+	return out, nil
+}
+
+func (u budgetUseCases) TargetNames(ctx context.Context, targets []domain.BudgetTarget) (cats, tags []string, err error) {
+	allCats, err := u.lists.ListCategories(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list categories: %w", err)
+	}
+	allTags, err := u.lists.ListTags(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list tags: %w", err)
+	}
+	for _, t := range targets {
+		for _, c := range allCats {
+			if t.CategoryID != 0 && c.ID == t.CategoryID {
+				cats = append(cats, c.Name)
+			}
+		}
+		for _, g := range allTags {
+			if t.TagID != 0 && g.ID == t.TagID {
+				tags = append(tags, g.Name)
+			}
+		}
+	}
+	return cats, tags, nil
+}
+
+func (u budgetUseCases) Today() (domain.Date, error) { return u.today() }
 
 func (u budgetUseCases) ApplyCopyPrevious(ctx context.Context, p budgeting.CopyPlan) error {
 	return u.build().ApplyCopyPrevious(ctx, p)
@@ -57,8 +113,8 @@ func (u reportUseCases) BalanceOverTime(ctx context.Context, r reporting.ReportR
 	return u.analytics().BalanceOverTime(ctx, r)
 }
 
-func (u reportUseCases) NetWorth(ctx context.Context, r reporting.ReportRequest) (reporting.SeriesResult, error) {
-	return u.analytics().NetWorth(ctx, r)
+func (u reportUseCases) NetWorth(ctx context.Context, r reporting.ReportRequest) (reporting.NetWorthResult, error) {
+	return u.analytics().NetWorthReport(ctx, r)
 }
 
 func (u reportUseCases) RemainingDebt(ctx context.Context, r reporting.ReportRequest) (reporting.DebtResult, error) {
@@ -79,6 +135,29 @@ func (u reportUseCases) BudgetVsActual(ctx context.Context, r reporting.ReportRe
 
 func (u reportUseCases) Forecast(ctx context.Context, r reporting.ForecastRequest) (reporting.ForecastResult, error) {
 	return u.analytics().Forecast(ctx, r)
+}
+
+func (u reportUseCases) Spending(ctx context.Context, r reporting.ReportRequest) (reporting.GroupedResult, error) {
+	return u.analytics().Spending(ctx, r)
+}
+
+func (u reportUseCases) CashFlow(ctx context.Context, r reporting.ReportRequest) (reporting.GroupedResult, error) {
+	return u.analytics().CashFlow(ctx, r)
+}
+
+// ExportResult writes a report result as csv or json with the same renderers as `fui report`.
+func (u reportUseCases) ExportResult(w io.Writer, format string, data any) error {
+	var f render.Format
+	switch format {
+	case "csv":
+		f = render.CSV
+	case "json":
+		f = render.JSON
+	default:
+		return fmt.Errorf("export report: unknown format %q", format)
+	}
+	// Machine formats do not use the locale.
+	return render.WriteReportResult(w, f, domain.LocaleENUS, data)
 }
 
 func (u reportUseCases) List(ctx context.Context) ([]app.SavedReport, error) {
@@ -109,6 +188,10 @@ func (u reportUseCases) Today() (domain.Date, error) { return u.svc.Today() }
 
 func (u reportUseCases) ListAccounts(ctx context.Context, req app.ListAccountsRequest) ([]app.AccountBalance, error) {
 	return u.svc.ListAccounts(ctx, req)
+}
+
+func (u reportUseCases) ResolveTxFilter(ctx context.Context, req app.ListTxRequest) (domain.TxFilter, error) {
+	return u.svc.ResolveTxFilter(ctx, req)
 }
 
 func (u reportUseCases) Export(ctx context.Context, req importing.ExportRequest, w io.Writer) (int, error) {

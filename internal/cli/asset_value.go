@@ -11,12 +11,13 @@ func newAssetValueCmd(deps *Deps, svc *assetting.Service) *cobra.Command {
 		Use:     "value ASSET VALUE",
 		Short:   "Record an asset valuation",
 		Args:    exactArgs(2),
-		Example: "  fui asset value House 320000 --date 2026-12-31",
+		Example: "  fui asset value House 320000 --date 2026-12-31\n  fui asset value rm House 2026-12-31",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAssetValue(cmd, deps, svc, args[0], args[1])
 		},
 	}
 	cmd.Flags().String("date", "", "valuation date (default: today)")
+	cmd.AddCommand(newAssetValueRemoveCmd(deps, svc))
 	return cmd
 }
 

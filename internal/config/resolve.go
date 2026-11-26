@@ -140,6 +140,8 @@ func loadConfigFile(cfg *Config, opts ResolveOptions) ([]string, error) {
 	var warnings []string
 	dec := toml.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
+	// Lets ForecastHorizon read the legacy integer form.
+	dec.EnableUnmarshalerInterface()
 	if decodeErr := dec.Decode(cfg); decodeErr != nil {
 		var sme *toml.StrictMissingError
 		if errors.As(decodeErr, &sme) {

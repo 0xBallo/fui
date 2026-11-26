@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/0xballo/fui/internal/domain"
 )
@@ -296,8 +297,23 @@ func (s *Service) PlanTagTransaction(ctx context.Context, req TagTransactionRequ
 
 // ApplyTagTransaction stores the resolved tag set.
 func (s *Service) ApplyTagTransaction(ctx context.Context, p TagTransactionPlan) error {
+	return s.applyTags(ctx, p, OpKindTag)
+}
+
+// applyTags stores the tag set and journals it as kind, unless the plan changes nothing.
+func (s *Service) applyTags(ctx context.Context, p TagTransactionPlan, kind string) error {
 	return s.apply(ctx, p.Bulk, func(r Repos) error {
-		return r.Tags().SetTags(ctx, p.ID, p.Tags)
+		if len(p.Changes) == 0 {
+			return r.Tags().SetTags(ctx, p.ID, p.Tags)
+		}
+		j, err := BeginJournal(ctx, r, p.ID)
+		if err != nil {
+			return err
+		}
+		if err := r.Tags().SetTags(ctx, p.ID, p.Tags); err != nil {
+			return err
+		}
+		return j.Commit(ctx, r, s.clock, kind, UndoFieldTags)
 	})
 }
 
@@ -345,7 +361,7 @@ func (s *Service) PlanUntagTransaction(ctx context.Context, req UntagTransaction
 
 // ApplyUntagTransaction applies a plan made by PlanUntagTransaction or PlanTagTransaction.
 func (s *Service) ApplyUntagTransaction(ctx context.Context, p TagTransactionPlan) error {
-	return s.ApplyTagTransaction(ctx, p)
+	return s.applyTags(ctx, p, OpKindUntag)
 }
 
 // currentTagIDsAndNames fails with ErrNotFound when the transaction does not exist.
@@ -429,4 +445,27 @@ func checkTagName(tags []domain.Tag, name string, self domain.TagID) error {
 		}
 	}
 	return nil
+}
+
+// resolveTagNames matches names exactly (case-insensitively) against tags; a name that matches
+// none is validated and returned in created. Repeated names collapse into one.
+func resolveTagNames(tags []domain.Tag, names []string) (existing, created []domain.Tag, err error) {
+	seen := map[string]bool{}
+	for _, name := range names {
+		key := domain.Tag{Name: name}.Key()
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		if i := slices.IndexFunc(tags, func(tg domain.Tag) bool { return tg.Key() == key }); i >= 0 {
+			existing = append(existing, tags[i])
+			continue
+		}
+		tg, err := domain.NewTag(name)
+		if err != nil {
+			return nil, nil, fmt.Errorf("tag: %w", err)
+		}
+		created = append(created, tg)
+	}
+	return existing, created, nil
 }

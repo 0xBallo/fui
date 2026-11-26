@@ -10,13 +10,15 @@ import (
 )
 
 // newTxEditCmd changes the given fields of one transaction; unset flags leave their field
-// unchanged. --category "" clears the category.
+// unchanged. --category "" and --payee "" clear the field.
 func newTxEditCmd(deps *Deps) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "edit ID",
-		Short:   "Edit a transaction",
-		Args:    exactArgs(1),
-		Example: "  fui tx edit 42 --amount -15,00 --confirm-reconciled",
+		Use:   "edit ID",
+		Short: "Edit a transaction",
+		Args:  exactArgs(1),
+		Example: "  fui tx edit 42 --amount -15,00 --confirm-reconciled\n" +
+			"  fui tx edit 42 --payee Trattoria --tag outing --untag work\n" +
+			"  fui tx edit 42 --payee \"\"",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runTxEdit(cmd, deps, args[0])
 		},
@@ -28,6 +30,9 @@ func newTxEditCmd(deps *Deps) *cobra.Command {
 	cmd.Flags().String("category", "", "new category (empty clears it)")
 	cmd.Flags().String("status", "", "new status")
 	cmd.Flags().String("kind", "", "new kind")
+	cmd.Flags().String("payee", "", "new payee, created when it does not exist (empty clears it)")
+	cmd.Flags().StringArray("tag", nil, "tag to add, repeatable (created when it does not exist)")
+	cmd.Flags().StringArray("untag", nil, "tag to remove, repeatable")
 	cmd.Flags().Bool("confirm-reconciled", false, "allow editing a reconciled transaction")
 	return cmd
 }
@@ -47,12 +52,12 @@ func runTxEdit(cmd *cobra.Command, deps *Deps, idArg string) error {
 	if err != nil {
 		return err
 	}
-	return writeChange(cmd, deps, rt, plan.Plan, func() error {
+	return writeTxChange(cmd, deps, rt, plan.Plan, func() error {
 		tx, err := deps.Service.ApplyEditTx(ctx, plan)
 		if err != nil {
 			return err
 		}
-		return renderTxByID(ctx, deps, rt, tx.ID)
+		return renderTxWithNotices(ctx, deps, rt, tx.ID, plan.Notices)
 	})
 }
 
@@ -65,6 +70,9 @@ func editTxRequest(cmd *cobra.Command, id domain.TransactionID) app.EditTxReques
 	req.Category = changedString(cmd, "category")
 	req.Status = changedString(cmd, "status")
 	req.Kind = changedString(cmd, "kind")
+	req.Payee = changedString(cmd, "payee")
+	req.AddTags, _ = cmd.Flags().GetStringArray("tag")
+	req.RemoveTags, _ = cmd.Flags().GetStringArray("untag")
 	req.ConfirmReconciled, _ = cmd.Flags().GetBool("confirm-reconciled")
 	return req
 }

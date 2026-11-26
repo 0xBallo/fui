@@ -143,13 +143,13 @@ func TestQuantityValueRoundsOnce(t *testing.T) {
 		{"3", 0, 1999, 5997},
 	}
 	for _, tc := range tests {
-		got, err := qty(t, tc.q, tc.scale).Value(money(t, tc.price, "EUR"))
+		got, err := qty(t, tc.q, tc.scale).Value(eurPrice(t, tc.price))
 		if err != nil || got.Minor() != tc.want {
 			t.Errorf("%s × %d = %v, %v; want %d", tc.q, tc.price, got, err, tc.want)
 		}
 	}
 	big, _ := NewQuantity(1<<62, 0)
-	if _, err := big.Value(money(t, 1<<40, "EUR")); !errors.Is(err, ErrOverflow) {
+	if _, err := big.Value(eurPrice(t, 1<<40)); !errors.Is(err, ErrOverflow) {
 		t.Errorf("overflow err = %v", err)
 	}
 }
@@ -197,7 +197,7 @@ func TestNewSecurity(t *testing.T) {
 func TestNewSecurityOp(t *testing.T) {
 	ok := SecurityOp{
 		Date: mustDate(t, "2026-01-05"), Account: 1, Security: 2, Kind: OpBuy,
-		Quantity: qty(t, "2", 0), UnitPrice: money(t, 1000, "EUR"),
+		Quantity: qty(t, "2", 0), UnitPrice: eurPrice(t, 1000),
 	}
 	got, err := NewSecurityOp(ok)
 	if err != nil || got.Fees.Minor() != 0 || got.Fees.Currency().Code() != "EUR" {
@@ -212,8 +212,8 @@ func TestNewSecurityOp(t *testing.T) {
 		"account":     {func(o *SecurityOp) { o.Account = 0 }, ErrMissingField},
 		"security":    {func(o *SecurityOp) { o.Security = 0 }, ErrMissingField},
 		"zero qty":    {func(o *SecurityOp) { o.Quantity = qty(t, "0", 0) }, ErrInvalidValue},
-		"no price":    {func(o *SecurityOp) { o.UnitPrice = Money{} }, ErrMissingField},
-		"neg price":   {func(o *SecurityOp) { o.UnitPrice = money(t, -1, "EUR") }, ErrInvalidValue},
+		"no price":    {func(o *SecurityOp) { o.UnitPrice = Price{} }, ErrMissingField},
+		"neg price":   {func(o *SecurityOp) { o.UnitPrice = eurPrice(t, -1) }, ErrInvalidValue},
 		"fees ccy":    {func(o *SecurityOp) { o.Fees = money(t, 1, "USD") }, ErrCurrencyMismatch},
 		"neg fees":    {func(o *SecurityOp) { o.Fees = money(t, -1, "EUR") }, ErrInvalidValue},
 		"unknown knd": {func(o *SecurityOp) { o.Kind = "swap" }, ErrInvalidValue},
@@ -234,7 +234,7 @@ func testSec(t tb, scale int) Security {
 func op(t tb, kind SecurityOpKind, date, q string, scale int, price, fees int64) SecurityOp {
 	return SecurityOp{
 		Date: mustDate(t, date), Account: 1, Security: 7, Kind: kind,
-		Quantity: qty(t, q, scale), UnitPrice: money(t, price, "EUR"), Fees: money(t, fees, "EUR"),
+		Quantity: qty(t, q, scale), UnitPrice: eurPrice(t, price), Fees: money(t, fees, "EUR"),
 	}
 }
 
@@ -248,10 +248,10 @@ func TestComputePosition(t *testing.T) {
 		op(t, OpBuy, "2026-06-01", "1", 0, 1, 0),        // after asOf
 	}
 	prices := []SecurityPrice{
-		{Security: 7, Date: mustDate(t, "2026-01-02"), Price: money(t, 1000, "EUR")},
-		{Security: 7, Date: mustDate(t, "2026-03-15"), Price: money(t, 1400, "EUR")},
-		{Security: 7, Date: mustDate(t, "2026-04-15"), Price: money(t, 9999, "EUR")}, // after asOf
-		{Security: 8, Date: mustDate(t, "2026-03-16"), Price: money(t, 1, "EUR")},    // other security
+		{Security: 7, Date: mustDate(t, "2026-01-02"), Price: priceOf(t, 1000, 2, "EUR")},
+		{Security: 7, Date: mustDate(t, "2026-03-15"), Price: priceOf(t, 1400, 2, "EUR")},
+		{Security: 7, Date: mustDate(t, "2026-04-15"), Price: priceOf(t, 9999, 2, "EUR")}, // after asOf
+		{Security: 8, Date: mustDate(t, "2026-03-16"), Price: priceOf(t, 1, 2, "EUR")},    // other security
 	}
 	got, err := ComputePosition(sec, ops, prices, mustDate(t, "2026-03-31"))
 	if err != nil {
@@ -261,10 +261,10 @@ func TestComputePosition(t *testing.T) {
 		Security: 7, AsOf: mustDate(t, "2026-03-31"), Quantity: qty(t, "15", 0),
 		CostBasis: money(t, 16575, "EUR"), AvgCost: money(t, 1105, "EUR"),
 		Realized: money(t, 1925, "EUR"), Income: money(t, 300, "EUR"),
-		HasPrice: true, LastPrice: money(t, 1400, "EUR"), PriceDate: mustDate(t, "2026-03-15"),
+		HasPrice: true, LastPrice: priceOf(t, 1400, 2, "EUR"), PriceDate: mustDate(t, "2026-03-15"),
 		MarketValue: money(t, 21000, "EUR"), Unrealized: money(t, 4425, "EUR"),
 	}
-	if d := cmp.Diff(want, got, cmp.AllowUnexported(Quantity{}, Money{}, Currency{}, Date{})); d != "" {
+	if d := cmp.Diff(want, got, cmp.AllowUnexported(Quantity{}, Price{}, Money{}, Currency{}, Date{})); d != "" {
 		t.Errorf("position mismatch (-want +got):\n%s", d)
 	}
 }
@@ -311,13 +311,13 @@ func TestComputePositionErrors(t *testing.T) {
 	})
 	t.Run("op currency", func(t *testing.T) {
 		o := op(t, OpBuy, "2026-01-01", "1", 0, 100, 0)
-		o.UnitPrice = money(t, 100, "USD")
+		o.UnitPrice = priceOf(t, 100, 2, "USD")
 		if _, err := ComputePosition(sec, []SecurityOp{o}, nil, asOf); !errors.Is(err, ErrCurrencyMismatch) {
 			t.Fatalf("err = %v", err)
 		}
 	})
 	t.Run("price currency", func(t *testing.T) {
-		p := []SecurityPrice{{Security: 7, Date: mustDate(t, "2026-01-01"), Price: money(t, 1, "USD")}}
+		p := []SecurityPrice{{Security: 7, Date: mustDate(t, "2026-01-01"), Price: priceOf(t, 1, 2, "USD")}}
 		if _, err := ComputePosition(sec, nil, p, asOf); !errors.Is(err, ErrCurrencyMismatch) {
 			t.Fatalf("err = %v", err)
 		}
@@ -332,8 +332,8 @@ func TestComputePositionErrors(t *testing.T) {
 
 func TestLastPriceOnOrBefore(t *testing.T) {
 	prices := []SecurityPrice{
-		{Security: 1, Date: mustDate(t, "2026-01-02"), Price: money(t, 1, "EUR")},
-		{Security: 1, Date: mustDate(t, "2026-01-02"), Price: money(t, 2, "EUR")},
+		{Security: 1, Date: mustDate(t, "2026-01-02"), Price: priceOf(t, 1, 2, "EUR")},
+		{Security: 1, Date: mustDate(t, "2026-01-02"), Price: priceOf(t, 2, 2, "EUR")},
 	}
 	got, ok := LastPriceOnOrBefore(prices, 1, mustDate(t, "2026-01-02"))
 	if !ok || got.Price.Minor() != 2 {
@@ -356,7 +356,7 @@ func TestPositionQuantityProperty(t *testing.T) {
 			q, _ := NewQuantity(u, 8)
 			return SecurityOp{
 				Date: date, Account: 1, Security: 7, Kind: kind, Quantity: q,
-				UnitPrice: money(t, price, "EUR"), Fees: money(t, 3, "EUR"),
+				UnitPrice: eurPrice(t, price), Fees: money(t, 3, "EUR"),
 			}
 		}
 		for _, b := range buys {
@@ -381,7 +381,7 @@ func TestPositionQuantityProperty(t *testing.T) {
 		if a.Quantity.Units() != total-sold {
 			t.Fatalf("quantity = %d, want %d", a.Quantity.Units(), total-sold)
 		}
-		if diff := cmp.Diff(a, b, cmp.AllowUnexported(Quantity{}, Money{}, Currency{}, Date{})); diff != "" {
+		if diff := cmp.Diff(a, b, cmp.AllowUnexported(Quantity{}, Price{}, Money{}, Currency{}, Date{})); diff != "" {
 			t.Fatalf("order dependent:\n%s", diff)
 		}
 	})

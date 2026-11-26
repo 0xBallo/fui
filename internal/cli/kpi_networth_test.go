@@ -169,3 +169,55 @@ func TestKPINetWorthIncludesPositionsAndAssetsComponents(t *testing.T) {
 		t.Fatalf("stdout = %q, want total 21150000 with positions and assets", out)
 	}
 }
+
+// TestKPINetWorthItemizesAssets covers the per-asset itemization: JSON asset_lines, extra table
+// and CSV rows, unchanged totals, and no trace when the assets module is off.
+func TestKPINetWorthItemizesAssets(t *testing.T) {
+	h := newHarness(t)
+	enableModules(t, h, module.Assets)
+	h.account("Cash", "checking", "EUR", "1000")
+	ctx := context.Background()
+	enabled, err := h.cfg.ModulesEnabled()
+	if err != nil {
+		t.Fatalf("ModulesEnabled: %v", err)
+	}
+	svc := newAssetService(t, h)
+	plan, err := svc.PlanAdd(ctx, enabled, assetting.AddRequest{
+		Name: "House", Kind: "property", Value: "200000", PurchaseDate: "2026-01-01",
+	})
+	if err != nil {
+		t.Fatalf("PlanAdd: %v", err)
+	}
+	if _, err := svc.ApplyAdd(ctx, plan); err != nil {
+		t.Fatalf("ApplyAdd: %v", err)
+	}
+
+	args := []string{"kpi", "networth", "--at", "2026-03-01"}
+	out, _, err := runWithAssetCommands(h, enabled, append(args, "--json")...)
+	if err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	want := `"asset_lines":[{"name":"House","currency":"EUR","value":20000000,"debt":0,"net":20000000,"loan":""}]`
+	if !strings.Contains(out, want) {
+		t.Fatalf("stdout = %q, want %s", out, want)
+	}
+	if !strings.Contains(out, `"total":20100000`) {
+		t.Fatalf("stdout = %q, want total 20100000 (cash + assets, itemization adds nothing)", out)
+	}
+	csv, _, err := runWithAssetCommands(h, enabled, append(args, "--csv")...)
+	if err != nil || !strings.Contains(csv, "ASSET House,EUR,,,200000.00,0.00,200000.00") {
+		t.Fatalf("csv = %q err=%v, want ASSET row", csv, err)
+	}
+	table, _, err := runWithAssetCommands(h, enabled, args...)
+	if err != nil || !strings.Contains(table, "ASSET House") {
+		t.Fatalf("table = %q err=%v, want ASSET row", table, err)
+	}
+
+	off, _, err := runWithAssetCommands(h, module.Default(), append(args, "--json")...)
+	if err != nil {
+		t.Fatalf("off: %v", err)
+	}
+	if strings.Contains(off, "asset_lines") {
+		t.Fatalf("stdout = %q, want no asset_lines with assets off", off)
+	}
+}

@@ -84,10 +84,57 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 			return bail(stderr, asJSON, err)
 		}
 		defer func() { _ = closeStore() }()
+		catchUp(ctx, logger, cfg, appClock, deps, args)
 	}
 
 	logger.Debug("executing command", "args", args)
 	return cli.Execute(ctx, deps, args)
+}
+
+// catchUpSkipVerbs are the commands that must not materialise due recurrences and installments:
+// they manage the archive itself, or run without needing its content.
+var catchUpSkipVerbs = map[string]bool{
+	"help": true, "completion": true, "__complete": true, "init": true, "reset": true, "restore": true,
+	"backup": true, "version": true, "config": true, "skill": true,
+}
+
+// SkipsCatchup reports whether args must not run the startup catch-up: the archive-management and
+// store-free verbs, help/version flags and --dry-run, which must never write.
+func SkipsCatchup(args []string) bool {
+	for _, a := range args {
+		switch a {
+		case "-h", "--help", "--version", "--dry-run":
+			return true
+		}
+	}
+	return catchUpSkipVerbs[firstVerb(args)]
+}
+
+// catchUp creates the pending transactions of recurrences and loan installments due through today
+// before the command or the TUI starts. A failure is logged and never aborts the command. A bare
+// invocation starts the TUI through the same wireStore path, so it is covered too.
+func catchUp(ctx context.Context, logger *slog.Logger, cfg *config.Config, clk app.Clock, deps *cli.Deps, args []string) {
+	if SkipsCatchup(args) {
+		return
+	}
+	modules, err := cfg.ModulesEnabled()
+	if err != nil {
+		logger.Warn("startup catch-up skipped", "err", err)
+		return
+	}
+	today, err := domain.FromTime(clk.Now().In(time.Local))
+	if err != nil {
+		logger.Warn("startup catch-up skipped", "err", err)
+		return
+	}
+	n, err := app.Catchup(ctx, modules, today, deps.Recurring, deps.Loans)
+	if err != nil {
+		logger.Warn("startup catch-up failed", "err", err)
+		return
+	}
+	if n > 0 {
+		logger.Info("startup catch-up created pending transactions", "count", n)
+	}
 }
 
 // bootstrap resolves the configuration and sets up file logging, in that order: logging needs
@@ -135,8 +182,13 @@ func wireStore(ctx context.Context, cfg *config.Config, appClock app.Clock, deps
 		_ = store.Close()
 		return nil, fmt.Errorf("parse base currency %q: %w", cfg.Currency, err)
 	}
+	modules, err := cfg.ModulesEnabled()
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("resolve modules.enabled: %w", err)
+	}
 	deps.Service = app.New(store, appClock, store, app.Config{
-		Locale: domain.Locale(cfg.Locale), BaseCurrency: baseCurrency,
+		Locale: domain.Locale(cfg.Locale), BaseCurrency: baseCurrency, Modules: modules,
 	})
 	rep, err := newReporting(store, store, appClock, cfg, baseCurrency)
 	if err != nil {
@@ -149,19 +201,14 @@ func wireStore(ctx context.Context, cfg *config.Config, appClock app.Clock, deps
 		Timeout:  cfg.Connectors.Timeout.Duration(),
 		Profiles: cfg.Import.Profiles,
 		Currency: cfg.Currency,
-	})
-	deps.Rules = rules.New(store, store)
-	modules, err := cfg.ModulesEnabled()
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("resolve modules.enabled: %w", err)
-	}
+	}).WithCSVDetector(connector.CSVFileDetector{})
+	deps.Rules = rules.New(store, store).WithClock(appClock)
 	deps.Budgeting = budgeting.New(store, appClock, budgeting.Config{
 		Locale: domain.Locale(cfg.Locale), BaseCurrency: baseCurrency, MonthStartDay: cfg.MonthStartDay,
 		Mode: domain.BudgetMode(cfg.Budget.Mode), Modules: modules,
 	})
 	deps.Recurring = recurring.New(store, appClock, store, recurring.Config{Locale: domain.Locale(cfg.Locale)})
-	deps.Loans = lending.New(store, appClock, store, lending.Config{Locale: domain.Locale(cfg.Locale)})
+	deps.Loans = lending.New(store, appClock, store, lending.Config{Locale: domain.Locale(cfg.Locale), Recurring: deps.Recurring})
 	loc := domain.Locale(cfg.Locale)
 	deps.Investing = investing.New(store, appClock, investing.Config{Locale: loc, BaseCurrency: baseCurrency, Modules: modules})
 	deps.Assets = assetting.New(store, appClock, store, assetting.Config{Locale: loc, BaseCurrency: baseCurrency})
@@ -190,7 +237,7 @@ func tuiConfig(cfg *config.Config, deps *cli.Deps, store *sqlite.Store, clk app.
 	analytics := func() *reporting.Analytics {
 		return reporting.NewAnalytics(store, clk, store, reporting.Config{
 			Locale: loc, BaseCurrency: base, MonthStartDay: cfg.MonthStartDay,
-			HorizonDays: cfg.Forecast.Horizon, Modules: modules(),
+			Horizon: string(cfg.Forecast.Horizon), MinBalance: cfg.Forecast.MinBalance, Modules: modules(),
 		})
 	}
 	return tui.Config{
@@ -204,12 +251,15 @@ func tuiConfig(cfg *config.Config, deps *cli.Deps, store *sqlite.Store, clk app.
 			})
 		}},
 		AlertRecurring: recurrenceAlerts{svc: deps.Recurring, modules: modules},
+		Pending: pendingActions{
+			txs: deps.Service, recurring: deps.Recurring, loans: deps.Loans, modules: modules,
+		},
 		Budget: budgetUseCases{build: func() *budgeting.Service {
 			return budgeting.New(store, clk, budgeting.Config{
 				Locale: loc, BaseCurrency: base, MonthStartDay: cfg.MonthStartDay,
 				Mode: domain.BudgetMode(cfg.Budget.Mode), Modules: modules(),
 			})
-		}},
+		}, today: deps.Service.Today, lists: lookups{svc: deps.Service}},
 		Report: reportUseCases{
 			analytics: analytics,
 			svc:       deps.Service, importing: deps.Importing,
@@ -277,11 +327,13 @@ func newReporting(
 	if err != nil {
 		return cli.Reporting{}, fmt.Errorf("resolve modules.enabled: %w", err)
 	}
+	runway = runway.WithModules(modules)
 	analytics := reporting.NewAnalytics(store, clk, source, reporting.Config{
 		Locale:        domain.Locale(cfg.Locale),
 		BaseCurrency:  baseCurrency,
 		MonthStartDay: cfg.MonthStartDay,
-		HorizonDays:   cfg.Forecast.Horizon,
+		Horizon:       string(cfg.Forecast.Horizon),
+		MinBalance:    cfg.Forecast.MinBalance,
 		Modules:       modules,
 	})
 	return cli.Reporting{Spending: spending, CashFlow: cashFlow, Runway: runway, Analytics: analytics}, nil
