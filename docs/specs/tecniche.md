@@ -565,6 +565,8 @@ Le regressioni si prevengono su tre fronti: invarianti verificate automaticament
 
 **Dati di test** — generatori di archivi sintetici in `internal/testutil/fixture` (conti, anni di movimenti, ricorrenze, finanziamenti) con seed fisso; gli export bancari reali entrano nel repository solo dopo l'anonimizzazione con lo script `tools/anonymize`.
 
+**Prova manuale della TUI** — `make demo` (`tools/demo/seed.sh`) crea in `.scratch/demo` un archivio sintetico con 12 mesi di movimenti su 6 conti (EUR e USD). `HOME` e le directory XDG sono reindirizzate lì, quindi l'archivio reale non viene toccato. Per aprire la TUI su quei dati, lanciare `./fui` dalla directory demo con le stesse variabili `HOME`/`XDG_*` puntate a essa. Lo script rifiuta di rieseguire il seed se l'archivio esiste già: cancellare la directory per ripartire.
+
 ## CI/CD e distribuzione
 
 La pipeline gira su GitHub Actions per ogni pull request e per ogni push su `develop` e `main`, ed esegue gli stessi target del `Makefile` usati in locale: se `make check` passa sul portatile, passa anche in CI. Un tag `vX.Y.Z` su `main` produce un rilascio completo senza passi manuali.

@@ -78,6 +78,16 @@ ambiguous input fails with `missing_field` instead of guessing.
 ```sh
 make check   # fmt, generate (no diff), lint, test -race ./...
 make bench   # non-functional-target benchmarks
+make demo    # seed a synthetic archive in .scratch/demo (never touches your real one)
 ```
+
+Try the TUI on the demo data (the env overrides keep it away from your real archive):
+
+```sh
+cd .scratch/demo
+HOME=$PWD XDG_CONFIG_HOME=$PWD/config XDG_DATA_HOME=$PWD/data XDG_STATE_HOME=$PWD/state ./fui
+```
+
+`make demo` refuses to reseed an existing `.scratch/demo`; delete the directory to start over.
 
 See `AGENTS.md` for the full contributor/agent workflow and commit conventions.
