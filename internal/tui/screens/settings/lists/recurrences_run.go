@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app/recurring"
 	"github.com/0xballo/fui/internal/tui/components"
@@ -68,7 +68,7 @@ func (m *Recurrences) applyRun() tea.Cmd {
 
 // handleRunKey: enter plans the typed date first and applies only when the preview already matches
 // it, so the count shown is always the count that gets created.
-func (m *Recurrences) handleRunKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Recurrences) handleRunKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.err = nil

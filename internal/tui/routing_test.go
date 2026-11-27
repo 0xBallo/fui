@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/tui/screens"
@@ -26,8 +26,8 @@ func TestAsyncResultReachesInactiveTab(t *testing.T) {
 	m, _ = m.Update(load())
 
 	m, _ = sendRunes(m, "2") // the reload this starts is deliberately not run
-	if !strings.Contains(m.View(), "Late arrival") {
-		t.Fatalf("Transactions did not receive its result while inactive:\n%s", m.View())
+	if !strings.Contains(plainView(m), "Late arrival") {
+		t.Fatalf("Transactions did not receive its result while inactive:\n%s", plainView(m))
 	}
 }
 
@@ -48,7 +48,7 @@ func TestSwitchScreenFilterRouting(t *testing.T) {
 	t.Run("receiver applies the filter", func(t *testing.T) {
 		m, cmd := seeded(t).Update(screens.SwitchScreenMsg{Target: screens.TabTransactions, Filter: filter})
 		m = run(t, m, cmd)
-		v := m.View()
+		v := plainView(m)
 		if !strings.Contains(v, "Cheese") || strings.Contains(v, "Cinema") || !strings.Contains(v, "Category: Groceries") {
 			t.Fatalf("filter not applied:\n%s", v)
 		}
@@ -60,7 +60,7 @@ func TestSwitchScreenFilterRouting(t *testing.T) {
 			t.Fatal("switching must still init the target screen")
 		}
 		m = run(t, m, cmd)
-		if v := m.View(); strings.Contains(v, "Category: Groceries") {
+		if v := plainView(m); strings.Contains(v, "Category: Groceries") {
 			t.Fatalf("filter leaked into Accounts:\n%s", v)
 		}
 	})
@@ -68,7 +68,7 @@ func TestSwitchScreenFilterRouting(t *testing.T) {
 	t.Run("nil filter keeps the plain switch", func(t *testing.T) {
 		m, cmd := seeded(t).Update(screens.SwitchScreenMsg{Target: screens.TabTransactions})
 		m = run(t, m, cmd)
-		if v := m.View(); !strings.Contains(v, "Cinema") {
+		if v := plainView(m); !strings.Contains(v, "Cinema") {
 			t.Fatalf("unfiltered list expected:\n%s", v)
 		}
 	})

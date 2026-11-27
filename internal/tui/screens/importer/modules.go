@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/module"
@@ -56,7 +56,7 @@ func (m *Model) openModules() (screens.Screen, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleModulesKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleModulesKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	n := len(m.plan.ModuleRecords)
 	switch {
 	case key.Matches(msg, m.km.Up):

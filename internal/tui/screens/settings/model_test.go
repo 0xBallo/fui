@@ -5,7 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/0xballo/fui/internal/config"
 	"github.com/0xballo/fui/internal/module"
@@ -35,11 +37,11 @@ func run(t *testing.T, scr screens.Screen, cmd tea.Cmd) screens.Screen {
 }
 
 func sendRunes(scr screens.Screen, s string) (screens.Screen, tea.Cmd) {
-	return scr.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)})
+	return scr.Update(tea.KeyPressMsg{Code: []rune(s)[0], Text: s})
 }
 
-func sendKey(scr screens.Screen, k tea.KeyType) (screens.Screen, tea.Cmd) {
-	return scr.Update(tea.KeyMsg{Type: k})
+func sendKey(scr screens.Screen, k rune) (screens.Screen, tea.Cmd) {
+	return scr.Update(tea.KeyPressMsg{Code: k})
 }
 
 // newFixture builds a settings screen over a real app.Service and a *config.Config backed by a
@@ -61,7 +63,7 @@ func TestSettingsLoadShowsModulesAndTheme(t *testing.T) {
 	_, scr := newFixture(t)
 	scr = run(t, scr, scr.Init())
 
-	view := scr.View()
+	view := ansi.Strip(scr.View())
 	if !strings.Contains(view, "core") || !strings.Contains(view, "yes") {
 		t.Fatalf("expected the core module listed as enabled, got:\n%s", view)
 	}

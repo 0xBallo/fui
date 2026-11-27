@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -31,7 +31,7 @@ func (m *Categories) openForm(name string) {
 	m.form.Focus()
 }
 
-func (m *Categories) handleFormKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Categories) handleFormKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.mode = categoriesList
@@ -118,7 +118,7 @@ func (m *Categories) openReassignForm(plan app.RemoveCategoryPlan) {
 	m.form.Focus()
 }
 
-func (m *Categories) handleReassignKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Categories) handleReassignKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.mode = categoriesList

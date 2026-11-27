@@ -4,12 +4,12 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/tui/theme"
 )
 
-func press(d DatePicker, keys ...tea.KeyMsg) DatePicker {
+func press(d DatePicker, keys ...tea.KeyPressMsg) DatePicker {
 	for _, k := range keys {
 		d, _ = d.Update(k)
 	}
@@ -19,20 +19,20 @@ func press(d DatePicker, keys ...tea.KeyMsg) DatePicker {
 func TestDatePicker(t *testing.T) {
 	loc := time.FixedZone("UTC+14", 14*3600)
 	start := time.Date(2026, 2, 28, 23, 30, 0, 0, loc)
-	right := tea.KeyMsg{Type: tea.KeyRight}
-	enter := tea.KeyMsg{Type: tea.KeyEnter}
+	right := tea.KeyPressMsg{Code: tea.KeyRight}
+	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
 
 	tests := []struct {
 		name   string
-		keys   []tea.KeyMsg
+		keys   []tea.KeyPressMsg
 		want   string
 		wantOK bool
 	}{
-		{"enter keeps date", []tea.KeyMsg{enter}, "2026-02-28", true},
-		{"next day crosses month", []tea.KeyMsg{right, enter}, "2026-03-01", true},
-		{"pgdown after next day", []tea.KeyMsg{right, {Type: tea.KeyPgDown}, enter}, "2026-04-01", true},
-		{"pgup", []tea.KeyMsg{{Type: tea.KeyPgUp}, enter}, "2026-01-28", true},
-		{"esc cancels", []tea.KeyMsg{right, {Type: tea.KeyEsc}, enter}, "", false},
+		{"enter keeps date", []tea.KeyPressMsg{enter}, "2026-02-28", true},
+		{"next day crosses month", []tea.KeyPressMsg{right, enter}, "2026-03-01", true},
+		{"pgdown after next day", []tea.KeyPressMsg{right, {Code: tea.KeyPgDown}, enter}, "2026-04-01", true},
+		{"pgup", []tea.KeyPressMsg{{Code: tea.KeyPgUp}, enter}, "2026-01-28", true},
+		{"esc cancels", []tea.KeyPressMsg{right, {Code: tea.KeyEsc}, enter}, "", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -1,13 +1,12 @@
 package importer_test
 
 import (
-	"bytes"
 	"strings"
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/exp/teatest"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/module"
@@ -16,21 +15,36 @@ import (
 	"github.com/0xballo/fui/internal/tui/theme"
 )
 
-func waitFor(t *testing.T, tm *teatest.TestModel, text string) {
-	t.Helper()
-	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return bytes.Contains(b, []byte(text))
-	}, teatest.WithDuration(3*time.Second))
+// flow is a running teatest program together with the model it drives.
+type flow struct {
+	*teatest.TestModel
+	m *screenModel
 }
 
-func enter(tm *teatest.TestModel) { tm.Send(tea.KeyMsg{Type: tea.KeyEnter}) }
+// waitFor polls the latest frame for text. The output stream cannot be searched: Bubble Tea v2
+// writes only the cells that changed, so text already on screen is not repeated.
+func waitFor(t *testing.T, f *flow, text string) {
+	t.Helper()
+	timeout := time.After(3 * time.Second)
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	for !strings.Contains(f.m.lastView(), text) {
+		select {
+		case <-timeout:
+			t.Fatalf("%q not shown after 3s; last frame:\n%s", text, f.m.lastView())
+		case <-tick.C:
+		}
+	}
+}
+
+func enter(tm interface{ Send(tea.Msg) }) { tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter}) }
 
 // startFlow runs m under teatest at 80x24, waits for the connector suggestions and opens the
 // source form.
-func startFlow(t *testing.T, m *importer.Model) *teatest.TestModel {
+func startFlow(t *testing.T, m *importer.Model) *flow {
 	t.Helper()
 	model := &screenModel{scr: screens.Screen(m), width: 80, height: 24}
-	tm := teatest.NewTestModel(t, model, teatest.WithInitialTermSize(80, 24))
+	tm := &flow{TestModel: teatest.NewTestModel(t, model, teatest.WithInitialTermSize(80, 24)), m: model}
 	waitFor(t, tm, "No import in progress.")
 	typeRunes(tm, "n")
 	waitFor(t, tm, "> csv")
@@ -38,7 +52,7 @@ func startFlow(t *testing.T, m *importer.Model) *teatest.TestModel {
 }
 
 // planRich types the rich stream's connector and file and submits the source form.
-func planRich(t *testing.T, tm *teatest.TestModel) {
+func planRich(t *testing.T, tm *flow) {
 	t.Helper()
 	typeRunes(tm, "fui")
 	enter(tm) // accept the suggestion
@@ -50,12 +64,12 @@ func planRich(t *testing.T, tm *teatest.TestModel) {
 	waitFor(t, tm, "Import preview")
 }
 
-func finish(t *testing.T, tm *teatest.TestModel) string {
+func finish(t *testing.T, tm *flow) string {
 	t.Helper()
 	if err := tm.Quit(); err != nil {
 		t.Fatalf("Quit: %v", err)
 	}
-	return tm.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)).View()
+	return tm.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)).View().Content
 }
 
 func richFlowModel(t *testing.T, mods *recordingModules) *importer.Model {
@@ -72,7 +86,7 @@ func richFlowModel(t *testing.T, mods *recordingModules) *importer.Model {
 func TestTeatestAcceptTransfer(t *testing.T) {
 	tm := startFlow(t, richFlowModel(t, &recordingModules{}))
 	planRich(t, tm)
-	tm.Send(tea.KeyMsg{Type: tea.KeyTab})
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyTab})
 	waitFor(t, tm, "Transfer proposals")
 	for range 5 { // Errors, error, Warnings, warning, Transfer proposals, proposal
 		typeRunes(tm, "j")
@@ -115,7 +129,7 @@ func TestTeatestMapCSVColumnsAndSave(t *testing.T) {
 	tm := startFlow(t, m)
 	enter(tm) // connector -> file
 	typeRunes(tm, "bank.csv")
-	tm.Send(tea.KeyMsg{Type: tea.KeyCtrlP})
+	tm.Send(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
 	waitFor(t, tm, "Map CSV columns")
 	typeRunes(tm, "mybank")
 	for range 5 {

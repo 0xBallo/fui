@@ -4,9 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 
 	"github.com/0xballo/fui/internal/tui/components"
 	"github.com/0xballo/fui/internal/tui/theme"
@@ -37,9 +36,6 @@ func TestChips(t *testing.T) {
 }
 
 func TestRowStyleAndBarStyle(t *testing.T) {
-	prev := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.ANSI256)
-	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
 	red := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 
 	tbl := components.NewTable([]components.Column{{Title: "A", Width: 6}}, theme.Default())

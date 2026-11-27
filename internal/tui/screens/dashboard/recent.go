@@ -3,10 +3,10 @@ package dashboard
 import (
 	"context"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/0xballo/fui/internal/app"
@@ -62,7 +62,7 @@ func (s *recentSection) update(msg tea.Msg) (tea.Cmd, bool) {
 			s.items, s.err, s.loaded = msg.items, msg.err, true
 		}
 		return nil, true
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if key.Matches(msg, s.all) {
 			return func() tea.Msg { return screens.SwitchScreenMsg{Target: screens.TabTransactions} }, true
 		}

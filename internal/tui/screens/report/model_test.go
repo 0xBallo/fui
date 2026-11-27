@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/importing"
@@ -279,12 +279,12 @@ func run(t *testing.T, s scr.Screen, cmd tea.Cmd) scr.Screen {
 	return s
 }
 
-func sendKey(s scr.Screen, k tea.KeyType) (scr.Screen, tea.Cmd) {
-	return s.Update(tea.KeyMsg{Type: k})
+func sendKey(s scr.Screen, k rune) (scr.Screen, tea.Cmd) {
+	return s.Update(tea.KeyPressMsg{Code: k})
 }
 
 func sendRunes(s scr.Screen, str string) (scr.Screen, tea.Cmd) {
-	return s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(str)})
+	return s.Update(tea.KeyPressMsg{Code: []rune(str)[0], Text: str})
 }
 
 func TestReportTitleAndKeyMap(t *testing.T) {

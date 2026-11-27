@@ -1,18 +1,20 @@
 package tui
 
 import (
+	"os"
 	"regexp"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/0xballo/fui/internal/tui/theme"
 )
 
 const (
 	// bannerRows is the height of the ASCII-art header.
-	bannerRows = 3
+	bannerRows = 7
 	// bannerMinHeight is the smallest terminal height that gets the full banner; below it the
 	// title shrinks to one line in the tab bar.
 	bannerMinHeight = 30
@@ -21,11 +23,16 @@ const (
 	authorURL  = "https://github.com/0xBallo"
 )
 
-// bannerLogo is the hand-drawn "FinanceUI" logo, three rows of half-block glyphs, 35 columns wide.
+// bannerLogo is the hand-drawn "FINANCEUI" logo, seven rows of full-block glyphs with a light-shade
+// shadow, 52 columns wide.
 var bannerLogo = [bannerRows]string{
-	"█▀▀ ▄ █▀▄ ▄▀▄ █▀▄ █▀▀ █▀▀ █ █ ▀█▀",
-	"█▀▀ █ █ █ █▀█ █ █ █   █▀▀ █ █  █ ",
-	"▀   ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀▀▀ ▀▀▀ ▀▀▀ ▀▀▀",
+	"█████ ███ █   █  ███  █   █  ███  █████ █   █ ███   ",
+	"█░░░░░ █░░██  █░█ ░░█ ██  █░█ ░░░ █░░░░░█░  █░ █░░  ",
+	"████░░░█░░█░█ █░█████░█░█ █░█░ ░░░████░░█░░ █░░█░░░ ",
+	"█░░░░  █░░█░░██░█░░░█░█░░██░█░░   █░░░░ █░░ █░░█░░  ",
+	"█░░░░░███░█░░ █░█░░░█░█░░ █░░███  █████░ ███ ░███░  ",
+	" ░░    ░░░ ░░  ░░░░  ░░░░  ░░ ░░░  ░░░░░  ░░░ ░░░░  ",
+	"  ░     ░░░ ░   ░ ░   ░ ░   ░  ░░░  ░░░░░  ░░░  ░░░ ",
 }
 
 var versionRE = regexp.MustCompile(`^v(\d+)\.(\d+)(\..*)?$`)
@@ -45,10 +52,10 @@ func formatVersion(v string) string {
 // authorLink renders the author name as an OSC 8 hyperlink; on terminals without color support
 // (and under the no-color theme) it stays plain text so escape sequences never leak into output.
 func authorLink() string {
-	if lipgloss.DefaultRenderer().ColorProfile() == termenv.Ascii {
+	if colorprofile.Detect(os.Stdout, os.Environ()) <= colorprofile.Ascii {
 		return authorName
 	}
-	return termenv.Hyperlink(authorURL, authorName)
+	return ansi.SetHyperlink(authorURL) + authorName + ansi.ResetHyperlink()
 }
 
 // byline is the "vX.Y by 0xBallo" text.

@@ -1,11 +1,11 @@
 package report
 
 import (
+	"image/color"
 	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
 	"github.com/google/go-cmp/cmp"
@@ -69,7 +69,7 @@ func TestSpentStyleTiers(t *testing.T) {
 		{"no budget spend", 0, 5, "negative"},
 		{"no budget no spend", 0, 0, "positive"},
 	}
-	styles := map[string]lipgloss.TerminalColor{
+	styles := map[string]color.Color{
 		"positive": th.Positive.GetForeground(), "warning": th.Warning.GetForeground(),
 		"caution": th.Caution.GetForeground(), "negative": th.Negative.GetForeground(),
 	}

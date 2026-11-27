@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -60,7 +60,7 @@ func pendingScreen(t *testing.T) (*Model, *fakePending) {
 }
 
 func typeKey(scr screens.Screen, s string) (screens.Screen, tea.Cmd) {
-	return scr.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)})
+	return scr.Update(tea.KeyPressMsg{Code: []rune(s)[0], Text: s})
 }
 
 func TestPendingConfirmBooksAndReloads(t *testing.T) {

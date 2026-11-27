@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app/budgeting"
 	"github.com/0xballo/fui/internal/domain"
@@ -132,13 +132,13 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 	case namesLoadedMsg:
 		m.bf.setSuggestions(msg)
 		return m, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
 	return m, nil
 }
 
-func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	if m.help.IsOpen() {
 		m.help, _ = m.help.Update(msg)
 		return m, nil
@@ -154,7 +154,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	return m.handleListKey(msg)
 }
 
-func (m *Model) handleListKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleListKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.km.Up):
 		m.table.MoveUp(1)
@@ -191,7 +191,7 @@ func (m *Model) navigate(delta int) tea.Cmd {
 	return m.load(month)
 }
 
-func (m *Model) handleConfirmKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleConfirmKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	yes, no := m.confirm.HandleKey(msg)
 	switch {
 	case yes:

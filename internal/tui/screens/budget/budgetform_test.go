@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/0xballo/fui/internal/app"
@@ -135,10 +135,10 @@ func TestBudgetNewEditFlow(t *testing.T) {
 	for range 7 { // categories, tags, period (+pick), amount, carry (+pick)
 		s = next(s)
 	}
-	s, _ = sendKey(s, tea.KeyCtrlU)
+	s, _ = s.Update(tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl})
 	s = typeInto(s, "60")
 	s = next(s)
-	s, _ = sendKey(s, tea.KeyCtrlU)
+	s, _ = s.Update(tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl})
 	s = typeInto(s, "90")
 	if s, err = submit(t, s); err != nil {
 		t.Fatalf("edit: %v", err)
@@ -172,8 +172,8 @@ func TestBudgetFormKeepsOpenOnError(t *testing.T) {
 
 	// bad thresholds: warn >= over is rejected by the app, a non-number never reaches it.
 	for _, bad := range []string{"150", "abc"} {
-		s, _ = sendKey(s, tea.KeyShiftTab)
-		s, _ = sendKey(s, tea.KeyCtrlU)
+		s, _ = s.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+		s, _ = s.Update(tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl})
 		s = typeInto(s, bad)
 		s = next(s)
 		if s, err = submit(t, s); err == nil {

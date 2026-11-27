@@ -3,7 +3,7 @@ package lists
 import (
 	"context"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app/assetting"
 	"github.com/0xballo/fui/internal/domain"
@@ -75,7 +75,7 @@ func (m *Assets) openLinkForm(name string, loans []string) {
 	m.startForm("Link loan: "+name, func() tea.Cmd { return m.submitLink(name) }, &f.loan)
 }
 
-func (m *Assets) handleFormKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Assets) handleFormKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.mode = m.base()

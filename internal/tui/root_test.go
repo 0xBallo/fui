@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -28,13 +28,20 @@ func run(t *testing.T, m tea.Model, cmd tea.Cmd) tea.Model {
 	t.Helper()
 	for cmd != nil {
 		msg := cmd()
+		// Root.Init batches the background color query with the first screen load.
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			for _, c := range batch {
+				m = run(t, m, c)
+			}
+			return m
+		}
 		m, cmd = m.Update(msg)
 	}
 	return m
 }
 
 func sendRunes(m tea.Model, s string) (tea.Model, tea.Cmd) {
-	return m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)})
+	return m.Update(tea.KeyPressMsg{Code: []rune(s)[0], Text: s})
 }
 
 func newRoot(t *testing.T) (screentest.Fixture, tea.Model) {
@@ -57,7 +64,7 @@ func TestNoKeyCollisions(t *testing.T) {
 	assertNoDuplicates(t, "root", global)
 
 	for _, name := range []string{"Dashboard", "Transactions", "Accounts"} {
-		scr, _ := root.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(screenSwitchKey(name))})
+		scr, _ := root.Update(tea.KeyPressMsg{Code: []rune(screenSwitchKey(name))[0], Text: screenSwitchKey(name)})
 		r := scr.(*tui.Root)
 		bindings := activeScreenKeyMap(t, r, name)
 		assertNoDuplicates(t, name, bindings)
@@ -78,7 +85,7 @@ func screenSwitchKey(name string) string {
 
 func activeScreenKeyMap(t *testing.T, r *tui.Root, name string) []key.Binding {
 	t.Helper()
-	view := r.View()
+	view := plainView(r)
 	if !strings.Contains(view, name) {
 		t.Fatalf("expected the %s tab to be active, got:\n%s", name, view)
 	}
@@ -120,13 +127,13 @@ func TestRootNavigatesTabs(t *testing.T) {
 	fx.Account(t, app.AddAccountRequest{Name: "Checking", Kind: "checking", Currency: "EUR", OpeningBalance: "100", OpenedOn: "2026-01-01"})
 
 	m = run(t, m, m.Init())
-	if !strings.Contains(m.View(), "Dashboard") {
-		t.Fatalf("expected the dashboard tab active at start, got:\n%s", m.View())
+	if !strings.Contains(plainView(m), "Dashboard") {
+		t.Fatalf("expected the dashboard tab active at start, got:\n%s", plainView(m))
 	}
 
 	m, cmd := sendRunes(m, "3")
 	m = run(t, m, cmd)
-	view := m.View()
+	view := plainView(m)
 	if !strings.Contains(view, "Checking") {
 		t.Fatalf("expected the accounts screen after switching to tab 3, got:\n%s", view)
 	}
@@ -151,7 +158,7 @@ func TestRootMinimumSizeWarning(t *testing.T) {
 	m = run(t, m, m.Init())
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 40, Height: 10})
 
-	view := m.View()
+	view := plainView(m)
 	if !strings.Contains(view, "too small") {
 		t.Fatalf("expected a minimum-size warning, got:\n%s", view)
 	}
@@ -162,14 +169,14 @@ func TestRootHelpOverlay(t *testing.T) {
 	m = run(t, m, m.Init())
 
 	m, _ = sendRunes(m, "?")
-	view := m.View()
+	view := plainView(m)
 	if !strings.Contains(view, "Global") || !strings.Contains(view, "quit") {
 		t.Fatalf("expected the expanded help listing global bindings, got:\n%s", view)
 	}
 
 	m, _ = sendRunes(m, "?")
-	if strings.Contains(m.View(), "Global") {
-		t.Fatalf("expected the help to collapse, got:\n%s", m.View())
+	if strings.Contains(plainView(m), "Global") {
+		t.Fatalf("expected the help to collapse, got:\n%s", plainView(m))
 	}
 }
 
@@ -208,12 +215,12 @@ func TestModuleMatrixRoutesBudgetTab(t *testing.T) {
 		t.Fatal(err)
 	}
 	m, _ = m.Update(settings.ModulesChangedMsg{Enabled: set})
-	if !strings.Contains(m.View(), "4 Budget") {
-		t.Fatalf("budget tab should stay listed (disabled): %s", m.View())
+	if !strings.Contains(plainView(m), "4 Budget") {
+		t.Fatalf("budget tab should stay listed (disabled): %s", plainView(m))
 	}
 	m, _ = sendRunes(m, "4")
-	if !strings.Contains(m.View(), "not available") {
-		t.Fatalf("disabled budget tab must not be routed: %s", m.View())
+	if !strings.Contains(plainView(m), "not available") {
+		t.Fatalf("disabled budget tab must not be routed: %s", plainView(m))
 	}
 }
 
@@ -221,7 +228,7 @@ func TestSevenFixedKeysRoute(t *testing.T) {
 	m := newRoutedRoot(t, routedConfig(module.Budget))
 	for _, k := range []string{"1", "2", "3", "4", "5", "6", "7"} {
 		m, _ = sendRunes(m, k)
-		if strings.Contains(m.View(), "not available") {
+		if strings.Contains(plainView(m), "not available") {
 			t.Fatalf("key %s not routed with every screen wired", k)
 		}
 	}
@@ -236,14 +243,18 @@ func TestThemeMessagesKeepSettingsScreen(t *testing.T) {
 		if cmd != nil {
 			t.Fatalf("%T must not reload the screen (it would reset the cursor)", msg)
 		}
-		if m.(*tui.Root).ActiveKeyMap() == nil || strings.Contains(m.View(), "not available") {
+		if m.(*tui.Root).ActiveKeyMap() == nil || strings.Contains(plainView(m), "not available") {
 			t.Fatalf("settings tab should survive %T", msg)
 		}
 	}
 }
 
 func click(m tea.Model, b tea.MouseButton, x, y int) (tea.Model, tea.Cmd) {
-	return m.Update(tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionPress, Button: b})
+	mouse := tea.Mouse{X: x, Y: y, Button: b}
+	if b == tea.MouseWheelUp || b == tea.MouseWheelDown {
+		return m.Update(tea.MouseWheelMsg(mouse))
+	}
+	return m.Update(tea.MouseClickMsg(mouse))
 }
 
 // TestRootMouse checks that a click on a tab switches to it and that the wheel moves the active
@@ -256,16 +267,17 @@ func TestRootMouse(t *testing.T) {
 	m = run(t, m, m.Init())
 
 	// At 100 columns each tab is "N Name" plus padding and borders; "1 Dashboard" spans 0-14.
-	m, cmd := click(m, tea.MouseButtonLeft, 20, 4)
+	// The 7-row banner is shown at height 30, so the tab bar starts at row 7.
+	m, cmd := click(m, tea.MouseLeft, 20, 8)
 	m = run(t, m, cmd)
-	if !strings.Contains(m.View(), "Description") {
-		t.Fatalf("expected a click on tab 2 to open Transactions, got:\n%s", m.View())
+	if !strings.Contains(plainView(m), "Description") {
+		t.Fatalf("expected a click on tab 2 to open Transactions, got:\n%s", plainView(m))
 	}
 
-	m, _ = click(m, tea.MouseButtonWheelDown, 40, 10)
+	m, _ = click(m, tea.MouseWheelDown, 40, 10)
 	m, _ = sendRunes(m, "d")
-	if !strings.Contains(m.View(), `"Older"`) {
-		t.Fatalf("expected the wheel to move the cursor to the second row, got:\n%s", m.View())
+	if !strings.Contains(plainView(m), `"Older"`) {
+		t.Fatalf("expected the wheel to move the cursor to the second row, got:\n%s", plainView(m))
 	}
 }
 
@@ -276,22 +288,22 @@ func TestRootHelpBar(t *testing.T) {
 	m = run(t, m, m.Init())
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, _ = sendRunes(m, "2")
-	lines := strings.Split(m.View(), "\n")
+	lines := strings.Split(plainView(m), "\n")
 	if len(lines) != 24 || !strings.Contains(lines[23], "add") || !strings.Contains(lines[23], "…") {
-		t.Fatalf("expected a one-line help bar cut with an ellipsis as last row, got:\n%s", m.View())
+		t.Fatalf("expected a one-line help bar cut with an ellipsis as last row, got:\n%s", plainView(m))
 	}
 	collapsedBody := strings.Count(strings.Join(lines, "\n"), "\n")
 
 	m, _ = sendRunes(m, "?")
-	view := m.View()
+	view := plainView(m)
 	if !strings.Contains(view, "Global") || !strings.Contains(view, "Transactions") || !strings.Contains(view, "bulk categorize") {
 		t.Fatalf("expected both help groups, got:\n%s", view)
 	}
 	if n := strings.Count(view, "\n"); n != collapsedBody {
 		t.Fatalf("expanded view has %d line breaks, want %d", n, collapsedBody)
 	}
-	m, _ = click(m, tea.MouseButtonLeft, 1, 10)
-	if strings.Contains(m.View(), "Global") {
-		t.Fatalf("expected a click to collapse the help, got:\n%s", m.View())
+	m, _ = click(m, tea.MouseLeft, 1, 10)
+	if strings.Contains(plainView(m), "Global") {
+		t.Fatalf("expected a click to collapse the help, got:\n%s", plainView(m))
 	}
 }

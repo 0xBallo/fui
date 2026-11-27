@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app/importing"
 	"github.com/0xballo/fui/internal/tui/components"
@@ -81,7 +81,7 @@ func (m *Model) openCSVMapper(sug importing.CSVSuggestion) {
 	m.csv.form.Focus()
 }
 
-func (m *Model) handleCSVMapKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleCSVMapKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	f := &m.csv.form
 	switch msg.String() {
 	case "esc":

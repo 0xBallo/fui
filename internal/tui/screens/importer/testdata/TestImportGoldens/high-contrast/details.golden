@@ -1,20 +1,20 @@
-[1;38;2;203;166;247mImport preview[0m
-[38;2;205;214;243m──────────────[0m
-[38;2;205;214;243mconnector=fui source=rich.fui.jsonl[0m
-[38;2;205;214;243mnew=3 duplicate=0 doubtful=0 errors=1 included=3[0m
-[38;2;205;214;243mwarnings=1 transfers=1/1 mismatches=1 modules=1[0m
+[1;38;2;203;166;247mImport preview[m
+[38;2;205;214;244m──────────────[m
+[38;2;205;214;244mconnector=fui source=rich.fui.jsonl[m
+[38;2;205;214;244mnew=3 duplicate=0 doubtful=0 errors=1 included=3[m
+[38;2;205;214;244mwarnings=1 transfers=1/1 mismatches=1 modules=1[m
 
-  [1;38;2;205;214;243mErrors (1)[0m
-  [1;38;2;243;139;168mline 9: source: bad date[0m
-  [1;38;2;205;214;243mWarnings (1)[0m
-  [38;2;249;226;175mline 9: security_op needs module investments: enable it or the record is skipped[0m
-  [1;38;2;205;214;243mTransfer proposals (1)[0m
-> [38;2;205;214;243m[x] line 4 to B <-> line 5 (amount_date)[0m
-  [1;38;2;205;214;243mBalance mismatches (1)[0m
-  [38;2;249;226;175mAccount A 06/04/2026: statement 1.23, computed -53.00[0m
-  [38;2;205;214;243m  fix: fui reconcile 'Account A' --date 2026-06-04 --balance 1.23[0m
-  [1;38;2;205;214;243mDisabled-module records (1)[0m
-  [38;2;205;214;243minvestments: 1 record(s) [security_op] lines 9[0m
-  [1;38;2;205;214;243mNew categories (1)[0m
+  [1;38;2;205;214;244mErrors (1)[m
+  [1;38;2;243;139;168mline 9: source: bad date[m
+  [1;38;2;205;214;244mWarnings (1)[m
+  [38;2;249;226;175mline 9: security_op needs module investments: enable it or the record is skipped[m
+  [1;38;2;205;214;244mTransfer proposals (1)[m
+> [38;2;205;214;244m[x] line 4 to B <-> line 5 (amount_date)[m
+  [1;38;2;205;214;244mBalance mismatches (1)[m
+  [38;2;249;226;175mAccount A 06/04/2026: statement 1.23, computed -53.00[m
+  [38;2;205;214;244m  fix: fui reconcile 'Account A' --date 2026-06-04 --balance 1.23[m
+  [1;38;2;205;214;244mDisabled-module records (1)[m
+  [38;2;205;214;244minvestments: 1 record(s) [security_op] lines 9[m
+  [1;38;2;205;214;244mNew categories (1)[m
 
-[38;2;205;214;243mj/k move · t accept transfer · m modules · tab rows · enter confirm · esc rows[0m
+[38;2;205;214;244mj/k move · t accept transfer · m modules · tab rows · enter confirm · esc rows[m

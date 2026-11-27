@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -231,14 +231,14 @@ func TestMapCSVColumnsAndSave(t *testing.T) {
 	scr, _ = sendRunes(scr, "n")
 
 	// A file is needed first.
-	scr, cmd := sendKey(scr, tea.KeyCtrlP)
+	scr, cmd := scr.Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
 	if cmd != nil || !strings.Contains(scr.View(), "File is required") {
 		t.Fatalf("expected the file notice:\n%s", scr.View())
 	}
 
 	scr, _ = sendKey(scr, tea.KeyEnter) // connector -> file
 	scr, _ = sendRunes(scr, "bank.csv")
-	scr, cmd = sendKey(scr, tea.KeyCtrlP)
+	scr, cmd = scr.Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
 	scr = run(t, scr, cmd)
 	view := scr.View()
 	for _, want := range []string{"Map CSV columns", "Salary", "Profile name:", "Memo:"} {
@@ -275,16 +275,16 @@ func TestMapCSVValidation(t *testing.T) {
 	scr, _ = sendRunes(scr, "n")
 	scr, _ = sendKey(scr, tea.KeyEnter)
 	scr, _ = sendRunes(scr, "bank.csv")
-	scr, cmd := sendKey(scr, tea.KeyCtrlP)
+	scr, cmd := scr.Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
 	scr = run(t, scr, cmd)
 
-	scr, _ = sendKey(scr, tea.KeyShiftTab) // wrap to the last field
-	scr, _ = sendKey(scr, tea.KeyEnter)    // submit with no name
+	scr, _ = scr.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}) // wrap to the last field
+	scr, _ = sendKey(scr, tea.KeyEnter)                                       // submit with no name
 	if !strings.Contains(scr.View(), "Profile name is required.") {
 		t.Fatalf("expected the name notice:\n%s", scr.View())
 	}
 	for range 4 {
-		scr, _ = sendKey(scr, tea.KeyShiftTab)
+		scr, _ = scr.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
 	}
 	scr, _ = sendRunes(scr, "mybank")
 	for range 4 {
@@ -308,7 +308,7 @@ func TestMapCSVValidation(t *testing.T) {
 	var bare screens.Screen = importer.New(fx, domain.LocaleENUS, theme.Default())
 	bare = run(t, bare, bare.Init())
 	bare, _ = sendRunes(bare, "n")
-	bare, _ = sendKey(bare, tea.KeyCtrlP)
+	bare, _ = bare.Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
 	if !strings.Contains(bare.View(), "not available") {
 		t.Fatalf("expected a notice:\n%s", bare.View())
 	}

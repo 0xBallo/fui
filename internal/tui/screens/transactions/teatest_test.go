@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
-	"github.com/charmbracelet/x/exp/teatest"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -37,7 +37,7 @@ func (m *screenModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *screenModel) View() string { return m.scr.View() }
+func (m *screenModel) View() tea.View { return tea.NewView(m.scr.View()) }
 
 func snapshot(t *testing.T, model tea.Model, ready, keys, wait string) {
 	t.Helper()
@@ -59,7 +59,7 @@ func snapshot(t *testing.T, model tea.Model, ready, keys, wait string) {
 	// Snapshot the final view, not the output stream: the renderer coalesces frames on a timer,
 	// so which intermediate frames reach the stream varies run to run.
 	final := tm.FinalModel(t, teatest.WithFinalTimeout(3*time.Second))
-	golden.RequireEqual(t, []byte(ansi.Strip(final.View())))
+	golden.RequireEqual(t, []byte(ansi.Strip(final.View().Content)))
 }
 
 func TestTransactionsSplitSnapshot(t *testing.T) {
@@ -87,7 +87,7 @@ func TestTransactionsEditFormPayeeTagsSnapshot(t *testing.T) {
 	for cmd := scr.Init(); cmd != nil; {
 		scr, cmd = scr.Update(cmd())
 	}
-	scr, cmd := scr.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	scr, cmd := scr.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	for cmd != nil {
 		scr, cmd = scr.Update(cmd())
 	}

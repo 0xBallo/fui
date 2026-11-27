@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/tui/components"
@@ -48,7 +48,7 @@ func (m *Model) openMappingForm(accts []app.AccountBalance) {
 	m.mappingForm.Focus()
 }
 
-func (m *Model) handleMappingKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleMappingKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.resetSourceForm()

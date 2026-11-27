@@ -1,6 +1,6 @@
 package importer
 
-import "github.com/charmbracelet/bubbles/key"
+import "charm.land/bubbles/v2/key"
 
 // KeyMap defines the keyboard shortcuts of the import screen outside its text forms (the source
 // and mapping forms handle their own keys, since every key there feeds a text field).
@@ -26,7 +26,7 @@ func DefaultKeyMap() KeyMap {
 	return KeyMap{
 		Up:       key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k/↑", "up")),
 		Down:     key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j/↓", "down")),
-		Toggle:   key.NewBinding(key.WithKeys(" ", "i"), key.WithHelp("space/i", "include/exclude")),
+		Toggle:   key.NewBinding(key.WithKeys("space", "i"), key.WithHelp("space/i", "include/exclude")),
 		Confirm:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "confirm")),
 		Back:     key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		New:      key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new import")),

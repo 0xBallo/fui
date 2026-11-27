@@ -4,10 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/exp/golden"
-	"github.com/muesli/termenv"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/rules"
@@ -180,21 +179,16 @@ func TestRulesFormHintSnapshots(t *testing.T) {
 	themes := []struct {
 		name    string
 		theme   string
-		profile termenv.Profile
+		profile colorprofile.Profile
 	}{
-		{"latte", "latte", termenv.TrueColor},
-		{"mocha", "mocha", termenv.TrueColor},
-		{"terminal", "terminal", termenv.TrueColor},
-		{"high-contrast", "high-contrast", termenv.TrueColor},
-		{"no-color", "mocha", termenv.Ascii},
+		{"latte", "latte", colorprofile.TrueColor},
+		{"mocha", "mocha", colorprofile.TrueColor},
+		{"terminal", "terminal", colorprofile.TrueColor},
+		{"high-contrast", "high-contrast", colorprofile.TrueColor},
+		{"no-color", "mocha", colorprofile.Ascii},
 	}
 	for _, tc := range themes {
 		t.Run(tc.name, func(t *testing.T) {
-			r := lipgloss.DefaultRenderer()
-			prev := r.ColorProfile()
-			r.SetColorProfile(tc.profile)
-			t.Cleanup(func() { r.SetColorProfile(prev) })
-
 			fx := screentest.New(t)
 			uc := rulesAdapter{Service: rules.New(fx.Store, stubBackup{}), lookups: lookups{svc: fx.Service}}
 			th := theme.Resolve(theme.Config{Theme: tc.theme}, nil)
@@ -202,7 +196,7 @@ func TestRulesFormHintSnapshots(t *testing.T) {
 			scr.SetSize(80, 24)
 			scr = run(t, scr, scr.Init())
 			scr, _ = sendRunes(scr, "a")
-			golden.RequireEqual(t, []byte(scr.View()))
+			golden.RequireEqual(t, []byte(screentest.Downsample(scr.View(), tc.profile)))
 		})
 	}
 }

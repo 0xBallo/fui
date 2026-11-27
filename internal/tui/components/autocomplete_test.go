@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/0xballo/fui/internal/tui/components"
@@ -24,9 +24,9 @@ func TestAutocomplete(t *testing.T) {
 	}
 
 	// Press tab/down to cycle suggestions
-	ac, _ = ac.Update(tea.KeyMsg{Type: tea.KeyTab})
+	ac, _ = ac.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	// Press enter to accept suggestion
-	ac, _ = ac.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	ac, _ = ac.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if diff := cmp.Diff("Fun", ac.Value()); diff != "" {
 		t.Errorf("accepted suggestion mismatch (-want +got):\n%s", diff)

@@ -3,7 +3,7 @@ package lists
 import (
 	"context"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/tui/components"
@@ -23,7 +23,7 @@ func (m *Tags) openForm(name string) {
 	m.form.Focus()
 }
 
-func (m *Tags) handleFormKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Tags) handleFormKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.mode = tagsList

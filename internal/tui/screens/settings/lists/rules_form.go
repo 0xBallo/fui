@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app/rules"
 	"github.com/0xballo/fui/internal/domain"
@@ -86,7 +86,7 @@ func (m *Rules) prefillFormFields(cur *domain.Rule) {
 	f.tags.SetValue(tagIDsToNames(cur.Actions.TagIDs, m.tags))
 }
 
-func (m *Rules) handleFormKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Rules) handleFormKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.mode = rulesList
@@ -198,7 +198,7 @@ func (m *Rules) openTestForm() {
 	m.testForm.Focus()
 }
 
-func (m *Rules) handleTestKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Rules) handleTestKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.mode = rulesList

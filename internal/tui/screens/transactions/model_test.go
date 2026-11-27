@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/0xballo/fui/internal/app"
@@ -29,12 +29,12 @@ func run(t *testing.T, scr screens.Screen, cmd tea.Cmd) screens.Screen {
 	return scr
 }
 
-func sendKey(scr screens.Screen, k tea.KeyType) (screens.Screen, tea.Cmd) {
-	return scr.Update(tea.KeyMsg{Type: k})
+func sendKey(scr screens.Screen, k rune) (screens.Screen, tea.Cmd) {
+	return scr.Update(tea.KeyPressMsg{Code: k})
 }
 
 func sendRunes(scr screens.Screen, s string) (screens.Screen, tea.Cmd) {
-	return scr.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)})
+	return scr.Update(tea.KeyPressMsg{Code: []rune(s)[0], Text: s})
 }
 
 func newFixture(t *testing.T) (screentest.Fixture, screens.Screen) {
@@ -322,7 +322,7 @@ func TestTransactionsFilterByCategory(t *testing.T) {
 		t.Fatalf("expected only the Groceries category after filtering, got:\n%s", view)
 	}
 
-	scr, cmd = sendKey(scr, tea.KeyCtrlR)
+	scr, cmd = scr.Update(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl})
 	scr = run(t, scr, cmd)
 	view = scr.View()
 	if !strings.Contains(view, "Coffee") {
@@ -462,9 +462,9 @@ func TestTransactionsBulkCategorize(t *testing.T) {
 	fx.Tx(t, app.AddTxRequest{Account: "Checking", Amount: "-8", Description: "Snack", Date: "2026-06-02"})
 	scr = run(t, scr, scr.Init())
 
-	scr, _ = sendKey(scr, tea.KeySpace) // select the first (most recent) row
+	scr, _ = scr.Update(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}) // select the first (most recent) row
 	scr, _ = sendKey(scr, tea.KeyDown)
-	scr, _ = sendKey(scr, tea.KeySpace) // select the second row too
+	scr, _ = scr.Update(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}) // select the second row too
 	scr, _ = sendRunes(scr, "c")
 	scr, _ = sendRunes(scr, "Groceries")
 	scr, _ = sendKey(scr, tea.KeyEnter) // accept suggestion

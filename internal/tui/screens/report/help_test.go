@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/tui/theme"
 )
@@ -20,12 +20,12 @@ func TestHelpCoversEveryPredefinedKind(t *testing.T) {
 func TestHelpOpenClose(t *testing.T) {
 	m := New(nil, "", 1, theme.Default())
 	m.SetSize(100, 30)
-	key := func(s string) { m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}) }
+	key := func(s string) { m.Update(tea.KeyPressMsg{Code: []rune(s)[0], Text: s}) }
 	key("i")
 	if !m.help.IsOpen() || !m.InputActive() || !strings.Contains(m.View(), "Net worth") {
 		t.Fatalf("help should be open:\n%s", m.View())
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if m.help.IsOpen() {
 		t.Fatal("esc should close help")
 	}

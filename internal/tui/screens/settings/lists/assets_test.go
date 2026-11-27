@@ -6,10 +6,9 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/exp/golden"
-	"github.com/muesli/termenv"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/assetting"
@@ -206,7 +205,7 @@ func TestAssetsFormEscAndShiftTab(t *testing.T) {
 		t.Fatal("form should capture input")
 	}
 	scr = enter(t, typeText(scr, "X"))
-	scr, _ = sendKey(scr, tea.KeyShiftTab)
+	scr, _ = scr.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
 	scr, _ = sendKey(scr, tea.KeyEsc)
 	if scr.InputActive() {
 		t.Fatal("esc should close the form")
@@ -339,21 +338,16 @@ func TestAssetsSnapshots(t *testing.T) {
 	themes := []struct {
 		name    string
 		theme   string
-		profile termenv.Profile
+		profile colorprofile.Profile
 	}{
-		{"latte", "latte", termenv.TrueColor},
-		{"mocha", "mocha", termenv.TrueColor},
-		{"terminal", "terminal", termenv.TrueColor},
-		{"high-contrast", "high-contrast", termenv.TrueColor},
-		{"no-color", "mocha", termenv.Ascii},
+		{"latte", "latte", colorprofile.TrueColor},
+		{"mocha", "mocha", colorprofile.TrueColor},
+		{"terminal", "terminal", colorprofile.TrueColor},
+		{"high-contrast", "high-contrast", colorprofile.TrueColor},
+		{"no-color", "mocha", colorprofile.Ascii},
 	}
 	for _, tc := range themes {
 		t.Run(tc.name, func(t *testing.T) {
-			r := lipgloss.DefaultRenderer()
-			prev := r.ColorProfile()
-			r.SetColorProfile(tc.profile)
-			t.Cleanup(func() { r.SetColorProfile(prev) })
-
 			e := newAssetsEnv(t)
 			e.addLoan(t)
 			e.addAsset(t, assetting.AddRequest{Name: "Flat", Kind: "property", Value: "20000", PurchaseDate: "2026-01-10", Loan: "Mortgage"})
@@ -363,7 +357,7 @@ func TestAssetsSnapshots(t *testing.T) {
 			list := e.screen(t, th).View()
 			detail := enter(t, e.screen(t, th)).View()
 			form, _ := sendRunes(e.screen(t, th), "a")
-			golden.RequireEqual(t, []byte(list+"\n---\n"+detail+"\n---\n"+form.View()))
+			golden.RequireEqual(t, []byte(screentest.Downsample(list+"\n---\n"+detail+"\n---\n"+form.View(), tc.profile)))
 		})
 	}
 }

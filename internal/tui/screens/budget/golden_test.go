@@ -5,17 +5,17 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
-	"github.com/muesli/termenv"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/budgeting"
 	"github.com/0xballo/fui/internal/domain"
 	scr "github.com/0xballo/fui/internal/tui/screens"
 	"github.com/0xballo/fui/internal/tui/screens/budget"
+	"github.com/0xballo/fui/internal/tui/screens/screentest"
 	"github.com/0xballo/fui/internal/tui/theme"
 )
 
@@ -91,9 +91,6 @@ func capHarness(t *testing.T) harness {
 // TestBudgetGoldenViews pins the 80x24 list views: the plain text must be identical across every
 // theme (color is never the only signal) and free of escape codes under NO_COLOR.
 func TestBudgetGoldenViews(t *testing.T) {
-	prev := lipgloss.ColorProfile()
-	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
-
 	cases := []struct {
 		name string
 		h    func(*testing.T) harness
@@ -109,7 +106,6 @@ func TestBudgetGoldenViews(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			h := c.h(t)
-			lipgloss.SetColorProfile(termenv.TrueColor)
 			var first string
 			for _, name := range themes {
 				th := theme.Resolve(theme.Config{Theme: name}, nil)
@@ -122,10 +118,9 @@ func TestBudgetGoldenViews(t *testing.T) {
 			}
 			golden.RequireEqual(t, []byte(first))
 
-			lipgloss.SetColorProfile(termenv.Ascii)
-			v := renderAfter(t, h, theme.Default(), c.keys)
-			if strings.Contains(v, "\x1b") {
-				t.Errorf("NO_COLOR view contains escape codes: %q", v)
+			v := screentest.Downsample(renderAfter(t, h, theme.Default(), c.keys), colorprofile.Ascii)
+			if screentest.HasColor(v) {
+				t.Errorf("NO_COLOR view contains colors: %q", v)
 			}
 			if ansi.Strip(v) != first {
 				t.Errorf("NO_COLOR view differs from the plain golden:\n%s", v)

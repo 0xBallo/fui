@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/0xballo/fui/internal/tui/components"
 	"github.com/0xballo/fui/internal/tui/theme"
@@ -62,17 +62,17 @@ func TestTableNavigationAndRender(t *testing.T) {
 
 func TestConfirmDialogKeys(t *testing.T) {
 	d := components.NewConfirmDialog(theme.Default())
-	if c, x := d.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}); c || x {
+	if c, x := d.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter}); c || x {
 		t.Fatal("hidden dialog must ignore keys")
 	}
 	tests := []struct {
-		key           tea.KeyMsg
+		key           tea.KeyPressMsg
 		confirmed, no bool
 	}{
-		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")}, true, false},
-		{tea.KeyMsg{Type: tea.KeyEnter}, true, false},
-		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}, false, true},
-		{tea.KeyMsg{Type: tea.KeyEsc}, false, true},
+		{tea.KeyPressMsg{Code: 'y', Text: "y"}, true, false},
+		{tea.KeyPressMsg{Code: tea.KeyEnter}, true, false},
+		{tea.KeyPressMsg{Code: 'n', Text: "n"}, false, true},
+		{tea.KeyPressMsg{Code: tea.KeyEsc}, false, true},
 	}
 	for _, tt := range tests {
 		d.Show("Delete", "Sure?", "1 transaction")
@@ -85,7 +85,7 @@ func TestConfirmDialogKeys(t *testing.T) {
 		}
 	}
 	d.Show("T", "P")
-	if c, x := d.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("z")}); c || x || !d.Visible() {
+	if c, x := d.HandleKey(tea.KeyPressMsg{Code: 'z', Text: "z"}); c || x || !d.Visible() {
 		t.Fatal("unrelated key must keep dialog open")
 	}
 }

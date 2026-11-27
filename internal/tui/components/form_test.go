@@ -3,7 +3,7 @@ package components_test
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/0xballo/fui/internal/tui/components"
@@ -42,7 +42,7 @@ func TestForm(t *testing.T) {
 	}
 
 	// Typing goes to the focused field.
-	form.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("Che")})
+	form.Update(tea.KeyPressMsg{Code: 'C', Text: "Che"})
 	if diff := cmp.Diff("Che", a.Value()); diff != "" {
 		t.Errorf("value mismatch (-want +got):\n%s", diff)
 	}

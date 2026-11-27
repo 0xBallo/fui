@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/0xballo/fui/internal/app/reporting"
 	"github.com/0xballo/fui/internal/tui/components"

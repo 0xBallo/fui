@@ -3,7 +3,7 @@ package components
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // Form sequences a set of Autocomplete fields, moving focus forward and backward and tracking

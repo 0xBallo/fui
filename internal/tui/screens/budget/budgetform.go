@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app/budgeting"
 	"github.com/0xballo/fui/internal/domain"
@@ -183,7 +183,7 @@ func (m *Model) focusedPicker() *picker {
 
 // handlePickerKey handles enter (add the suggestion or typed name) and backspace on an empty field
 // (drop the last chosen name) for the focused picker.
-func (m *Model) handlePickerKey(msg tea.KeyMsg) (bool, tea.Cmd) {
+func (m *Model) handlePickerKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	p := m.focusedPicker()
 	if p == nil {
 		return false, nil

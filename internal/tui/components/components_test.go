@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/0xballo/fui/internal/tui/components"

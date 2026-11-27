@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/recurring"
@@ -78,7 +78,7 @@ func (m *Recurrences) prefillFormFields(cur *app.Recurrence) {
 	}
 }
 
-func (m *Recurrences) handleFormKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Recurrences) handleFormKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.mode = recurrencesListMode

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"slices"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/app/simulating"
@@ -50,7 +50,7 @@ func defaultSimKeys() simKeys {
 		Save:     key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "save simulation")),
 		Saved:    key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "saved simulations")),
 		Compare:  key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "compare selected")),
-		Toggle:   key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "select")),
+		Toggle:   key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "select")),
 		Remove:   key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete saved simulation")),
 		Back:     key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 	}
@@ -188,7 +188,7 @@ func (m *Model) runSimForm() tea.Cmd {
 	}
 }
 
-func (m *Model) handleSimKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleSimKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch m.sim.panel {
 	case simPanelForm:
 		return m.handleSimFormKey(msg)
@@ -209,7 +209,7 @@ func (m *Model) handleSimKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleSimRunKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleSimRunKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	k := m.sim.km
 	switch {
 	case key.Matches(msg, k.Back):
@@ -254,7 +254,7 @@ func (m *Model) loadSimSaved() tea.Cmd {
 	}
 }
 
-func (m *Model) handleSimSavedKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleSimSavedKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	k := m.sim.km
 	t := &m.sim.savedTable
 	switch {
@@ -292,7 +292,7 @@ func (m *Model) handleSimSavedKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleSimConfirmKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleSimConfirmKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	yes, no := m.confirm.HandleKey(msg)
 	switch {
 	case yes:
@@ -353,7 +353,7 @@ func (m *Model) openSimSave() {
 	m.sim.form.Focus()
 }
 
-func (m *Model) handleSimSaveKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleSimSaveKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.sim.panel = simPanelRun

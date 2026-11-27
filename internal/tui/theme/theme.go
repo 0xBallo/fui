@@ -5,7 +5,11 @@
 // technical spec), so a new flavor or a palette tweak never touches screen code.
 package theme
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"image/color"
+
+	"charm.land/lipgloss/v2"
+)
 
 // Tokens are the semantic color roles every theme must define, independent of any particular
 // Catppuccin flavor. Screens and components never see Tokens directly: they use the lipgloss
@@ -13,43 +17,43 @@ import "github.com/charmbracelet/lipgloss"
 type Tokens struct {
 	// Base, Surface and Selection are background roles: the terminal background, panels, and the
 	// highlighted row.
-	Base      lipgloss.Color
-	Surface   lipgloss.Color
-	Selection lipgloss.Color
+	Base      color.Color
+	Surface   color.Color
+	Selection color.Color
 	// Text, Muted and Border are foreground roles for body text, secondary text, and borders.
-	Text   lipgloss.Color
-	Muted  lipgloss.Color
-	Border lipgloss.Color
+	Text   color.Color
+	Muted  color.Color
+	Border color.Color
 	// Accent marks the active screen, focus, and titles.
-	Accent lipgloss.Color
+	Accent color.Color
 	// Income and Expense color inflows and outflows; always paired with a sign, never the only
 	// signal.
-	Income  lipgloss.Color
-	Expense lipgloss.Color
+	Income  color.Color
+	Expense color.Color
 	// Warning and Over mark budgets near or past their threshold; always paired with a label.
-	Warning lipgloss.Color
-	Over    lipgloss.Color
+	Warning color.Color
+	Over    color.Color
 	// Caution marks budgets at 90-99%, between Warning and Over; always paired with a label.
-	Caution lipgloss.Color
+	Caution color.Color
 	// Info marks informational alerts.
-	Info lipgloss.Color
+	Info color.Color
 	// IncomeSoft and ExpenseSoft are lighter tones of Income and Expense for pending rows.
-	IncomeSoft  lipgloss.Color
-	ExpenseSoft lipgloss.Color
+	IncomeSoft  color.Color
+	ExpenseSoft color.Color
 	// Chip is the background of tag chips.
-	Chip lipgloss.Color
+	Chip color.Color
 	// Pending and Reconciled mark transaction states; always paired with a symbol.
-	Pending    lipgloss.Color
-	Reconciled lipgloss.Color
+	Pending    color.Color
+	Reconciled color.Color
 	// Series1..Series8 color chart and sparkline series.
-	Series1 lipgloss.Color
-	Series2 lipgloss.Color
-	Series3 lipgloss.Color
-	Series4 lipgloss.Color
-	Series5 lipgloss.Color
-	Series6 lipgloss.Color
-	Series7 lipgloss.Color
-	Series8 lipgloss.Color
+	Series1 color.Color
+	Series2 color.Color
+	Series3 color.Color
+	Series4 color.Color
+	Series5 color.Color
+	Series6 color.Color
+	Series7 color.Color
+	Series8 color.Color
 }
 
 // Theme encapsulates lipgloss styles for UI elements to ensure consistent presentation across

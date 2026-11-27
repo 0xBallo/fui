@@ -1,13 +1,12 @@
 package components
 
 import (
+	"os"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/glamour/v2"
 
 	"github.com/0xballo/fui/internal/tui/theme"
 )
@@ -26,7 +25,7 @@ type MarkdownModal struct {
 
 // NewMarkdownModal returns a closed modal for markdown, styled from th.
 func NewMarkdownModal(th theme.Theme, markdown string) MarkdownModal {
-	m := MarkdownModal{th: th, markdown: markdown, vp: viewport.New(0, 0)}
+	m := MarkdownModal{th: th, markdown: markdown, vp: viewport.New()}
 	m.SetSize(80, 24)
 	return m
 }
@@ -49,7 +48,8 @@ func (m *MarkdownModal) SetSize(w, h int) {
 	m.w, m.h = w, h
 	innerW := max(w-m.th.Dialog.GetHorizontalFrameSize()-2, 10)
 	innerH := max(h-m.th.Dialog.GetVerticalFrameSize()-2, 3)
-	m.vp.Width, m.vp.Height = innerW, innerH-1
+	m.vp.SetWidth(innerW)
+	m.vp.SetHeight(innerH - 1)
 	m.vp.SetContent(m.render(innerW))
 }
 
@@ -59,14 +59,14 @@ func (m MarkdownModal) render(width int) string {
 	if m.th.Name == "latte" {
 		style = "light"
 	}
-	profile := lipgloss.ColorProfile()
-	if profile == termenv.Ascii {
-		// Dark/light still emit bold/underline sequences without colors; notty emits none.
+	if os.Getenv("NO_COLOR") != "" {
+		// Without colors dark/light set headings and code apart only by backgrounds that are
+		// dropped; notty marks them with plain text instead. The env var is read rather than the
+		// detected profile so the choice does not depend on whether stdout is a terminal.
 		style = "notty"
 	}
-	// The profile makes glamour honor NO_COLOR and downsample on 16/256-color terminals.
-	r, err := glamour.NewTermRenderer(glamour.WithStandardStyle(style), glamour.WithWordWrap(width),
-		glamour.WithColorProfile(profile))
+	// Bubble Tea downsamples the truecolor output to the terminal profile and honors NO_COLOR.
+	r, err := glamour.NewTermRenderer(glamour.WithStandardStyle(style), glamour.WithWordWrap(width))
 	if err != nil {
 		return m.markdown
 	}
@@ -82,7 +82,7 @@ func (m MarkdownModal) Update(msg tea.Msg) (MarkdownModal, tea.Cmd) {
 	if !m.open {
 		return m, nil
 	}
-	if k, ok := msg.(tea.KeyMsg); ok {
+	if k, ok := msg.(tea.KeyPressMsg); ok {
 		switch k.String() {
 		case "esc", "i":
 			m.open = false

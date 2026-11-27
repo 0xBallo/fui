@@ -26,5 +26,6 @@ Architectural decisions are immutable once accepted: if a decision is reconsider
 | [0016](0016-undo-scope-transaction-writes.md) | Generic undo covers every transaction write | Accepted | 2026-11-15 |
 | [0017](0017-insights-keys-and-thresholds.md) | Insights with stable keys and integer permille thresholds | Accepted | 2026-11-15 |
 | [0018](0018-simulations-are-read-only.md) | Simulations never write transactions | Accepted | 2026-11-15 |
-| [0019](0019-tui-libraries.md) | TUI libraries for the revamp, staying on Bubble Tea v1 | Accepted | 2026-11-18 |
+| [0019](0019-tui-libraries.md) | TUI libraries for the revamp, staying on Bubble Tea v1 | Superseded by 0021 | 2026-11-18 |
 | [0020](0020-v05-gap-closure-decisions.md) | v0.5 gap-closure product decisions | Accepted | 2026-11-25 |
+| [0021](0021-bubble-tea-v2.md) | Migrate the TUI to Bubble Tea v2 | Accepted | 2026-11-26 |

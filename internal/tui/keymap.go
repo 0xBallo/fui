@@ -1,6 +1,6 @@
 package tui
 
-import "github.com/charmbracelet/bubbles/key"
+import "charm.land/bubbles/v2/key"
 
 // KeyMap defines the global keyboard shortcuts handled by Root itself, outside any screen.
 type KeyMap struct {

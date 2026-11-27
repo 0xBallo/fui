@@ -1,10 +1,11 @@
 package theme
 
 import (
+	"image/color"
 	"math"
 	"strconv"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // ensureTextContrast returns t with every token the technical spec treats as "text" (Text, Muted,
@@ -33,7 +34,7 @@ func ensureTextContrast(t Tokens, minContrast float64) Tokens {
 // ensureContrast returns fg unchanged if it already meets min contrast against base, otherwise
 // the closest color on the fg-to-black (if base is light) or fg-to-white (if base is dark) line
 // that does, found by bisection since contrast is monotonic along that line.
-func ensureContrast(base, fg lipgloss.Color, minContrast float64) lipgloss.Color {
+func ensureContrast(base, fg color.Color, minContrast float64) color.Color {
 	if contrastRatioHex(base, fg) >= minContrast {
 		return fg
 	}
@@ -69,22 +70,14 @@ func ensureContrast(base, fg lipgloss.Color, minContrast float64) lipgloss.Color
 
 func blend(c, target, t float64) float64 { return c + (target-c)*t }
 
-// hexToRGB parses a "#RRGGBB" lipgloss.Color into [0,1] RGB components.
-func hexToRGB(c lipgloss.Color) (r, g, b float64) {
-	s := string(c)
-	return hexChannel(s[1:3]), hexChannel(s[3:5]), hexChannel(s[5:7])
+// hexToRGB returns the [0,1] RGB components of c.
+func hexToRGB(c color.Color) (r, g, b float64) {
+	cr, cg, cb, _ := c.RGBA()
+	return float64(cr) / 0xffff, float64(cg) / 0xffff, float64(cb) / 0xffff
 }
 
-func hexChannel(s string) float64 {
-	v, err := strconv.ParseUint(s, 16, 16)
-	if err != nil {
-		return 0
-	}
-	return float64(v) / 255
-}
-
-// rgbToHex formats [0,1] RGB components (clamped) as a "#RRGGBB" lipgloss.Color.
-func rgbToHex(r, g, b float64) lipgloss.Color {
+// rgbToHex formats [0,1] RGB components (clamped) as a "#RRGGBB" color.Color.
+func rgbToHex(r, g, b float64) color.Color {
 	ch := func(v float64) string {
 		v = math.Max(0, math.Min(1, v))
 		return padHex(int(math.Round(v * 255)))
@@ -100,13 +93,13 @@ func padHex(v int) string {
 	return s
 }
 
-// luminanceHex and contrastRatioHex wrap relativeLuminance for "#RRGGBB" lipgloss.Colors.
-func luminanceHex(c lipgloss.Color) float64 {
+// luminanceHex and contrastRatioHex wrap relativeLuminance for "#RRGGBB" color.Colors.
+func luminanceHex(c color.Color) float64 {
 	r, g, b := hexToRGB(c)
 	return relativeLuminance(r, g, b)
 }
 
-func contrastRatioHex(a, b lipgloss.Color) float64 {
+func contrastRatioHex(a, b color.Color) float64 {
 	la, lb := luminanceHex(a), luminanceHex(b)
 	if la < lb {
 		la, lb = lb, la

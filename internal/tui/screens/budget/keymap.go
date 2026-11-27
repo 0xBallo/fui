@@ -1,6 +1,6 @@
 package budget
 
-import "github.com/charmbracelet/bubbles/key"
+import "charm.land/bubbles/v2/key"
 
 // KeyMap defines the keyboard shortcuts of the budget screen.
 type KeyMap struct {

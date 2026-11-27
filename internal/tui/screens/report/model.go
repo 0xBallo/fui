@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -198,7 +198,7 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		return m, cmd
 	}
 	if m.help.IsOpen() {
-		if _, ok := msg.(tea.KeyMsg); ok {
+		if _, ok := msg.(tea.KeyPressMsg); ok {
 			m.help, _ = m.help.Update(msg)
 			return m, nil
 		}
@@ -226,7 +226,7 @@ func (m *Model) Update(msg tea.Msg) (screens.Screen, tea.Cmd) {
 		return m, func() tea.Msg {
 			return screens.StatusMsg{Text: exportStatus(msg)}
 		}
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
 	return m, nil
@@ -239,7 +239,7 @@ func exportStatus(msg exportDoneMsg) string {
 	return "Exported report to " + msg.path
 }
 
-func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch m.mode {
 	case modeParamsForm, modeSaveForm, modeExportForm, modeFilterForm:
 		return m.handleFormKey(msg)
@@ -257,7 +257,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 	return m.handleReportKey(msg)
 }
 
-func (m *Model) handleReportKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleReportKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.km.Up):
 		m.table.MoveUp(1)
@@ -283,7 +283,7 @@ func (m *Model) handleReportKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
 }
 
 // openPanel opens the form or overlay msg asks for, and reports whether it was one.
-func (m *Model) openPanel(msg tea.KeyMsg) bool {
+func (m *Model) openPanel(msg tea.KeyPressMsg) bool {
 	switch {
 	case key.Matches(msg, m.km.Params):
 		m.openParamsForm()

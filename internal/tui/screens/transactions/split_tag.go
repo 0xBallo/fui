@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/app"
 	"github.com/0xballo/fui/internal/domain"
@@ -118,7 +118,7 @@ func (m *Model) removeSplitRow() {
 	_ = m.splitForm.Focus()
 }
 
-func (m *Model) handleSplitKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleSplitKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.mode = modeList
@@ -263,7 +263,7 @@ func (m *Model) openTagsEditor() {
 	m.tagForm.Focus()
 }
 
-func (m *Model) handleTagsKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleTagsKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.mode = modeList

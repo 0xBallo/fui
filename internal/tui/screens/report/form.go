@@ -1,7 +1,7 @@
 package report
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/tui/components"
 	"github.com/0xballo/fui/internal/tui/screens"
@@ -77,7 +77,7 @@ func (m *Model) openExportForm() {
 	m.form.Focus()
 }
 
-func (m *Model) handleFormKey(msg tea.KeyMsg) (screens.Screen, tea.Cmd) {
+func (m *Model) handleFormKey(msg tea.KeyPressMsg) (screens.Screen, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.mode = modeReport

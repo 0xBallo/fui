@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/0xballo/fui/internal/domain"
 	"github.com/0xballo/fui/internal/tui/screens"
@@ -34,7 +34,7 @@ func (m *Model) selectedPending() *domain.Transaction {
 
 // handlePendingKey arms the confirm dialog for "c" or "S" on a pending row, reporting whether msg
 // was consumed; on any other row "c" falls through to bulk categorize.
-func (m *Model) handlePendingKey(msg tea.KeyMsg) bool {
+func (m *Model) handlePendingKey(msg tea.KeyPressMsg) bool {
 	confirm, skip := key.Matches(msg, m.km.ConfirmPending), key.Matches(msg, m.km.SkipPending)
 	if !confirm && !skip {
 		return false
